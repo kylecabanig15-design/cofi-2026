@@ -1,0 +1,68 @@
+// ADMIN VERIFICATION WORKFLOW GUIDE
+//
+// Since you partner with a community of café owners for manual validation,
+// the admin verification process is simplified to Firebase manual updates.
+//
+// CURRENT SYSTEM:
+// - Shops have an "isVerified" boolean field (default: false)
+// - Only verified shops appear in discovery, maps, and recommendations
+// - Unverified shops appear to owners in their business dashboard
+//
+// MANUAL APPROVAL PROCESS:
+//
+// 1. RECEIVE CAFÉ LIST
+//    - Café owners from your community provide lists of legitimate cafés
+//    - You compile these into a validation list
+//
+// 2. VERIFY IN FIREBASE:
+//    a. Go to Cloud Firestore Console
+//    b. Open the "shops" collection
+//    c. For each café to approve:
+//       - Find the shop document by name (you can search/filter)
+//       - Open the document
+//       - Look for the "isVerified" field
+//       - If it doesn't exist, add it with value: true (boolean)
+//       - If it exists and is false, set it to: true
+//       - Optionally add "verifiedAt" timestamp
+//       - Optionally add "verifiedBy" field with admin name
+//
+// 3. BATCH OPERATIONS (for multiple shops):
+//    If you need to approve many at once, consider:
+//    - Using Firebase CLI with a script
+//    - Running a batch operation through Firebase Functions
+//    - Contact Firebase support for assistance
+//
+// 4. TRACKING VERIFICATIONS:
+//    Add these optional fields to track approvals:
+//    {
+//      "isVerified": true,
+//      "verifiedAt": Timestamp.now(),
+//      "verifiedBy": "admin-name",
+//      "verificationNotes": "Approved by community validation"
+//    }
+//
+// REJECTION PROCESS:
+// - Keep "isVerified" as false
+// - Optionally add "rejectionReason" field explaining why
+// - Shop owners won't see their shop in public listings
+// - You can contact them to provide more information
+//
+// IN-APP DISPLAY:
+// - Verified badge (checkmark icon) shows on verified shops
+// - Pending/unverified shops show warning icon
+// - Only verified shops appear in:
+//   * Explore tab shop listings
+//   * Map view
+//   * Featured cafés section
+//   * Recommendations and notifications
+//
+// FUTURE ENHANCEMENT:
+// To implement an in-app admin dashboard in the future:
+// 1. Create "admins" user role
+// 2. Add admin management screen in app
+// 3. Display unverified shops awaiting approval
+// 4. Allow in-app approval/rejection with notes
+// 5. Add notification when café owners submit new shops
+//
+// For now, the manual Firebase approach is faster and gives you
+// full control over the community validation process.

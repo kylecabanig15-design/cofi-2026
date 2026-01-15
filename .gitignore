@@ -1,0 +1,11 @@
+# flutter / dart
+.dart_tool/
+
+
+# build outputs
+
+
+# android artifacts
+*.apk
+*.aab
+node_modules

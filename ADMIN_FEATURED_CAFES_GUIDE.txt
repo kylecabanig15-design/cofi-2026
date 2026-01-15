@@ -1,0 +1,30 @@
+// ADMIN GUIDE: Setting Featured Cafés Manually
+//
+// Since you'll be manually selecting featured cafés from your community partners,
+// follow these steps in Firebase Console:
+//
+// 1. Go to Cloud Firestore Console
+// 2. Open the "shops" collection
+// 3. For each café you want to feature:
+//    - Click to open the shop document
+//    - Look for the "isFeatured" field (create it if missing)
+//    - Set "isFeatured" to "true" (boolean)
+//    - Optionally add "featuredAt" timestamp (Timestamp type)
+//
+// 4. The app will automatically show shops with isFeatured = true 
+//    in the "Monthly Featured Cafe Shops" section, sorted by:
+//    - Rating (highest first)
+//    - Then by review count (highest first)
+//
+// To remove a café from featured:
+//    - Set "isFeatured" to "false" in that shop's document
+//
+// Tips for Easy Selection:
+// - Create a database index on shops collection:
+//  Fields: isFeatured (Ascending) + ratings (Descending)
+// - Filter your view by adding: isFeatured = true
+//  to easily see and manage all featured shops
+//
+// The "Monthly Featured Cafe Shops" label is currently shown for all featured
+// shops. You can manually rotate them on a monthly basis by toggling the
+// isFeatured field when updating your selection.

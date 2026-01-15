@@ -1,0 +1,58 @@
+// CAFÉ OWNER RESPONSE TO REVIEWS SYSTEM
+//
+// This system allows café owners to respond to customer reviews in the app.
+//
+// STRUCTURE:
+// Each review now has an optional "responses" array field that stores owner responses.
+//
+// Review Document Structure:
+// shops/{shopId}/reviews/{reviewId}
+// {
+//   "userId": "user123",
+//   "authorName": "John Doe",
+//   "text": "Great coffee!",
+//   "rating": 5,
+//   "tags": ["Study Session", "Specialty Coffee"],
+//   "imageUrl": "...",
+//   "createdAt": Timestamp,
+//   "responses": [
+//     {
+//       "id": "response1",
+//       "ownerName": "Café Owner",
+//       "ownerAvatarUrl": "...",
+//       "responseText": "Thank you for visiting!",
+//       "createdAt": Timestamp
+//     }
+//   ]
+// }
+//
+// HOW OWNERS RESPOND (Future Implementation):
+// 1. Owner opens their Business Profile
+// 2. Clicks "Reviews" section
+// 3. Sees all reviews for their shop
+// 4. Can tap on a review to open details
+// 5. Taps "Reply to Review" button
+// 6. Types their response
+// 7. Taps "Submit Response"
+//
+// The response is saved to the "responses" array in that review document.
+//
+// DISPLAYING RESPONSES:
+// In the ReviewsScreen, responses are automatically fetched and displayed
+// below each review in a styled container showing:
+// - Owner name
+// - Response text
+// - Posted time (relative, e.g., "2 days ago")
+//
+// BENEFITS:
+// - Shows customer that owners are engaged
+// - Allows owners to address concerns publicly
+// - Builds trust and community engagement
+// - Increases review value for other potential customers
+//
+// NEXT STEPS:
+// 1. Create ResponseReviewBottomSheet widget for owners to compose responses
+// 2. Add "Reply to Review" button in BusinessProfileScreen reviews view
+// 3. Update ReviewCard to display existing responses
+// 4. Add response deletion option for owners
+// 5. Add response count badge next to review count
