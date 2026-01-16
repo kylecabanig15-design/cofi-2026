@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../utils/colors.dart';
 import '../../widgets/text_widget.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class VisitedCafesScreen extends StatelessWidget {
   const VisitedCafesScreen({super.key});
@@ -158,7 +159,8 @@ class VisitedCafesScreen extends StatelessWidget {
             decoration: BoxDecoration(
               image: cafeImage != null
                   ? DecorationImage(
-                      image: NetworkImage(cafeImage), fit: BoxFit.cover)
+                      image: CachedNetworkImageProvider(cafeImage),
+                      fit: BoxFit.cover)
                   : null,
               color: backgroundColor,
               shape: BoxShape.circle,

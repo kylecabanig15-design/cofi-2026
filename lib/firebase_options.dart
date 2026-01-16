@@ -50,12 +50,12 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-      apiKey: "AIzaSyDB_wryAYvLEINOF-aLgJDy3YfXprN89Dw",
+      apiKey: "AIzaSyA-4pJQPA1VQ8o4URW4JqwiNTdBx9eS2HU",
       authDomain: "cofi-3e5f4.firebaseapp.com",
       projectId: "cofi-3e5f4",
       storageBucket: "cofi-3e5f4.firebasestorage.app",
       messagingSenderId: "1033537657456",
-      appId: "1:1033537657456:web:85077905b5a228cb0c32b5");
+      appId: "1:1033537657456:android:44af85579abd7b820c32b5");
 
   static const FirebaseOptions ios = FirebaseOptions(
       apiKey: "AIzaSyDoaShElUWHdg-rPzFzCUmDAbttILjSwJo",
@@ -63,6 +63,7 @@ class DefaultFirebaseOptions {
       messagingSenderId: "1033537657456",
       projectId: "cofi-3e5f4",
       storageBucket: "cofi-3e5f4.firebasestorage.app",
-      iosClientId: "1033537657456-tf1ek6nm04p6os6tlb6cqtm2k013h37m.apps.googleusercontent.com",
+      iosClientId:
+          "1033537657456-tf1ek6nm04p6os6tlb6cqtm2k013h37m.apps.googleusercontent.com",
       iosBundleId: "com.example.cofi");
 }

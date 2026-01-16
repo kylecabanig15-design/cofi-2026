@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/text_widget.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class InterestSelectionScreen extends StatefulWidget {
   const InterestSelectionScreen({super.key});
@@ -86,7 +87,8 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         // Check if email is verified before proceeding (skip for Google users)
-        final isGoogleUser = user.providerData.any((p) => p.providerId == 'google.com');
+        final isGoogleUser =
+            user.providerData.any((p) => p.providerId == 'google.com');
         if (!isGoogleUser) {
           await user.reload();
           if (!user.emailVerified) {
@@ -369,8 +371,8 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
                                     topRight: Radius.circular(12),
                                   ),
                                   image: DecorationImage(
-                                    image:
-                                        NetworkImage(interestImages[interest]!),
+                                    image: CachedNetworkImageProvider(
+                                        interestImages[interest]!),
                                     fit: BoxFit.cover,
                                   ),
                                 ),

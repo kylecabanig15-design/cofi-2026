@@ -5,10 +5,10 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:io';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'text_widget.dart';
 import '../screens/subscreens/custom_location_screen.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/colors.dart';
 
 class PostEventBottomSheet extends StatefulWidget {
@@ -46,24 +46,22 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
 
   // Image picker related variables
   final ImagePicker _picker = ImagePicker();
-  File? _selectedImage;
-  List<File> _selectedImages = [];
-  bool _isUploading = false;
+
+  final List<File> _selectedImages = [];
+
 
   // Map related variables
   // double _latitude = 37.7749; // Default to San Francisco
   // double _longitude = -122.4194;
   // GoogleMapController? _mapController;
-  
+
   // Location selection
   String _locationType = 'my_location'; // 'my_location' or 'custom_location'
   LatLng? _selectedLocation;
   bool _locationReady = false;
 
   // Autocomplete related variables
-  List<Map<String, String>> _predictions = [];
-  bool _showPredictions = false;
-  final String _googleMapsApiKey = 'AIzaSyDB_wryAYvLEINOF-aLgJDy3YfXprN89Dw';
+
 
   @override
   void initState() {
@@ -107,13 +105,13 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
 
       // Check if location is valid
       if (latitude == null || longitude == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text(
-                    'Location required. Please enable location or select a custom location.')),
-          );
-          if (mounted) setState(() => _saving = false);
-          return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Location required. Please enable location or select a custom location.')),
+        );
+        if (mounted) setState(() => _saving = false);
+        return;
       }
 
       // Upload images if selected
@@ -142,7 +140,9 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
         'email': email,
         'link': link,
         'imageUrls': imageUrls,
-        'imageUrl': imageUrls.isNotEmpty ? imageUrls.first : null, // Store single image URL
+        'imageUrl': imageUrls.isNotEmpty
+            ? imageUrls.first
+            : null, // Store single image URL
         'latitude': latitude,
         'longitude': longitude,
         'status': 'pending',
@@ -165,9 +165,11 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to post event: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to post event: $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -205,10 +207,13 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
           // Add new images to the list, limiting to 5 total
           final remainingSlots = 5 - _selectedImages.length;
           if (remainingSlots > 0) {
-            final imagesToAdd = pickedFiles.take(remainingSlots).map((e) => File(e.path)).toList();
+            final imagesToAdd = pickedFiles
+                .take(remainingSlots)
+                .map((e) => File(e.path))
+                .toList();
             _selectedImages.addAll(imagesToAdd);
           } else {
-             ScaffoldMessenger.of(context).showSnackBar(
+            ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Maximum 5 images allowed')),
             );
           }
@@ -321,7 +326,7 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
       return null;
     }
   }
-  
+
   Future<void> _selectCustomLocation() async {
     final result = await Navigator.push<Map<String, dynamic>>(
       context,
@@ -345,8 +350,6 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
       });
     }
   }
-
-
 
   @override
   void dispose() {
@@ -445,10 +448,12 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
                               )
                             : ListView.separated(
                                 scrollDirection: Axis.horizontal,
-                                itemCount: _selectedImages.length + (_selectedImages.length < 5 ? 1 : 0),
-                                separatorBuilder: (context, index) => const SizedBox(width: 12),
+                                itemCount: _selectedImages.length +
+                                    (_selectedImages.length < 5 ? 1 : 0),
+                                separatorBuilder: (context, index) =>
+                                    const SizedBox(width: 12),
                                 itemBuilder: (context, index) {
-                                   if (index == _selectedImages.length) {
+                                  if (index == _selectedImages.length) {
                                     // Add button at the end
                                     return GestureDetector(
                                       onTap: _pickImages,
@@ -456,11 +461,14 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
                                         width: 150,
                                         decoration: BoxDecoration(
                                           color: Colors.grey[800],
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(color: Colors.grey[700]!),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          border: Border.all(
+                                              color: Colors.grey[700]!),
                                         ),
                                         child: const Center(
-                                          child: Icon(Icons.add, color: Colors.white, size: 30),
+                                          child: Icon(Icons.add,
+                                              color: Colors.white, size: 30),
                                         ),
                                       ),
                                     );
@@ -682,8 +690,8 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
                           decoration: BoxDecoration(
                             color: Colors.amber.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(8),
-                            border:
-                                Border.all(color: Colors.amber.withOpacity(0.4)),
+                            border: Border.all(
+                                color: Colors.amber.withOpacity(0.4)),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -728,7 +736,7 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
                             ],
                           ),
                         ),
-                      
+
                       // Address Field (Below location logic)
                       _buildField('Address', _addressController),
 
@@ -748,8 +756,6 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
                       _buildField('Link (Optional)', _linkController),
 
                       const SizedBox(height: 20),
-
-
 
                       // Save Button
                       SizedBox(
@@ -973,10 +979,6 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
       ],
     );
   }
-
-
-
-
 }
 
 class EditEventBottomSheet extends StatefulWidget {
@@ -1015,9 +1017,9 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
 
   // Image related variables
   final ImagePicker _picker = ImagePicker();
-  List<File> _newImages = [];
+  final List<File> _newImages = [];
   List<String> _existingImageUrls = [];
-  bool _isUploading = false;
+  final bool _isUploading = false;
 
   @override
   void initState() {
@@ -1074,14 +1076,15 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
     }
 
     // Load existing coordinates
-    if (widget.eventData['latitude'] != null && widget.eventData['longitude'] != null) {
+    if (widget.eventData['latitude'] != null &&
+        widget.eventData['longitude'] != null) {
       double lat = widget.eventData['latitude'] is double
           ? widget.eventData['latitude']
           : (widget.eventData['latitude'] as num).toDouble();
       double lng = widget.eventData['longitude'] is double
           ? widget.eventData['longitude']
           : (widget.eventData['longitude'] as num).toDouble();
-      
+
       _selectedLocation = LatLng(lat, lng);
       _locationType = 'custom_location';
     }
@@ -1092,7 +1095,7 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
     } else if (widget.eventData['imageUrl'] != null) {
       _existingImageUrls.add(widget.eventData['imageUrl']);
     }
-    
+
     // Ensure location services
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ensureLocationReady();
@@ -1141,13 +1144,13 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
 
       // Check if location is valid
       if (latitude == null || longitude == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text(
-                    'Location required. Please enable location or select a custom location.')),
-          );
-          if (mounted) setState(() => _saving = false);
-          return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Location required. Please enable location or select a custom location.')),
+        );
+        if (mounted) setState(() => _saving = false);
+        return;
       }
 
       // Upload new images
@@ -1157,7 +1160,10 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
       }
 
       // Combine existing and new URLs
-      final List<String> finalImageUrls = [..._existingImageUrls, ...newImageUrls];
+      final List<String> finalImageUrls = [
+        ..._existingImageUrls,
+        ...newImageUrls
+      ];
 
       final startDateTime = _startDate != null && _startTime != null
           ? DateTime(_startDate!.year, _startDate!.month, _startDate!.day,
@@ -1183,7 +1189,9 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
         'email': email,
         'link': link,
         'imageUrls': finalImageUrls,
-        'imageUrl': finalImageUrls.isNotEmpty ? finalImageUrls.first : null, // Backward compatibility
+        'imageUrl': finalImageUrls.isNotEmpty
+            ? finalImageUrls.first
+            : null, // Backward compatibility
         'latitude': latitude,
         'longitude': longitude,
         'updatedAt': FieldValue.serverTimestamp(),
@@ -1212,12 +1220,15 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
           // Calculate remaining slots
           final currentCount = _existingImageUrls.length + _newImages.length;
           final remainingSlots = 5 - currentCount;
-          
+
           if (remainingSlots > 0) {
-            final imagesToAdd = pickedFiles.take(remainingSlots).map((e) => File(e.path)).toList();
+            final imagesToAdd = pickedFiles
+                .take(remainingSlots)
+                .map((e) => File(e.path))
+                .toList();
             _newImages.addAll(imagesToAdd);
           } else {
-             ScaffoldMessenger.of(context).showSnackBar(
+            ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Maximum 5 images allowed')),
             );
           }
@@ -1360,7 +1371,7 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
       return null;
     }
   }
-  
+
   Future<void> _selectCustomLocation() async {
     final result = await Navigator.push<Map<String, dynamic>>(
       context,
@@ -1431,9 +1442,9 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildField('Event Name', _eventNameController), 
+                      _buildField('Event Name', _eventNameController),
                       const SizedBox(height: 20),
-                      
+
                       // Image Carousel
                       TextWidget(
                         text: 'Event Images (Max 5)',
@@ -1444,7 +1455,8 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                       const SizedBox(height: 16),
                       SizedBox(
                         height: 200,
-                        child: (_existingImageUrls.isEmpty && _newImages.isEmpty)
+                        child: (_existingImageUrls.isEmpty &&
+                                _newImages.isEmpty)
                             ? GestureDetector(
                                 onTap: _pickImages,
                                 child: Container(
@@ -1477,22 +1489,34 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                               )
                             : ListView.separated(
                                 scrollDirection: Axis.horizontal,
-                                itemCount: _existingImageUrls.length + _newImages.length + (_existingImageUrls.length + _newImages.length < 5 ? 1 : 0),
-                                separatorBuilder: (context, index) => const SizedBox(width: 12),
+                                itemCount: _existingImageUrls.length +
+                                    _newImages.length +
+                                    (_existingImageUrls.length +
+                                                _newImages.length <
+                                            5
+                                        ? 1
+                                        : 0),
+                                separatorBuilder: (context, index) =>
+                                    const SizedBox(width: 12),
                                 itemBuilder: (context, index) {
                                   // Add button at the end
-                                  if (index == _existingImageUrls.length + _newImages.length) {
-                                     return GestureDetector(
+                                  if (index ==
+                                      _existingImageUrls.length +
+                                          _newImages.length) {
+                                    return GestureDetector(
                                       onTap: _pickImages,
                                       child: Container(
                                         width: 150,
                                         decoration: BoxDecoration(
                                           color: Colors.grey[800],
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(color: Colors.grey[700]!),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          border: Border.all(
+                                              color: Colors.grey[700]!),
                                         ),
                                         child: const Center(
-                                          child: Icon(Icons.add, color: Colors.white, size: 30),
+                                          child: Icon(Icons.add,
+                                              color: Colors.white, size: 30),
                                         ),
                                       ),
                                     );
@@ -1503,28 +1527,40 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                                     return Stack(
                                       children: [
                                         ClipRRect(
-                                          borderRadius: BorderRadius.circular(12),
-                                          child: Image.network(
-                                            _existingImageUrls[index],
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          child: CachedNetworkImage(
+                                            imageUrl: _existingImageUrls[index],
                                             width: 280,
                                             height: 200,
                                             fit: BoxFit.cover,
-                                            loadingBuilder: (context, child, loadingProgress) {
-                                              if (loadingProgress == null) return child;
-                                              return Container(
-                                                 width: 280,
-                                                 height: 200,
-                                                 color: Colors.grey[800],
-                                                 child: const Center(child: CircularProgressIndicator()),
-                                              );
-                                            },
+                                            placeholder: (context, url) =>
+                                                Container(
+                                              width: 280,
+                                              height: 200,
+                                              color: Colors.grey[800],
+                                              child: const Center(
+                                                  child:
+                                                      CircularProgressIndicator()),
+                                            ),
+                                            errorWidget:
+                                                (context, url, error) =>
+                                                    Container(
+                                              width: 280,
+                                              height: 200,
+                                              color: Colors.grey[800],
+                                              child: const Center(
+                                                  child: Icon(Icons.error,
+                                                      color: Colors.white)),
+                                            ),
                                           ),
                                         ),
                                         Positioned(
                                           top: 8,
                                           right: 8,
                                           child: GestureDetector(
-                                            onTap: () => _removeExistingImage(index),
+                                            onTap: () =>
+                                                _removeExistingImage(index),
                                             child: Container(
                                               padding: const EdgeInsets.all(4),
                                               decoration: const BoxDecoration(
@@ -1543,8 +1579,9 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                                     );
                                   }
 
-                                   // New Images
-                                  final newIndex = index - _existingImageUrls.length;
+                                  // New Images
+                                  final newIndex =
+                                      index - _existingImageUrls.length;
                                   return Stack(
                                     children: [
                                       ClipRRect(
@@ -1560,7 +1597,8 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                                         top: 8,
                                         right: 8,
                                         child: GestureDetector(
-                                          onTap: () => _removeNewImage(newIndex),
+                                          onTap: () =>
+                                              _removeNewImage(newIndex),
                                           child: Container(
                                             padding: const EdgeInsets.all(4),
                                             decoration: const BoxDecoration(
@@ -1577,7 +1615,6 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                                       ),
                                     ],
                                   );
-
                                 },
                               ),
                       ),
@@ -1747,8 +1784,8 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                           decoration: BoxDecoration(
                             color: Colors.amber.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(8),
-                            border:
-                                Border.all(color: Colors.amber.withOpacity(0.4)),
+                            border: Border.all(
+                                color: Colors.amber.withOpacity(0.4)),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1793,7 +1830,7 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                             ],
                           ),
                         ),
-                      
+
                       // Address Field (Below location logic)
                       _buildField('Address', _addressController),
                       const SizedBox(height: 20),
@@ -1803,8 +1840,6 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                       const SizedBox(height: 20),
                       _buildField('Link (Optional)', _linkController),
                       const SizedBox(height: 20),
-
-
 
                       // Save Button
                       SizedBox(
@@ -2028,6 +2063,4 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
 
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
-
-
 }

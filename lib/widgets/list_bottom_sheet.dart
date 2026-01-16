@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../widgets/text_widget.dart';
 import '../../utils/colors.dart';
 import '../screens/subscreens/cafe_details_screen.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ListBottomSheet extends StatefulWidget {
   final String title;
@@ -633,7 +634,7 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
                     color: Colors.grey[800],
                     image: logo.isNotEmpty
                         ? DecorationImage(
-                            image: NetworkImage(logo),
+                            image: CachedNetworkImageProvider(logo),
                             fit: BoxFit.cover,
                           )
                         : null,
@@ -1223,13 +1224,14 @@ class _AddCafeToListDialogState extends State<AddCafeToListDialog> {
                           child: cafeLogoUrl.isNotEmpty
                               ? ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
-                                  child: Image.network(
-                                    cafeLogoUrl,
+                                  child: CachedNetworkImage(
+                                    imageUrl: cafeLogoUrl,
                                     fit: BoxFit.cover,
-                                    errorBuilder:
-                                        (context, error, stackTrace) =>
-                                            const Icon(Icons.local_cafe,
-                                                color: Colors.grey),
+                                    placeholder: (context, url) =>
+                                        Container(color: Colors.grey[800]),
+                                    errorWidget: (context, url, error) =>
+                                        const Icon(Icons.local_cafe,
+                                            color: Colors.grey),
                                   ),
                                 )
                               : const Icon(Icons.local_cafe,

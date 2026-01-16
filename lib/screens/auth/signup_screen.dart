@@ -110,16 +110,16 @@ class _SignupScreenState extends State<SignupScreen> {
           'visited': [],
           'reviews': [],
           'accountType': widget.accountType,
-        'emailVerified': false, // Track email verification status
-        'createdAt': FieldValue.serverTimestamp(),
-        // Notification preferences
-        'notificationPreferences': {
-          'emailNotifications': _emailNotifications,
-          'eventNotifications': _eventNotifications,
-          'jobNotifications': _jobNotifications,
-          'promoNotifications': _promoNotifications,
-        },
-      }, SetOptions(merge: true));
+          'emailVerified': false, // Track email verification status
+          'createdAt': FieldValue.serverTimestamp(),
+          // Notification preferences
+          'notificationPreferences': {
+            'emailNotifications': _emailNotifications,
+            'eventNotifications': _eventNotifications,
+            'jobNotifications': _jobNotifications,
+            'promoNotifications': _promoNotifications,
+          },
+        }, SetOptions(merge: true));
       }
 
       if (!mounted) return;
@@ -152,7 +152,8 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
                 const SizedBox(height: 16),
                 TextWidget(
-                  text: 'Note: You must verify your email before you can log in.',
+                  text:
+                      'Note: You must verify your email before you can log in.',
                   fontSize: 12,
                   color: Colors.orange[400],
                   isBold: true,

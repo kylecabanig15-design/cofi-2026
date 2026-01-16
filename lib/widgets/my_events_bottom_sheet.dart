@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/text_widget.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../screens/subscreens/event_details_screen.dart';
 
 class MyEventsBottomSheet extends StatelessWidget {
@@ -244,7 +245,8 @@ class MyEventsBottomSheet extends StatelessWidget {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(7.5),
                       image: DecorationImage(
-                          image: NetworkImage(image), fit: BoxFit.cover),
+                          image: CachedNetworkImageProvider(image),
+                          fit: BoxFit.cover),
                     )),
                 // Paused overlay badge
                 if (eventData['isPaused'] == true)

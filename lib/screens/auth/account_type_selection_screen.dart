@@ -93,7 +93,8 @@ class AccountTypeSelectionScreen extends StatelessWidget {
         // Detect if user is Google Sign-In user
         final user = FirebaseAuth.instance.currentUser;
         final isGoogleSignUp =
-            user?.providerData.any((p) => p.providerId == 'google.com') ?? false;
+            user?.providerData.any((p) => p.providerId == 'google.com') ??
+                false;
 
         // Show loading overlay briefly to prevent flash
         showDialog(

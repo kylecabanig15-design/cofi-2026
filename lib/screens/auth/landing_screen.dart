@@ -27,7 +27,7 @@
 
 //     try {
 //       final userCredential = await GoogleSignInService.signInWithGoogle();
-      
+
 //       if (userCredential != null && mounted) {
 //         // Navigate to home screen
 //         Navigator.pushReplacement(
@@ -106,7 +106,7 @@
 //                   ],
 //                 ),
 //                 const SizedBox(height: 50),
-                
+
 //                 // Google Login Button
 //                 _buildSocialButton(
 //                   icon: FontAwesomeIcons.google,
@@ -117,7 +117,7 @@
 //                   onPressed: _isSigningIn ? null : _handleGoogleSignIn,
 //                 ),
 //                 const SizedBox(height: 25),
-                
+
 //                 // Separator
 //                 Row(
 //                   children: [
@@ -145,7 +145,7 @@
 //                   ],
 //                 ),
 //                 const SizedBox(height: 25),
-                
+
 //                 // Create Account Button
 //                 SizedBox(
 //                   width: double.infinity,
@@ -167,7 +167,7 @@
 //                   ),
 //                 ),
 //                 const SizedBox(height: 20),
-                
+
 //                 // Login Link
 //                 Row(
 //                   mainAxisAlignment: MainAxisAlignment.center,

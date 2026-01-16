@@ -4,8 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../../utils/colors.dart';
 import '../../widgets/coffee_shop_details_bottom_sheet.dart';
+import '../../widgets/selected_shop_card.dart';
 
 class MapViewScreen extends StatefulWidget {
   const MapViewScreen({super.key});
@@ -19,6 +19,8 @@ class _MapViewScreenState extends State<MapViewScreen> {
   LatLng? _userLocation;
   bool _showRecenterButton = false;
   bool _isLoadingLocation = true;
+  Map<String, dynamic>? _selectedShopData;
+  String? _selectedShopId;
 
   @override
   void initState() {
@@ -50,8 +52,8 @@ class _MapViewScreenState extends State<MapViewScreen> {
         _isLoadingLocation = false;
       });
 
-      // Center map on user's location
-      if (_userLocation != null && _mapController != null) {
+      // Center map on user's location ONLY if no shop is selected
+      if (_userLocation != null && _mapController != null && _selectedShopId == null) {
         _mapController!.animateCamera(
           CameraUpdate.newLatLngZoom(_userLocation!, 14),
         );
@@ -106,190 +108,467 @@ class _MapViewScreenState extends State<MapViewScreen> {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
-          onPressed: () => Navigator.pop(context),
-        ),
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: user != null
+            ? FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.uid)
+                .snapshots()
+            : null,
+        builder: (context, userSnap) {
+          Set<String> bookmarks = {};
+          if (userSnap.hasData && userSnap.data?.data() != null) {
+            final u = userSnap.data!.data();
+            bookmarks = ((u?['bookmarks'] as List?)?.cast<String>() ?? []).toSet();
+          }
+
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('shops')
+                .where('isVerified', isEqualTo: true)
+                .snapshots(),
+            builder: (context, shopSnap) {
+              if (shopSnap.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final docs = shopSnap.data?.docs ?? [];
+              
+              return Stack(
+                children: [
+                   // 1. Map Layer
+                  _buildMapLayer(docs),
+
+                  // 2. Back Button
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    child: SafeArea(
+                      child: GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          margin: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.1),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(Icons.arrow_back, color: Colors.black87, size: 20),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // 3. Cafe List Bottom Sheet (Visible when no shop selected)
+                  if (_selectedShopId == null)
+                    _buildCafeListSheet(docs, bookmarks),
+
+                  // 4. Selected Shop Card (Visible when shop selected)
+                  if (_selectedShopId != null && _selectedShopData != null)
+                    Positioned(
+                      bottom: 20,
+                      left: 20,
+                      right: 20,
+                      child: SelectedShopCard(
+                        data: _selectedShopData!,
+                        shopId: _selectedShopId!,
+                        isBookmarked: bookmarks.contains(_selectedShopId),
+                        onClose: () {
+                          setState(() {
+                            _selectedShopId = null;
+                            _selectedShopData = null;
+                            // Optionally recenter map nicely or do nothing
+                          });
+                        },
+                        onToggleBookmark: () => _toggleBookmark(user, _selectedShopId!, bookmarks.contains(_selectedShopId)),
+                        onTap: () => _showShopDetails(_selectedShopId!, _selectedShopData!, bookmarks),
+                      ),
+                    ),
+
+                  // 5. Recenter Button
+                  if (_showRecenterButton)
+                    Positioned(
+                      bottom: _selectedShopId != null ? 150 : 120, // Move up if card is shown, though list obscures it usually
+                      right: 20,
+                      child: FloatingActionButton(
+                        onPressed: _recenterToUserLocation,
+                        backgroundColor: Colors.white,
+                        mini: true,
+                        child: const Icon(Icons.my_location, color: Colors.black87),
+                      ),
+                    ),
+                  
+                  // 6. Loading Location Indicator
+                  if (_isLoadingLocation)
+                    Positioned(
+                      top: 60,
+                      left: 20,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Getting your location...',
+                              style: TextStyle(color: Colors.white, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          );
+        },
       ),
-      body: user != null
-          ? StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(user.uid)
-                  .snapshots(),
-              builder: (context, userSnap) {
-                Set<String> bookmarks = {};
-                if (userSnap.hasData) {
-                  final u = userSnap.data!.data();
-                  bookmarks = ((u?['bookmarks'] as List?)?.cast<String>() ?? [])
-                      .toSet();
-                }
-                return _buildMapView(bookmarks, user);
-              },
-            )
-          : _buildMapView(<String>{}, null),
     );
   }
 
-  Widget _buildMapView(Set<String> bookmarks, User? user) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('shops')
-          .where('isVerified', isEqualTo: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          );
+  Widget _buildMapLayer(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+    final markers = <Marker>{};
+    for (final doc in docs) {
+      final data = doc.data();
+      final lat = (data['latitude'] as num?)?.toDouble();
+      final lng = (data['longitude'] as num?)?.toDouble();
+      if (lat == null || lng == null) continue;
+
+      markers.add(
+        Marker(
+          markerId: MarkerId(doc.id),
+          position: LatLng(lat, lng),
+          onTap: () => _selectShop(doc.id, data),
+        ),
+      );
+    }
+
+     final initialCenter = _userLocation ??
+        (markers.isNotEmpty
+            ? markers.first.position
+            : const LatLng(7.0647, 125.6088));
+
+    return GoogleMap(
+      key: const ValueKey('google_map_view'), // PREVENTS MAP RESET ON REBUILD
+      onMapCreated: _onMapCreated,
+      onCameraMove: _onCameraMove,
+      initialCameraPosition: CameraPosition(
+        target: initialCenter,
+        zoom: 14,
+      ),
+      markers: markers,
+      myLocationEnabled: _userLocation != null,
+      myLocationButtonEnabled: false,
+      zoomControlsEnabled: false,
+      onTap: (_) {
+        if (_selectedShopId != null) {
+          setState(() {
+            _selectedShopId = null;
+            _selectedShopData = null;
+          });
         }
+      },
+      padding: const EdgeInsets.only(bottom: 120), // Constant padding to avoid layout shifts
+    );
+  }
 
-        final docs = snapshot.data?.docs ?? [];
-        final markers = <Marker>{};
+  Widget _buildCafeListSheet(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, Set<String> bookmarks) {
+    if (docs.isEmpty) return const SizedBox.shrink();
 
-        Future<void> toggleBookmark(String shopId, bool isBookmarked) async {
-          if (user == null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Sign in to bookmark shops')),
-            );
-            return;
-          }
-          final ref =
-              FirebaseFirestore.instance.collection('users').doc(user.uid);
-          try {
-            await ref.update({
-              'bookmarks': isBookmarked
-                  ? FieldValue.arrayRemove([shopId])
-                  : FieldValue.arrayUnion([shopId])
-            });
-          } catch (e) {
-            await ref.set({
-              'bookmarks': [shopId],
-            }, SetOptions(merge: true));
-          }
-        }
+    // Sort docs by distance if user location is available
+    final sortedDocs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(docs);
+    if (_userLocation != null) {
+      sortedDocs.sort((a, b) {
+        final dataA = a.data();
+        final dataB = b.data();
+        final latA = (dataA['latitude'] as num?)?.toDouble() ?? 0;
+        final lngA = (dataA['longitude'] as num?)?.toDouble() ?? 0;
+        final latB = (dataB['latitude'] as num?)?.toDouble() ?? 0;
+        final lngB = (dataB['longitude'] as num?)?.toDouble() ?? 0;
 
-        for (final doc in docs) {
-          final data = doc.data();
-          final lat = (data['latitude'] as num?)?.toDouble();
-          final lng = (data['longitude'] as num?)?.toDouble();
-          if (lat == null || lng == null) continue;
+        final distA = Geolocator.distanceBetween(
+          _userLocation!.latitude,
+          _userLocation!.longitude,
+          latA,
+          lngA,
+        );
+        final distB = Geolocator.distanceBetween(
+          _userLocation!.latitude,
+          _userLocation!.longitude,
+          latB,
+          lngB,
+        );
+        return distA.compareTo(distB);
+      });
+    }
 
-          final name = (data['name'] as String?) ?? 'Unknown';
-          final address = (data['address'] as String?) ?? '';
-          final embeddedAvg = ((data['ratings'] as num?)?.toDouble() ?? 0.0);
-          final embeddedCount = ((data['reviews'] as List?)?.length ?? 0);
-          final hours = _formatTodayHours(
-              (data['schedule'] as Map<String, dynamic>?) ?? {});
-          final isBM = bookmarks.contains(doc.id);
-
-          markers.add(
-            Marker(
-              markerId: MarkerId(doc.id),
-              position: LatLng(lat, lng),
-              infoWindow: InfoWindow(
-                title: name,
-                snippet: address,
-                onTap: () {
-                  final gallery =
-                      (data['gallery'] as List?)?.cast<String>() ?? [];
-                  final imageUrl = gallery.isNotEmpty ? gallery[0] : '';
-                  CoffeeShopDetailsBottomSheet.show(
-                    imageUrl: imageUrl,
-                    context,
-                    shopId: doc.id,
-                    name: name,
-                    location: address,
-                    hours: hours,
-                    rating:
-                        '${embeddedAvg.toStringAsFixed(1)} ($embeddedCount)',
-                    isBookmarked: isBM,
-                    onToggleBookmark: () => toggleBookmark(doc.id, isBM),
-                  );
-                },
+    return DraggableScrollableSheet(
+      initialChildSize: 0.35,
+      minChildSize: 0.15,
+      maxChildSize: 0.8,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[900],
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 10,
+                offset: const Offset(0, -2),
               ),
-            ),
-          );
-        }
-
-        final initialCenter = _userLocation ??
-            (markers.isNotEmpty
-                ? markers.first.position
-                : const LatLng(7.0647, 125.6088));
-
-        return Stack(
-          children: [
-            GoogleMap(
-              onMapCreated: _onMapCreated,
-              onCameraMove: _onCameraMove,
-              initialCameraPosition: CameraPosition(
-                target: initialCenter,
-                zoom: 14,
+            ],
+          ),
+          child: Column(
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 10, bottom: 5),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[600],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
               ),
-              markers: markers,
-              myLocationEnabled: _userLocation != null,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-            ),
-            if (_showRecenterButton)
-              Positioned(
-                bottom: 30,
-                right: 20,
-                child: FloatingActionButton(
-                  onPressed: _recenterToUserLocation,
-                  backgroundColor: primary,
-                  mini: true,
-                  child: const Icon(
-                    Icons.my_location,
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(
+                  'Nearby Cafes (${docs.length})',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Bold',
                     color: Colors.white,
                   ),
                 ),
               ),
-            if (_isLoadingLocation)
-              Positioned(
-                top: 20,
-                left: 20,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
+              const Divider(height: 1, color: Colors.white24),
+              // List
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  padding: EdgeInsets.zero,
+                  itemCount: sortedDocs.length,
+                  itemBuilder: (context, index) {
+                    final doc = sortedDocs[index];
+                    final data = doc.data();
+                    final name = (data['name'] as String?) ?? 'Unknown';
+                    final address = (data['address'] as String?) ?? '';
+                    final num embeddedRating = (data['ratings'] as num?) ?? 0.0;
+                    final int embeddedCount = (data['reviews'] as List?)?.length ?? 0;
+                    
+                    // Logic for ratings adapted from CafeDetailsScreen
+
+                     // Calculate average rating from reviews list
+
+
+                    
+
+                    final gallery = (data['gallery'] as List?)?.cast<String>() ?? [];
+                    final imageUrl = gallery.isNotEmpty ? gallery[0] : '';
+
+                    return InkWell(
+                      onTap: () => _selectShop(doc.id, data),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                width: 60,
+                                height: 60,
+                                color: Colors.grey[800],
+                                child: imageUrl.isNotEmpty
+                                    ? Image.network(imageUrl, fit: BoxFit.cover)
+                                    : const Icon(Icons.store, color: Colors.white54),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                      color: Colors.white,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    address,
+                                    style: TextStyle(
+                                      color: Colors.grey[400],
+                                      fontSize: 12,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const SizedBox(height: 4),
+                                  // Live ratings from subcollection (most accurate)
+                                  StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                                    stream: FirebaseFirestore.instance
+                                        .collection('shops')
+                                        .doc(doc.id)
+                                        .collection('reviews')
+                                        .snapshots(),
+                                    builder: (context, snapshot) {
+                                      double rating = 0.0;
+                                      int count = 0;
+                                      
+                                      if (snapshot.hasData) {
+                                        final docs = snapshot.data!.docs;
+                                        final scores = docs
+                                            .map((d) => d.data()['rating'])
+                                            .whereType<num>()
+                                            .map((n) => n.toDouble())
+                                            .toList();
+                                        count = scores.length;
+                                        if (count > 0) {
+                                          rating = scores.reduce((a, b) => a + b) / count;
+                                        }
+                                      } else {
+                                        // Fallback to embedded data while loading
+                                        rating = embeddedRating.toDouble();
+                                        count = embeddedCount;
+                                      }
+
+                                      return Row(
+                                        children: [
+                                          const Icon(Icons.star, size: 14, color: Colors.amber),
+                                          const SizedBox(width: 2),
+                                          Text(
+                                            rating.toStringAsFixed(1),
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 12,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          Text(
+                                            ' ($count)',
+                                            style: TextStyle(
+                                              color: Colors.grey[400],
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  )
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+                          ],
                         ),
                       ),
-                      SizedBox(width: 8),
-                      Text(
-                        'Getting your location...',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
               ),
-          ],
+            ],
+          ),
         );
       },
+    );
+  }
+
+  void _selectShop(String id, Map<String, dynamic> data) {
+    // 1. Update UI state first
+    setState(() {
+      _selectedShopId = id;
+      _selectedShopData = data;
+      _showRecenterButton = false;
+    });
+
+    final latRaw = data['latitude'];
+    final lngRaw = data['longitude'];
+    
+    final double? lat = (latRaw is num) ? latRaw.toDouble() : double.tryParse(latRaw?.toString() ?? '');
+    final double? lng = (lngRaw is num) ? lngRaw.toDouble() : double.tryParse(lngRaw?.toString() ?? '');
+
+    // 2. Animate camera after the frame build ensures the map is ready and layout is stable
+    if (lat != null && lng != null && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _mapController?.animateCamera(
+          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 18),
+        );
+      });
+    }
+  }
+
+  Future<void> _toggleBookmark(User? user, String shopId, bool isBookmarked) async {
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in to bookmark shops')),
+      );
+      return;
+    }
+    final ref = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    try {
+      await ref.update({
+        'bookmarks': isBookmarked
+            ? FieldValue.arrayRemove([shopId])
+            : FieldValue.arrayUnion([shopId])
+      });
+    } catch (e) {
+      await ref.set({
+        'bookmarks': [shopId],
+      }, SetOptions(merge: true));
+    }
+  }
+
+  void _showShopDetails(String shopId, Map<String, dynamic> data, Set<String> bookmarks) {
+    final name = (data['name'] as String?) ?? 'Unknown';
+    final address = (data['address'] as String?) ?? '';
+    final embeddedAvg = ((data['ratings'] as num?)?.toDouble() ?? 0.0);
+    final embeddedCount = ((data['reviews'] as List?)?.length ?? 0);
+    final hours = _formatTodayHours((data['schedule'] as Map<String, dynamic>?) ?? {});
+    final gallery = (data['gallery'] as List?)?.cast<String>() ?? [];
+    final imageUrl = gallery.isNotEmpty ? gallery[0] : '';
+    final logoUrl = (data['logoUrl'] as String?) ?? '';
+
+    CoffeeShopDetailsBottomSheet.show(
+      context,
+      imageUrl: imageUrl,
+      shopId: shopId,
+      name: name,
+      location: address,
+      hours: hours,
+      rating: '${embeddedAvg.toStringAsFixed(1)} ($embeddedCount)',
+      isBookmarked: bookmarks.contains(shopId),
+      onToggleBookmark: () => _toggleBookmark(FirebaseAuth.instance.currentUser, shopId, bookmarks.contains(shopId)),
+      logoUrl: logoUrl,
     );
   }
 

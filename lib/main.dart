@@ -24,6 +24,8 @@ import 'package:cofi/utils/colors.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  String? initializationError;
+  
   try {
     print('Initializing Firebase...');
     await Firebase.initializeApp(
@@ -31,10 +33,9 @@ void main() async {
     );
     print('Firebase initialized');
 
-    // Configure Firestore for better performance and offline support
     FirebaseFirestore.instance.settings = const Settings(
-      persistenceEnabled: true, // Enable offline cache
-      cacheSizeBytes: 100 * 1024 * 1024, // 100MB cache
+      persistenceEnabled: true,
+      cacheSizeBytes: 100 * 1024 * 1024,
     );
 
     await GetStorage.init();
@@ -42,16 +43,48 @@ void main() async {
   } catch (e, stack) {
     print('Error during initialization: $e');
     print('Stack: $stack');
+    initializationError = e.toString();
   }
 
-  runApp(const MyApp());
+  runApp(MyApp(initializationError: initializationError));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final String? initializationError;
+  const MyApp({super.key, this.initializationError});
 
   @override
   Widget build(BuildContext context) {
+    if (initializationError != null) {
+      return MaterialApp(
+        home: Scaffold(
+          backgroundColor: Colors.black,
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Initialization Error',
+                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'The app failed to start correctly.\n\nError: $initializationError',
+                    style: const TextStyle(color: Colors.white70),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    
     return MaterialApp(
       title: 'Cofi',
       theme: ThemeData(
@@ -132,7 +165,7 @@ class AuthGate extends StatelessWidget {
           print('Onboarding check error: ${onboardingSnapshot.error}');
           return const SplashScreen();
         }
-        
+
         if (onboardingSnapshot.connectionState == ConnectionState.waiting) {
           return const SplashScreen();
         }
@@ -142,18 +175,20 @@ class AuthGate extends StatelessWidget {
         return StreamBuilder<User?>(
           stream: FirebaseAuth.instance.authStateChanges(),
           builder: (context, snapshot) {
-            print('Auth state: ${snapshot.connectionState}, user: ${snapshot.data?.email}');
-            
+            print(
+                'Auth state: ${snapshot.connectionState}, user: ${snapshot.data?.email}');
+
             if (snapshot.hasError) {
               print('Auth error: ${snapshot.error}');
               return Scaffold(
                 backgroundColor: Colors.black,
                 body: Center(
-                  child: Text('Auth Error: ${snapshot.error}', style: const TextStyle(color: Colors.white)),
+                  child: Text('Auth Error: ${snapshot.error}',
+                      style: const TextStyle(color: Colors.white)),
                 ),
               );
             }
-            
+
             // While initializing or waiting for auth state, show splash
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const SplashScreen();
@@ -185,13 +220,14 @@ class AuthGate extends StatelessWidget {
                   .doc(user.uid)
                   .snapshots(),
               builder: (context, userSnapshot) {
-                print('User profile snapshot state: ${userSnapshot.connectionState}');
-                
+                print(
+                    'User profile snapshot state: ${userSnapshot.connectionState}');
+
                 if (userSnapshot.hasError) {
                   print('User profile error: ${userSnapshot.error}');
                   return const SplashScreen();
                 }
-                
+
                 if (userSnapshot.connectionState == ConnectionState.waiting) {
                   return const SplashScreen();
                 }
@@ -201,20 +237,21 @@ class AuthGate extends StatelessWidget {
                   return const SplashScreen();
                 }
 
-                final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
-                
+                final userData =
+                    userSnapshot.data!.data() as Map<String, dynamic>?;
+
                 if (userData == null) {
                   print('User data is null');
                   return const SplashScreen();
                 }
-                
+
                 print('User data: $userData');
-                
+
                 // Check if user has accountType
                 final hasAccountType = userData.containsKey('accountType') &&
-                    userData['accountType'] != null && 
+                    userData['accountType'] != null &&
                     (userData['accountType'] as String?)?.isNotEmpty == true;
-                
+
                 // Check if user has interests
                 final hasInterests = userData.containsKey('interests') &&
                     userData['interests'] != null &&

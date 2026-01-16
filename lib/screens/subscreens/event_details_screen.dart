@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../widgets/text_widget.dart';
 import '../../../widgets/post_event_bottom_sheet.dart';
 import '../../../utils/colors.dart';
@@ -43,160 +44,162 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
               child: ListView(
                 children: [
                   // Event Image Carousel
-                  Builder(
-                    builder: (context) {
-                      final List<String> imageUrls = [];
-                      if (e['imageUrls'] != null) {
-                        imageUrls.addAll((e['imageUrls'] as List).map((e) => e.toString()));
-                      } else if (e['imageUrl'] != null) {
-                        imageUrls.add(e['imageUrl'].toString());
-                      }
-
-                      if (imageUrls.isEmpty) return const SizedBox.shrink();
-
-                      return Stack(
-                        children: [
-                          SizedBox(
-                            height: 400,
-                            width: double.infinity,
-                            child: PageView.builder(
-                              controller: _pageController,
-                              onPageChanged: (index) {
-                                setState(() {
-                                  _currentImageIndex = index;
-                                });
-                              },
-                              itemCount: imageUrls.length,
-                              itemBuilder: (context, index) {
-                                return Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.black,
-                                    image: DecorationImage(
-                                      opacity: 0.65,
-                                      image: NetworkImage(imageUrls[index]),
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          // Dot Indicator
-                          if (imageUrls.length > 1)
-                            Positioned(
-                              bottom: 90,
-                              left: 0,
-                              right: 0,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: List.generate(
-                                  imageUrls.length,
-                                  (index) => Container(
-                                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      color: _currentImageIndex == index
-                                          ? Colors.white
-                                          : Colors.white.withOpacity(0.5),
-                                      shape: BoxShape.circle,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.2),
-                                          blurRadius: 2,
-                                          offset: const Offset(0, 1),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          // Left Arrow
-                          if (_currentImageIndex > 0)
-                            Positioned(
-                              left: 8,
-                              top: 0,
-                              bottom: 100,
-                              child: Center(
-                                child: Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.3),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: IconButton(
-                                    icon: const Icon(Icons.chevron_left,
-                                        color: Colors.white, size: 28),
-                                    onPressed: () {
-                                      _pageController.previousPage(
-                                        duration:
-                                            const Duration(milliseconds: 300),
-                                        curve: Curves.easeInOut,
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-                          // Right Arrow
-                          if (_currentImageIndex < imageUrls.length - 1)
-                            Positioned(
-                              right: 8,
-                              top: 0,
-                              bottom: 100,
-                              child: Center(
-                                child: Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.3),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: IconButton(
-                                    icon: const Icon(Icons.chevron_right,
-                                        color: Colors.white, size: 28),
-                                    onPressed: () {
-                                      _pageController.nextPage(
-                                        duration:
-                                            const Duration(milliseconds: 300),
-                                        curve: Curves.easeInOut,
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-                          Positioned(
-                            top: 16,
-                            left: 16,
-                            child: IconButton(
-                              icon: const Icon(Icons.arrow_back, color: Colors.white),
-                              onPressed: () {
-                                Navigator.pop(context);
-                              },
-                            ),
-                          ),
-                          Positioned(
-                            left: 16,
-                            bottom: 24,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                TextWidget(
-                                  text: (e['title'] ?? 'Event').toString(),
-                                  fontSize: 24,
-                                  color: Colors.white,
-                                  isBold: true,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      );
+                  Builder(builder: (context) {
+                    final List<String> imageUrls = [];
+                    if (e['imageUrls'] != null) {
+                      imageUrls.addAll(
+                          (e['imageUrls'] as List).map((e) => e.toString()));
+                    } else if (e['imageUrl'] != null) {
+                      imageUrls.add(e['imageUrl'].toString());
                     }
-                  ),
+
+                    if (imageUrls.isEmpty) return const SizedBox.shrink();
+
+                    return Stack(
+                      children: [
+                        SizedBox(
+                          height: 400,
+                          width: double.infinity,
+                          child: PageView.builder(
+                            controller: _pageController,
+                            onPageChanged: (index) {
+                              setState(() {
+                                _currentImageIndex = index;
+                              });
+                            },
+                            itemCount: imageUrls.length,
+                            itemBuilder: (context, index) {
+                              return Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.black,
+                                  image: DecorationImage(
+                                    opacity: 0.65,
+                                    image: CachedNetworkImageProvider(
+                                        imageUrls[index]),
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        // Dot Indicator
+                        if (imageUrls.length > 1)
+                          Positioned(
+                            bottom: 90,
+                            left: 0,
+                            right: 0,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(
+                                imageUrls.length,
+                                (index) => Container(
+                                  margin:
+                                      const EdgeInsets.symmetric(horizontal: 4),
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: _currentImageIndex == index
+                                        ? Colors.white
+                                        : Colors.white.withOpacity(0.5),
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.2),
+                                        blurRadius: 2,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        // Left Arrow
+                        if (_currentImageIndex > 0)
+                          Positioned(
+                            left: 8,
+                            top: 0,
+                            bottom: 100,
+                            child: Center(
+                              child: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.3),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: IconButton(
+                                  icon: const Icon(Icons.chevron_left,
+                                      color: Colors.white, size: 28),
+                                  onPressed: () {
+                                    _pageController.previousPage(
+                                      duration:
+                                          const Duration(milliseconds: 300),
+                                      curve: Curves.easeInOut,
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                        // Right Arrow
+                        if (_currentImageIndex < imageUrls.length - 1)
+                          Positioned(
+                            right: 8,
+                            top: 0,
+                            bottom: 100,
+                            child: Center(
+                              child: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.3),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: IconButton(
+                                  icon: const Icon(Icons.chevron_right,
+                                      color: Colors.white, size: 28),
+                                  onPressed: () {
+                                    _pageController.nextPage(
+                                      duration:
+                                          const Duration(milliseconds: 300),
+                                      curve: Curves.easeInOut,
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                        Positioned(
+                          top: 16,
+                          left: 16,
+                          child: IconButton(
+                            icon: const Icon(Icons.arrow_back,
+                                color: Colors.white),
+                            onPressed: () {
+                              Navigator.pop(context);
+                            },
+                          ),
+                        ),
+                        Positioned(
+                          left: 16,
+                          bottom: 24,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              TextWidget(
+                                text: (e['title'] ?? 'Event').toString(),
+                                fontSize: 24,
+                                color: Colors.white,
+                                isBold: true,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
                   const SizedBox(height: 24),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),

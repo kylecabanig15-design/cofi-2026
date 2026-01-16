@@ -5,7 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cofi/widgets/text_widget.dart';
-import 'package:cofi/utils/colors.dart';
+import '../../utils/colors.dart';
+import '../../widgets/post_event_bottom_sheet.dart';
 import 'package:cofi/screens/subscreens/reviews_screen.dart';
 import 'package:cofi/screens/subscreens/log_visit_screen.dart';
 import 'package:cofi/screens/subscreens/write_review_screen.dart';
@@ -258,7 +259,8 @@ class CafeDetailsScreen extends StatelessWidget {
                                 padding: const EdgeInsets.only(left: 12),
                                 child: CircleAvatar(
                                   radius: 28,
-                                  backgroundImage: NetworkImage(logoUrl),
+                                  backgroundImage:
+                                      CachedNetworkImageProvider(logoUrl),
                                 ),
                               )
                             else
@@ -327,7 +329,7 @@ class CafeDetailsScreen extends StatelessWidget {
                       : _buildReviewsSummary(reviews),
                   (shopId != null && shopId!.isNotEmpty)
                       ? _buildReviewsSectionStream(shopId!)
-                      : _buildReviewsSection(reviews),
+                      : _buildReviewsSection(reviews, context),
                   // Add extra padding to ensure content isn't hidden behind fixed buttons
                   const SizedBox(height: 200),
                 ],
@@ -885,7 +887,7 @@ class CafeDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildReviewsSection(List reviews) {
+  Widget _buildReviewsSection(List reviews, BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -926,6 +928,7 @@ class CafeDetailsScreen extends StatelessWidget {
                 rating: m['rating'],
                 createdAt: m['createdAt'],
                 responses: responses,
+                context: context,
               );
             }),
         ],
@@ -942,6 +945,7 @@ class CafeDetailsScreen extends StatelessWidget {
     required int rating,
     Timestamp? createdAt,
     List<Map<String, dynamic>>? responses,
+    required BuildContext context,
   }) {
     // Calculate time difference
     String timeAgo = '1 week ago'; // Default fallback
@@ -1052,39 +1056,55 @@ class CafeDetailsScreen extends StatelessWidget {
               color: Colors.white70,
             ),
             const SizedBox(height: 16),
-            if (imageUrl != null && imageUrl.isNotEmpty)
-              Container(
-                height: 120,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: CachedNetworkImage(
-                    imageUrl: imageUrl,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
+              if (imageUrl != null && imageUrl.isNotEmpty)
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => _FullScreenImageViewer(
+                          imageUrl: imageUrl,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    constraints: const BoxConstraints(maxHeight: 450),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        )
+                      ],
                     ),
-                    errorWidget: (context, url, error) => const Center(
-                      child: Icon(Icons.image, color: Colors.white38, size: 60),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.fitWidth,
+                        placeholder: (context, url) => Container(
+                          height: 200,
+                          color: Colors.grey[850],
+                          child: const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          height: 200,
+                          color: Colors.grey[850],
+                          child: const Center(
+                            child: Icon(Icons.broken_image,
+                                color: Colors.white38, size: 50),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              )
-            else
-              Container(
-                height: 120,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  color: Colors.grey[800],
-                ),
-                child: const Center(
-                  child: Icon(Icons.image, color: Colors.white38, size: 60),
-                ),
-              ),
             // Owner's Response Section
             if (responses != null && responses.isNotEmpty) ...[
               const SizedBox(height: 16),
@@ -1320,6 +1340,7 @@ class CafeDetailsScreen extends StatelessWidget {
                     rating: m['rating'],
                     createdAt: m['createdAt'] as Timestamp?,
                     responses: responses,
+                    context: context,
                   );
                 }),
             ],
@@ -1446,7 +1467,6 @@ class CafeDetailsScreen extends StatelessWidget {
       ),
     );
   }
-
 }
 
 class _CafeMap extends StatefulWidget {
@@ -1478,7 +1498,8 @@ class _CafeMapState extends State<_CafeMap> {
             Marker(
               markerId: const MarkerId('shop_location'),
               position: LatLng(widget.latitude, widget.longitude),
-              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueRed),
             ),
           },
           zoomControlsEnabled: false,
@@ -1527,6 +1548,47 @@ class _CafeMapState extends State<_CafeMap> {
         icon: Icon(icon, color: Colors.black87, size: 20),
         onPressed: onPressed,
         padding: EdgeInsets.zero,
+      ),
+    );
+  }
+}
+
+class _FullScreenImageViewer extends StatelessWidget {
+  final String imageUrl;
+
+  const _FullScreenImageViewer({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Center(
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: CachedNetworkImage(
+                imageUrl: imageUrl,
+                fit: BoxFit.contain,
+                placeholder: (context, url) => const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+                errorWidget: (context, url, error) => const Center(
+                  child: Icon(Icons.error, color: Colors.white, size: 50),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 40,
+            left: 16,
+            child: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white, size: 30),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+        ],
       ),
     );
   }

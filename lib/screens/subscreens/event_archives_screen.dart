@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/text_widget.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class EventArchivesScreen extends StatefulWidget {
   final String shopId;
@@ -179,10 +180,12 @@ class _EventArchivesScreenState extends State<EventArchivesScreen> {
               decoration: BoxDecoration(
                 color: Colors.grey[800],
               ),
-              child: Image.network(
-                imageUrl,
+              child: CachedNetworkImage(
+                imageUrl: imageUrl,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Center(
+                placeholder: (context, url) =>
+                    Container(color: Colors.grey[800]),
+                errorWidget: (context, url, error) => Center(
                   child: Icon(Icons.image, color: Colors.white38, size: 50),
                 ),
               ),

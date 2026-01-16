@@ -74,8 +74,9 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
       _jobNameController.text = widget.jobData!['title'] ?? '';
       _rateController.text = widget.jobData!['rate'] ?? '';
       // Prefer the canonical "qualifications" field, but fall back to the old key
-      _requiredController.text =
-          widget.jobData!['qualifications'] ?? widget.jobData!['requiredSkills'] ?? '';
+      _requiredController.text = widget.jobData!['qualifications'] ??
+          widget.jobData!['requiredSkills'] ??
+          '';
       _descriptionController.text = widget.jobData!['description'] ?? '';
       _emailController.text = widget.jobData!['email'] ?? '';
       _linkController.text = widget.jobData!['link'] ?? '';
@@ -171,7 +172,8 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
           // If we somehow don't have a jobId, fail fast with a clear message
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Unable to update job: missing job ID.')),
+              const SnackBar(
+                  content: Text('Unable to update job: missing job ID.')),
             );
           }
           return;

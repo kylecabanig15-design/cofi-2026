@@ -6,7 +6,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../utils/colors.dart';
 import '../../widgets/text_widget.dart';
+import '../../widgets/text_widget.dart';
 import '../../widgets/button_widget.dart';
+import 'dart:async'; // Added for TimeoutException
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -138,7 +140,7 @@ class _LoginScreenState extends State<LoginScreen> {
           await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
-      );
+      ).timeout(const Duration(seconds: 30));
 
       // Check if email is verified
       if (!userCredential.user!.emailVerified) {
@@ -223,15 +225,19 @@ class _LoginScreenState extends State<LoginScreen> {
       final message = (e.message ?? 'Authentication failed').trim();
       final full = message.isNotEmpty ? '$code: $message' : code;
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(full)),
+        _showErrorDialog(context, 'Login Failed', full);
+      }
+    } on TimeoutException {
+      if (mounted) {
+        _showErrorDialog(
+          context,
+          'Connection Timeout',
+          'The login request took too long. Please check your internet connection and try again.',
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Unexpected error: ${e.toString()}')),
-        );
+        _showErrorDialog(context, 'Unexpected Error', e.toString());
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -244,16 +250,29 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final userCredential = await GoogleSignInService.signInWithGoogle();
+      final userCredential = await GoogleSignInService.signInWithGoogle()
+          .timeout(const Duration(seconds: 45));
 
       if (userCredential != null && mounted) {
         // Success - let auth gate handle navigation
+      } else if (mounted) {
+        _showErrorDialog(
+          context,
+          'Sign In Failed',
+          'Sign in cancelled or configuration error.\n\nPlease check your SHA-1 fingerprint in Firebase Console.',
+        );
+      }
+    } on TimeoutException {
+      if (mounted) {
+        _showErrorDialog(
+          context,
+          'Connection Timeout',
+          'Google Sign In took too long. Please check your internet connection and try again.',
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
+        _showErrorDialog(context, 'Google Sign In Error', e.toString());
       }
     } finally {
       if (mounted) {
@@ -346,6 +365,40 @@ class _LoginScreenState extends State<LoginScreen> {
               text: 'Send',
               fontSize: 14,
               color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorDialog(BuildContext context, String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: TextWidget(
+          text: title,
+          fontSize: 18,
+          color: Colors.redAccent,
+          isBold: true,
+        ),
+        content: SingleChildScrollView(
+          child: TextWidget(
+            text: message,
+            fontSize: 14,
+            color: Colors.white,
+            align: TextAlign.left,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: TextWidget(
+              text: 'OK',
+              fontSize: 16,
+              color: primary,
+              isBold: true,
             ),
           ),
         ],

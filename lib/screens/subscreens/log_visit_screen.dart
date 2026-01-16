@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/text_widget.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class LogVisitScreen extends StatefulWidget {
   final String shopId;
@@ -120,7 +121,7 @@ class _LogVisitScreenState extends State<LogVisitScreen> {
                     color: Colors.grey[800],
                     image: widget.logo.isNotEmpty
                         ? DecorationImage(
-                            image: NetworkImage(widget.logo),
+                            image: CachedNetworkImageProvider(widget.logo),
                             fit: BoxFit.cover,
                           )
                         : null,

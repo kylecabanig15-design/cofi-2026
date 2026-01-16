@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Padding to shrink the logo visually within the 108dp splash icon view -->
+    <item
+        android:top="54dp"
+        android:bottom="54dp"
+        android:left="54dp"
+        android:right="54dp"
+        android:gravity="center">
+        <bitmap
+            android:src="@drawable/splash_logo"
+            android:gravity="center" />
+    </item>
+</layer-list>

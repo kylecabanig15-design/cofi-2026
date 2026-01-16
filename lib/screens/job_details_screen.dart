@@ -575,8 +575,9 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
               icon: Icon(isClosedStatus ? Icons.lock_open : Icons.lock_outline),
               label: Text(isClosedStatus ? 'Open' : 'Close'),
               style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    isPending ? Colors.grey : (isClosedStatus ? Colors.green : Colors.red),
+                backgroundColor: isPending
+                    ? Colors.grey
+                    : (isClosedStatus ? Colors.green : Colors.red),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 disabledBackgroundColor: Colors.grey,

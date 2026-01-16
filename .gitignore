@@ -1,11 +1,35 @@
-# flutter / dart
+# Flutter / Dart
 .dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+node_modules/
+firebase/functions/node_modules/
 
-
-# build outputs
-
-
-# android artifacts
+# Android
+.gradle/
+local.properties
 *.apk
 *.aab
-node_modules
+*.keystore
+*.jks
+
+# iOS/macOS
+.DS_Store
+.apple_desktop
+Podfile.lock
+DerivedData/
+*.moved-aside
+*.xcuserstate
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# Symbols and logs
+*.log
+*.js_
+*.js.map
+*.symbol

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../widgets/text_widget.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../utils/colors.dart';
 
 class EventCommentsScreen extends StatefulWidget {
@@ -159,13 +160,15 @@ class _EventCommentsScreenState extends State<EventCommentsScreen> {
                   child: _currentUser?.photoURL != null
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(20),
-                          child: Image.network(
-                            _currentUser!.photoURL!,
+                          child: CachedNetworkImage(
+                            imageUrl: _currentUser!.photoURL!,
                             width: 40,
                             height: 40,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Icon(
+                            placeholder: (context, url) =>
+                                Container(color: Colors.grey[800]),
+                            errorWidget: (context, url, error) {
+                              return const Icon(
                                 Icons.person,
                                 color: Colors.white,
                                 size: 24,
@@ -250,13 +253,15 @@ class _EventCommentsScreenState extends State<EventCommentsScreen> {
             child: comment['userPhotoUrl'] != null
                 ? ClipRRect(
                     borderRadius: BorderRadius.circular(20),
-                    child: Image.network(
-                      comment['userPhotoUrl'],
+                    child: CachedNetworkImage(
+                      imageUrl: comment['userPhotoUrl'],
                       width: 40,
                       height: 40,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Icon(
+                      placeholder: (context, url) =>
+                          Container(color: Colors.grey[800]),
+                      errorWidget: (context, url, error) {
+                        return const Icon(
                           Icons.person,
                           color: Colors.white,
                           size: 24,

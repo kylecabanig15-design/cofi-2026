@@ -9,6 +9,7 @@ import 'dart:io';
 import '../../utils/colors.dart';
 import '../../widgets/text_widget.dart';
 import 'custom_location_screen.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class SubmitShopScreen extends StatefulWidget {
   const SubmitShopScreen({super.key});
@@ -34,7 +35,7 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
   List<File> _galleryImages = [];
   final List<File> _menuPriceImages = [];
   bool _isUploading = false;
-  
+
   // Existing image URLs (for edit mode)
   String? _existingLogoUrl;
   List<String> _existingGalleryUrls = [];
@@ -174,7 +175,8 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
       // Load existing images
       _existingLogoUrl = (data['logoUrl'] as String?) ?? '';
       _existingGalleryUrls = ((data['gallery'] as List?)?.cast<String>()) ?? [];
-      _existingMenuPriceUrls = ((data['menuPricePhotos'] as List?)?.cast<String>()) ?? [];
+      _existingMenuPriceUrls =
+          ((data['menuPricePhotos'] as List?)?.cast<String>()) ?? [];
     } catch (_) {
       // ignore, basic UX handled by unchanged fields
     } finally {
@@ -526,730 +528,800 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
                       children: [
                         const SizedBox(height: 16),
 
-                    // Posting as indicator
-                    if (_currentUser != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.account_circle,
-                                color: Colors.white70, size: 18),
-                            const SizedBox(width: 8),
-                            TextWidget(
-                              text:
-                                  'Posting as ${_currentUser!.displayName?.isNotEmpty == true ? _currentUser!.displayName! : (_currentUser!.email ?? 'Anonymous')}',
-                              fontSize: 13,
-                              color: Colors.white70,
-                              isBold: false,
+                        // Posting as indicator
+                        if (_currentUser != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.account_circle,
+                                    color: Colors.white70, size: 18),
+                                const SizedBox(width: 8),
+                                TextWidget(
+                                  text:
+                                      'Posting as ${_currentUser!.displayName?.isNotEmpty == true ? _currentUser!.displayName! : (_currentUser!.email ?? 'Anonymous')}',
+                                  fontSize: 13,
+                                  color: Colors.white70,
+                                  isBold: false,
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
+                          ),
 
-                    // Shop Logo Section
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        TextWidget(
-                          text: 'Shop Logo',
-                          fontSize: 16,
-                          color: Colors.white,
-                          isBold: true,
-                        ),
-                        GestureDetector(
-                          onTap: _isUploading ? null : _pickImage,
-                          child: Container(
-                            width: 60,
-                            height: 60,
-                            decoration: BoxDecoration(
-                              color: primary,
-                              borderRadius: BorderRadius.circular(8),
+                        // Shop Logo Section
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            TextWidget(
+                              text: 'Shop Logo',
+                              fontSize: 16,
+                              color: Colors.white,
+                              isBold: true,
                             ),
-                            child: _isUploading
-                                ? const Center(
-                                    child: SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                                Colors.white),
-                                      ),
-                                    ),
-                                  )
-                                : _selectedImage != null
-                                    ? ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Image.file(
-                                          _selectedImage!,
-                                          width: 60,
-                                          height: 60,
-                                          fit: BoxFit.cover,
+                            GestureDetector(
+                              onTap: _isUploading ? null : _pickImage,
+                              child: Container(
+                                width: 60,
+                                height: 60,
+                                decoration: BoxDecoration(
+                                  color: primary,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: _isUploading
+                                    ? const Center(
+                                        child: SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                    Colors.white),
+                                          ),
                                         ),
                                       )
-                                    : _existingLogoUrl != null && _existingLogoUrl!.isNotEmpty
+                                    : _selectedImage != null
                                         ? ClipRRect(
-                                            borderRadius: BorderRadius.circular(8),
-                                            child: Image.network(
-                                              _existingLogoUrl!,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            child: Image.file(
+                                              _selectedImage!,
                                               width: 60,
                                               height: 60,
                                               fit: BoxFit.cover,
                                             ),
                                           )
-                                        : Center(
-                                            child: Icon(
-                                              Icons.add_a_photo,
-                                              color: Colors.white,
-                                              size: 24,
-                                            ),
-                                          ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Shop Name
-                    TextWidget(
-                      text: 'Shop Name',
-                      fontSize: 16,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[900],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: TextField(
-                        controller: shopNameController,
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: 'Sample Cafe Name',
-                          hintStyle:
-                              TextStyle(color: Colors.grey[500], fontSize: 14),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 16),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Shop Location Section (moved above Address)
-                    TextWidget(
-                      text: 'Shop Location',
-                      fontSize: 16,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Location Type Selection
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey[900],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        children: [
-                          RadioListTile<String>(
-                            title: TextWidget(
-                              text: 'My Current Location',
-                              fontSize: 14,
-                              color: Colors.white,
-                            ),
-                            subtitle: TextWidget(
-                              text: 'Use my current location for the shop',
-                              fontSize: 12,
-                              color: Colors.white70,
-                            ),
-                            value: 'my_location',
-                            groupValue: _locationType,
-                            onChanged: (value) {
-                              setState(() {
-                                _locationType = value!;
-                              });
-                            },
-                            activeColor: primary,
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 16),
-                          ),
-                          RadioListTile<String>(
-                            title: TextWidget(
-                              text: 'Custom Location',
-                              fontSize: 14,
-                              color: Colors.white,
-                            ),
-                            subtitle: TextWidget(
-                              text: 'Select a custom location on the map',
-                              fontSize: 12,
-                              color: Colors.white70,
-                            ),
-                            value: 'custom_location',
-                            groupValue: _locationType,
-                            onChanged: (value) {
-                              setState(() {
-                                _locationType = value!;
-                              });
-                            },
-                            activeColor: primary,
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 16),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Show selected custom location info
-                    if (_locationType == 'custom_location' &&
-                        _selectedLocation != null)
-                      Container(
-                        margin: const EdgeInsets.only(top: 12),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[900],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.location_on,
-                                color: primary, size: 20),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextWidget(
-                                text:
-                                    'Selected: ${_selectedLocation!.latitude.toStringAsFixed(6)}, ${_selectedLocation!.longitude.toStringAsFixed(6)}',
-                                fontSize: 12,
-                                color: Colors.white70,
+                                        : _existingLogoUrl != null &&
+                                                _existingLogoUrl!.isNotEmpty
+                                            ? ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                child: CachedNetworkImage(
+                                                  imageUrl: _existingLogoUrl!,
+                                                  width: 60,
+                                                  height: 60,
+                                                  fit: BoxFit.cover,
+                                                  placeholder: (context, url) =>
+                                                      Container(
+                                                          color:
+                                                              Colors.grey[800]),
+                                                  errorWidget:
+                                                      (context, url, error) =>
+                                                          const Icon(
+                                                              Icons.error,
+                                                              color:
+                                                                  Colors.white),
+                                                ),
+                                              )
+                                            : Center(
+                                                child: Icon(
+                                                  Icons.add_a_photo,
+                                                  color: Colors.white,
+                                                  size: 24,
+                                                ),
+                                              ),
                               ),
                             ),
-                            TextButton(
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Shop Name
+                        TextWidget(
+                          text: 'Shop Name',
+                          fontSize: 16,
+                          color: Colors.white,
+                          isBold: true,
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[900],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: TextField(
+                            controller: shopNameController,
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 14),
+                            decoration: InputDecoration(
+                              hintText: 'Sample Cafe Name',
+                              hintStyle: TextStyle(
+                                  color: Colors.grey[500], fontSize: 14),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 16),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Shop Location Section (moved above Address)
+                        TextWidget(
+                          text: 'Shop Location',
+                          fontSize: 16,
+                          color: Colors.white,
+                          isBold: true,
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Location Type Selection
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey[900],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            children: [
+                              RadioListTile<String>(
+                                title: TextWidget(
+                                  text: 'My Current Location',
+                                  fontSize: 14,
+                                  color: Colors.white,
+                                ),
+                                subtitle: TextWidget(
+                                  text: 'Use my current location for the shop',
+                                  fontSize: 12,
+                                  color: Colors.white70,
+                                ),
+                                value: 'my_location',
+                                groupValue: _locationType,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _locationType = value!;
+                                  });
+                                },
+                                activeColor: primary,
+                                contentPadding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
+                              ),
+                              RadioListTile<String>(
+                                title: TextWidget(
+                                  text: 'Custom Location',
+                                  fontSize: 14,
+                                  color: Colors.white,
+                                ),
+                                subtitle: TextWidget(
+                                  text: 'Select a custom location on the map',
+                                  fontSize: 12,
+                                  color: Colors.white70,
+                                ),
+                                value: 'custom_location',
+                                groupValue: _locationType,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _locationType = value!;
+                                  });
+                                },
+                                activeColor: primary,
+                                contentPadding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Show selected custom location info
+                        if (_locationType == 'custom_location' &&
+                            _selectedLocation != null)
+                          Container(
+                            margin: const EdgeInsets.only(top: 12),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.location_on,
+                                    color: primary, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextWidget(
+                                    text:
+                                        'Selected: ${_selectedLocation!.latitude.toStringAsFixed(6)}, ${_selectedLocation!.longitude.toStringAsFixed(6)}',
+                                    fontSize: 12,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: _selectCustomLocation,
+                                  child: const Text('Change',
+                                      style: TextStyle(fontSize: 12)),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        // Custom location selection button
+                        if (_locationType == 'custom_location')
+                          Container(
+                            margin: const EdgeInsets.only(top: 12),
+                            width: double.infinity,
+                            height: 48,
+                            child: ElevatedButton(
                               onPressed: _selectCustomLocation,
-                              child: const Text('Change',
-                                  style: TextStyle(fontSize: 12)),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    // Custom location selection button
-                    if (_locationType == 'custom_location')
-                      Container(
-                        margin: const EdgeInsets.only(top: 12),
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton(
-                          onPressed: _selectCustomLocation,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primary,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(100),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: primary,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(100),
+                                ),
+                              ),
+                              child: TextWidget(
+                                text: _selectedLocation == null
+                                    ? 'Select Location on Map'
+                                    : 'Change Location',
+                                fontSize: 16,
+                                color: Colors.white,
+                                isBold: true,
+                              ),
                             ),
                           ),
-                          child: TextWidget(
-                            text: _selectedLocation == null
-                                ? 'Select Location on Map'
-                                : 'Change Location',
-                            fontSize: 16,
-                            color: Colors.white,
-                            isBold: true,
+
+                        const SizedBox(height: 32),
+
+                        // Location requirement notice for my location
+                        if (_locationType == 'my_location' && !_locationReady)
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                  color: Colors.amber.withValues(alpha: 0.4)),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.location_off,
+                                    color: Colors.amber, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Location required',
+                                        style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        'Please enable Location Services and grant permission to proceed.',
+                                        style: TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 12),
+                                      ),
+                                      Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: TextButton(
+                                          onPressed: _ensureLocationReady,
+                                          child: const Text('Fix',
+                                              style: TextStyle(fontSize: 12)),
+                                        ),
+                                      )
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        const SizedBox(height: 24),
+
+                        // Address
+                        TextWidget(
+                          text: 'Address',
+                          fontSize: 16,
+                          color: Colors.white,
+                          isBold: true,
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[900],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: TextField(
+                            controller: addressController,
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 14),
+                            decoration: InputDecoration(
+                              hintText: 'Davao City',
+                              hintStyle: TextStyle(
+                                  color: Colors.grey[500], fontSize: 14),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 16),
+                            ),
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 32),
 
-                    const SizedBox(height: 32),
-
-                    // Location requirement notice for my location
-                    if (_locationType == 'my_location' && !_locationReady)
-                      Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(8),
-                          border:
-                              Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+                        // Gallery
+                        TextWidget(
+                          text: 'Gallery (Max 5)',
+                          fontSize: 16,
+                          color: Colors.white,
+                          isBold: true,
                         ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(Icons.location_off,
-                                color: Colors.amber, size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Location required',
-                                    style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const Text(
-                                    'Please enable Location Services and grant permission to proceed.',
-                                    style: TextStyle(
-                                        color: Colors.white70, fontSize: 12),
-                                  ),
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: TextButton(
-                                      onPressed: _ensureLocationReady,
-                                      child: const Text('Fix',
-                                          style: TextStyle(fontSize: 12)),
-                                    ),
-                                  )
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    const SizedBox(height: 24),
-
-                    // Address
-                    TextWidget(
-                      text: 'Address',
-                      fontSize: 16,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[900],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: TextField(
-                        controller: addressController,
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: 'Davao City',
-                          hintStyle:
-                              TextStyle(color: Colors.grey[500], fontSize: 14),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 16),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-
-                    // Gallery
-                    TextWidget(
-                      text: 'Gallery (Max 5)',
-                      fontSize: 16,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 200,
-                      child: (_existingGalleryUrls.isEmpty && _galleryImages.isEmpty)
-                          ? GestureDetector(
-                              onTap: _isUploading ? null : _pickGalleryImages,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[800],
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: Colors.grey[700]!,
-                                    width: 1,
-                                    style: BorderStyle.solid,
-                                  ),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(
-                                      Icons.add_photo_alternate_outlined,
-                                      color: Colors.white54,
-                                      size: 40,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    TextWidget(
-                                      text: 'Add up to 5 photos',
-                                      fontSize: 14,
-                                      color: Colors.white54,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                          : ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: _existingGalleryUrls.length + _galleryImages.length + (_existingGalleryUrls.length + _galleryImages.length < 5 ? 1 : 0),
-                              separatorBuilder: (context, index) => const SizedBox(width: 12),
-                              itemBuilder: (context, index) {
-                                // Add button at the end
-                                if (index == _existingGalleryUrls.length + _galleryImages.length) {
-                                   return GestureDetector(
-                                    onTap: _isUploading ? null : _pickGalleryImages,
-                                    child: Container(
-                                      width: 150,
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[800],
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(color: Colors.grey[700]!),
-                                      ),
-                                      child: const Center(
-                                        child: Icon(Icons.add, color: Colors.white, size: 30),
-                                      ),
-                                    ),
-                                  );
-                                }
-
-                                // Existing Images
-                                if (index < _existingGalleryUrls.length) {
-                                  return Stack(
-                                    children: [
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: Image.network(
-                                          _existingGalleryUrls[index],
-                                          width: 280,
-                                          height: 200,
-                                          fit: BoxFit.cover,
-                                          loadingBuilder: (context, child, loadingProgress) {
-                                            if (loadingProgress == null) return child;
-                                            return Container(
-                                               width: 280,
-                                               height: 200,
-                                               color: Colors.grey[800],
-                                               child: const Center(child: CircularProgressIndicator()),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                      Positioned(
-                                        top: 8,
-                                        right: 8,
-                                        child: GestureDetector(
-                                          onTap: () {
-                                            setState(() {
-                                              _existingGalleryUrls.removeAt(index);
-                                            });
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.all(4),
-                                            decoration: const BoxDecoration(
-                                              color: Colors.black54,
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: const Icon(
-                                              Icons.close,
-                                              color: Colors.white,
-                                              size: 16,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                }
-
-                                 // New Images
-                                final newIndex = index - _existingGalleryUrls.length;
-                                return Stack(
-                                  children: [
-                                    ClipRRect(
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          height: 200,
+                          child: (_existingGalleryUrls.isEmpty &&
+                                  _galleryImages.isEmpty)
+                              ? GestureDetector(
+                                  onTap:
+                                      _isUploading ? null : _pickGalleryImages,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[800],
                                       borderRadius: BorderRadius.circular(12),
-                                      child: Image.file(
-                                        _galleryImages[newIndex],
-                                        width: 280,
-                                        height: 200,
-                                        fit: BoxFit.cover,
+                                      border: Border.all(
+                                        color: Colors.grey[700]!,
+                                        width: 1,
+                                        style: BorderStyle.solid,
                                       ),
                                     ),
-                                    Positioned(
-                                      top: 8,
-                                      right: 8,
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            _galleryImages.removeAt(newIndex);
-                                          });
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: const BoxDecoration(
-                                            color: Colors.black54,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(
-                                            Icons.close,
-                                            color: Colors.white,
-                                            size: 16,
-                                          ),
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(
+                                          Icons.add_photo_alternate_outlined,
+                                          color: Colors.white54,
+                                          size: 40,
                                         ),
-                                      ),
+                                        const SizedBox(height: 8),
+                                        TextWidget(
+                                          text: 'Add up to 5 photos',
+                                          fontSize: 14,
+                                          color: Colors.white54,
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                );
-
-                              },
-                            ),
-                    ),
-                    const SizedBox(height: 32),
-
-                    // Menu/Price Photos
-                    TextWidget(
-                      text: 'Menu/Price Photos (Max 5)',
-                      fontSize: 16,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 200,
-                      child: (_existingMenuPriceUrls.isEmpty && _menuPriceImages.isEmpty)
-                          ? GestureDetector(
-                              onTap: _isUploading ? null : _pickMenuPriceImages,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[800],
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: Colors.grey[700]!,
-                                    width: 1,
-                                    style: BorderStyle.solid,
                                   ),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(
-                                      Icons.add_photo_alternate_outlined,
-                                      color: Colors.white54,
-                                      size: 40,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    TextWidget(
-                                      text: 'Add up to 5 photos',
-                                      fontSize: 14,
-                                      color: Colors.white54,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                          : ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: _existingMenuPriceUrls.length + _menuPriceImages.length + (_existingMenuPriceUrls.length + _menuPriceImages.length < 5 ? 1 : 0),
-                              separatorBuilder: (context, index) => const SizedBox(width: 12),
-                              itemBuilder: (context, index) {
-                                // Add button at the end
-                                if (index == _existingMenuPriceUrls.length + _menuPriceImages.length) {
-                                   return GestureDetector(
-                                    onTap: _isUploading ? null : _pickMenuPriceImages,
-                                    child: Container(
-                                      width: 150,
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey[800],
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(color: Colors.grey[700]!),
-                                      ),
-                                      child: const Center(
-                                        child: Icon(Icons.add, color: Colors.white, size: 30),
-                                      ),
-                                    ),
-                                  );
-                                }
-
-                                // Existing Images
-                                if (index < _existingMenuPriceUrls.length) {
-                                  return Stack(
-                                    children: [
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: Image.network(
-                                          _existingMenuPriceUrls[index],
-                                          width: 280,
-                                          height: 200,
-                                          fit: BoxFit.cover,
-                                          loadingBuilder: (context, child, loadingProgress) {
-                                            if (loadingProgress == null) return child;
-                                            return Container(
-                                               width: 280,
-                                               height: 200,
-                                               color: Colors.grey[800],
-                                               child: const Center(child: CircularProgressIndicator()),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                      Positioned(
-                                        top: 8,
-                                        right: 8,
-                                        child: GestureDetector(
-                                          onTap: () {
-                                            setState(() {
-                                              _existingMenuPriceUrls.removeAt(index);
-                                            });
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.all(4),
-                                            decoration: const BoxDecoration(
-                                              color: Colors.black54,
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: const Icon(
-                                              Icons.close,
-                                              color: Colors.white,
-                                              size: 16,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                }
-
-                                 // New Images
-                                final newIndex = index - _existingMenuPriceUrls.length;
-                                return Stack(
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Image.file(
-                                        _menuPriceImages[newIndex],
-                                        width: 280,
-                                        height: 200,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                    Positioned(
-                                      top: 8,
-                                      right: 8,
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            _menuPriceImages.removeAt(newIndex);
-                                          });
-                                        },
+                                )
+                              : ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: _existingGalleryUrls.length +
+                                      _galleryImages.length +
+                                      (_existingGalleryUrls.length +
+                                                  _galleryImages.length <
+                                              5
+                                          ? 1
+                                          : 0),
+                                  separatorBuilder: (context, index) =>
+                                      const SizedBox(width: 12),
+                                  itemBuilder: (context, index) {
+                                    // Add button at the end
+                                    if (index ==
+                                        _existingGalleryUrls.length +
+                                            _galleryImages.length) {
+                                      return GestureDetector(
+                                        onTap: _isUploading
+                                            ? null
+                                            : _pickGalleryImages,
                                         child: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: const BoxDecoration(
-                                            color: Colors.black54,
-                                            shape: BoxShape.circle,
+                                          width: 150,
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[800],
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            border: Border.all(
+                                                color: Colors.grey[700]!),
                                           ),
-                                          child: const Icon(
-                                            Icons.close,
-                                            color: Colors.white,
-                                            size: 16,
+                                          child: const Center(
+                                            child: Icon(Icons.add,
+                                                color: Colors.white, size: 30),
                                           ),
                                         ),
+                                      );
+                                    }
+
+                                    // Existing Images
+                                    if (index < _existingGalleryUrls.length) {
+                                      return Stack(
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            child: CachedNetworkImage(
+                                              imageUrl:
+                                                  _existingGalleryUrls[index],
+                                              width: 280,
+                                              height: 200,
+                                              fit: BoxFit.cover,
+                                              placeholder: (context, url) =>
+                                                  Container(
+                                                width: 280,
+                                                height: 200,
+                                                color: Colors.grey[800],
+                                                child: const Center(
+                                                    child:
+                                                        CircularProgressIndicator()),
+                                              ),
+                                              errorWidget:
+                                                  (context, url, error) =>
+                                                      const Icon(Icons.error,
+                                                          color: Colors.white),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            top: 8,
+                                            right: 8,
+                                            child: GestureDetector(
+                                              onTap: () {
+                                                setState(() {
+                                                  _existingGalleryUrls
+                                                      .removeAt(index);
+                                                });
+                                              },
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.all(4),
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.black54,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(
+                                                  Icons.close,
+                                                  color: Colors.white,
+                                                  size: 16,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    }
+
+                                    // New Images
+                                    final newIndex =
+                                        index - _existingGalleryUrls.length;
+                                    return Stack(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          child: Image.file(
+                                            _galleryImages[newIndex],
+                                            width: 280,
+                                            height: 200,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                        Positioned(
+                                          top: 8,
+                                          right: 8,
+                                          child: GestureDetector(
+                                            onTap: () {
+                                              setState(() {
+                                                _galleryImages
+                                                    .removeAt(newIndex);
+                                              });
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              decoration: const BoxDecoration(
+                                                color: Colors.black54,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Icon(
+                                                Icons.close,
+                                                color: Colors.white,
+                                                size: 16,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                        ),
+                        const SizedBox(height: 32),
+
+                        // Menu/Price Photos
+                        TextWidget(
+                          text: 'Menu/Price Photos (Max 5)',
+                          fontSize: 16,
+                          color: Colors.white,
+                          isBold: true,
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          height: 200,
+                          child: (_existingMenuPriceUrls.isEmpty &&
+                                  _menuPriceImages.isEmpty)
+                              ? GestureDetector(
+                                  onTap: _isUploading
+                                      ? null
+                                      : _pickMenuPriceImages,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[800],
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.grey[700]!,
+                                        width: 1,
+                                        style: BorderStyle.solid,
                                       ),
                                     ),
-                                  ],
-                                );
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(
+                                          Icons.add_photo_alternate_outlined,
+                                          color: Colors.white54,
+                                          size: 40,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        TextWidget(
+                                          text: 'Add up to 5 photos',
+                                          fontSize: 14,
+                                          color: Colors.white54,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              : ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: _existingMenuPriceUrls.length +
+                                      _menuPriceImages.length +
+                                      (_existingMenuPriceUrls.length +
+                                                  _menuPriceImages.length <
+                                              5
+                                          ? 1
+                                          : 0),
+                                  separatorBuilder: (context, index) =>
+                                      const SizedBox(width: 12),
+                                  itemBuilder: (context, index) {
+                                    // Add button at the end
+                                    if (index ==
+                                        _existingMenuPriceUrls.length +
+                                            _menuPriceImages.length) {
+                                      return GestureDetector(
+                                        onTap: _isUploading
+                                            ? null
+                                            : _pickMenuPriceImages,
+                                        child: Container(
+                                          width: 150,
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[800],
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            border: Border.all(
+                                                color: Colors.grey[700]!),
+                                          ),
+                                          child: const Center(
+                                            child: Icon(Icons.add,
+                                                color: Colors.white, size: 30),
+                                          ),
+                                        ),
+                                      );
+                                    }
 
-                              },
-                            ),
-                    ),
-                    const SizedBox(height: 32),
+                                    // Existing Images
+                                    if (index < _existingMenuPriceUrls.length) {
+                                      return Stack(
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            child: CachedNetworkImage(
+                                              imageUrl:
+                                                  _existingMenuPriceUrls[index],
+                                              width: 280,
+                                              height: 200,
+                                              fit: BoxFit.cover,
+                                              placeholder: (context, url) =>
+                                                  Container(
+                                                width: 280,
+                                                height: 200,
+                                                color: Colors.grey[800],
+                                                child: const Center(
+                                                    child:
+                                                        CircularProgressIndicator()),
+                                              ),
+                                              errorWidget:
+                                                  (context, url, error) =>
+                                                      const Icon(Icons.error,
+                                                          color: Colors.white),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            top: 8,
+                                            right: 8,
+                                            child: GestureDetector(
+                                              onTap: () {
+                                                setState(() {
+                                                  _existingMenuPriceUrls
+                                                      .removeAt(index);
+                                                });
+                                              },
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.all(4),
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.black54,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(
+                                                  Icons.close,
+                                                  color: Colors.white,
+                                                  size: 16,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    }
 
-                    // About Me
-                    TextWidget(
-                      text: 'About the Shop',
-                      fontSize: 16,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 150,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[900],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: TextField(
-                        controller: aboutController,
-                        maxLines: 4,
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: '',
-                          hintStyle:
-                              TextStyle(color: Colors.grey[500], fontSize: 14),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.all(16),
+                                    // New Images
+                                    final newIndex =
+                                        index - _existingMenuPriceUrls.length;
+                                    return Stack(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          child: Image.file(
+                                            _menuPriceImages[newIndex],
+                                            width: 280,
+                                            height: 200,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                        Positioned(
+                                          top: 8,
+                                          right: 8,
+                                          child: GestureDetector(
+                                            onTap: () {
+                                              setState(() {
+                                                _menuPriceImages
+                                                    .removeAt(newIndex);
+                                              });
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              decoration: const BoxDecoration(
+                                                color: Colors.black54,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Icon(
+                                                Icons.close,
+                                                color: Colors.white,
+                                                size: 16,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
+                        const SizedBox(height: 32),
 
-                    // Contacts
-                    TextWidget(
-                      text: 'Contacts',
-                      fontSize: 16,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                    const SizedBox(height: 16),
+                        // About Me
+                        TextWidget(
+                          text: 'About the Shop',
+                          fontSize: 16,
+                          color: Colors.white,
+                          isBold: true,
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 150,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[900],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: TextField(
+                            controller: aboutController,
+                            maxLines: 4,
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 14),
+                            decoration: InputDecoration(
+                              hintText: '',
+                              hintStyle: TextStyle(
+                                  color: Colors.grey[500], fontSize: 14),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.all(16),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 32),
 
-                    // Instagram
-                    _buildContactField(
-                      icon: Icons.camera_alt,
-                      controller: instagramController,
-                      label: 'Instagram',
-                    ),
-                    const SizedBox(height: 12),
+                        // Contacts
+                        TextWidget(
+                          text: 'Contacts',
+                          fontSize: 16,
+                          color: Colors.white,
+                          isBold: true,
+                        ),
+                        const SizedBox(height: 16),
 
-                    // Facebook
-                    _buildContactField(
-                      icon: Icons.facebook,
-                      controller: facebookController,
-                      label: 'Facebook',
-                    ),
-                    const SizedBox(height: 12),
+                        // Instagram
+                        _buildContactField(
+                          icon: Icons.camera_alt,
+                          controller: instagramController,
+                          label: 'Instagram',
+                        ),
+                        const SizedBox(height: 12),
 
-                    // TikTok
-                    _buildContactField(
-                      icon: Icons.music_note,
-                      controller: tiktokController,
-                      label: 'Tiktok',
-                    ),
-                    const SizedBox(height: 32),
+                        // Facebook
+                        _buildContactField(
+                          icon: Icons.facebook,
+                          controller: facebookController,
+                          label: 'Facebook',
+                        ),
+                        const SizedBox(height: 12),
 
-                    // Select Tags
-                    TextWidget(
-                      text: 'Select Tags',
-                      fontSize: 16,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                    const SizedBox(height: 16),
+                        // TikTok
+                        _buildContactField(
+                          icon: Icons.music_note,
+                          controller: tiktokController,
+                          label: 'Tiktok',
+                        ),
+                        const SizedBox(height: 32),
 
-                    // Tags Grid
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: selectedTags.keys.map((tag) {
-                        return _buildTag(tag, selectedTags[tag]!);
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 24),
+                        // Select Tags
+                        TextWidget(
+                          text: 'Select Tags',
+                          fontSize: 16,
+                          color: Colors.white,
+                          isBold: true,
+                        ),
+                        const SizedBox(height: 16),
 
-                    // Daily Schedule Section
-                    _buildScheduleSection(),
+                        // Tags Grid
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: selectedTags.keys.map((tag) {
+                            return _buildTag(tag, selectedTags[tag]!);
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 24),
 
-                    const SizedBox(height: 40),
-                    // Extra padding for scrollview to not overlap with fixed button
-                    const SizedBox(height: 80),
-                  ],
+                        // Daily Schedule Section
+                        _buildScheduleSection(),
+
+                        const SizedBox(height: 40),
+                        // Extra padding for scrollview to not overlap with fixed button
+                        const SizedBox(height: 80),
+                      ],
                     ),
                   ),
                   // Fixed Save Button at Bottom
@@ -1259,7 +1331,8 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
                     right: 0,
                     child: Container(
                       color: Colors.black,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 16),
                       child: SizedBox(
                         width: double.infinity,
                         height: 48,
@@ -1626,7 +1699,9 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
   }
 
   Future<void> _pickImage() async {
-    if (_isEditing && _existingLogoUrl != null && _existingLogoUrl!.isNotEmpty) {
+    if (_isEditing &&
+        _existingLogoUrl != null &&
+        _existingLogoUrl!.isNotEmpty) {
       _showImageChangeDialog(
         title: 'Change Shop Logo',
         onRemove: () {
@@ -1663,8 +1738,9 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
   }
 
   Future<void> _pickGalleryImages() async {
-    final totalGalleryImages = _galleryImages.length + _existingGalleryUrls.length;
-    
+    final totalGalleryImages =
+        _galleryImages.length + _existingGalleryUrls.length;
+
     if (totalGalleryImages >= 5) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Gallery limit is 5 images maximum')),
@@ -1677,7 +1753,8 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
 
   Future<void> _pickGalleryImagesFromGallery() async {
     try {
-      final totalGalleryImages = _galleryImages.length + _existingGalleryUrls.length;
+      final totalGalleryImages =
+          _galleryImages.length + _existingGalleryUrls.length;
       final maxPickable = 5 - totalGalleryImages;
 
       final List<XFile> pickedFiles = await _picker.pickMultiImage(
@@ -1711,7 +1788,8 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
     final totalImages = _menuPriceImages.length + _existingMenuPriceUrls.length;
     if (totalImages >= 5) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Menu/Price photos limit is 5 images maximum')),
+        const SnackBar(
+            content: Text('Menu/Price photos limit is 5 images maximum')),
       );
       return;
     }

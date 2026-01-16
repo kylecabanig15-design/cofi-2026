@@ -22,7 +22,8 @@ class NotificationModel {
   });
 
   // Factory constructor to create a NotificationModel from Firestore document
-  factory NotificationModel.fromFirestore(Map<String, dynamic> data, String id) {
+  factory NotificationModel.fromFirestore(
+      Map<String, dynamic> data, String id) {
     return NotificationModel(
       id: id,
       title: data['title'] ?? '',

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:cofi/screens/subscreens/cafe_details_screen.dart';
 import 'package:cofi/screens/subscreens/event_details_screen.dart';
+import '../../services/google_sign_in_service.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -1033,7 +1034,7 @@ class _ExploreTabState extends State<ExploreTab> {
             if (logo != null && logo.isNotEmpty)
               CircleAvatar(
                 radius: 20,
-                backgroundImage: NetworkImage(logo),
+                backgroundImage: CachedNetworkImageProvider(logo),
               )
             else
               CircleAvatar(
@@ -1247,9 +1248,8 @@ class _ExploreTabState extends State<ExploreTab> {
                               height: 8,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: index == i
-                                    ? Colors.white
-                                    : Colors.white54,
+                                color:
+                                    index == i ? Colors.white : Colors.white54,
                               ),
                             ),
                           ),
@@ -1729,7 +1729,7 @@ class _ExploreTabState extends State<ExploreTab> {
                       ],
                     ),
                     CircleAvatar(
-                      backgroundImage: NetworkImage(logo),
+                      backgroundImage: CachedNetworkImageProvider(logo),
                     ),
                   ],
                 ),
@@ -1844,7 +1844,7 @@ class _ExploreTabState extends State<ExploreTab> {
               if (logo.isNotEmpty)
                 CircleAvatar(
                   radius: 20,
-                  backgroundImage: NetworkImage(logo),
+                  backgroundImage: CachedNetworkImageProvider(logo),
                 )
               else
                 CircleAvatar(
@@ -2018,9 +2018,8 @@ class _ExploreTabState extends State<ExploreTab> {
                               height: 8,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: index == i
-                                    ? Colors.white
-                                    : Colors.white54,
+                                color:
+                                    index == i ? Colors.white : Colors.white54,
                               ),
                             ),
                           ),
@@ -2202,7 +2201,7 @@ class _ExploreTabState extends State<ExploreTab> {
                         borderRadius: BorderRadius.circular(18),
                         image: DecorationImage(
                             opacity: event['isPaused'] == true ? 0.85 : 0.65,
-                            image: NetworkImage(
+                            image: CachedNetworkImageProvider(
                               event['imageUrl'] ?? '',
                             ),
                             fit: BoxFit.cover),

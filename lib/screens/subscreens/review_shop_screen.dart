@@ -5,6 +5,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../widgets/text_widget.dart';
 
 class ReviewShopScreen extends StatefulWidget {
@@ -193,7 +194,8 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
                       borderRadius: BorderRadius.circular(8),
                       color: Colors.grey[800],
                       image: DecorationImage(
-                          image: NetworkImage(widget.logo), fit: BoxFit.cover),
+                          image: CachedNetworkImageProvider(widget.logo),
+                          fit: BoxFit.cover),
                     ),
                   ),
                   const SizedBox(width: 16),

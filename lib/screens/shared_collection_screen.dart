@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/colors.dart';
 import '../widgets/text_widget.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../screens/subscreens/cafe_details_screen.dart';
 
 class SharedCollectionScreen extends StatefulWidget {
@@ -335,7 +336,7 @@ class _SharedCollectionScreenState extends State<SharedCollectionScreen> {
                 color: Colors.grey[800],
                 image: logoUrl.isNotEmpty
                     ? DecorationImage(
-                        image: NetworkImage(logoUrl),
+                        image: CachedNetworkImageProvider(logoUrl),
                         fit: BoxFit.cover,
                       )
                     : null,

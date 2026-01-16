@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/screens/subscreens/event_details_screen.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -61,281 +62,273 @@ class CommunityTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collectionGroup('events')
-                    .orderBy('createdAt', descending: true)
-                    .limit(10)
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snapshot.hasError) {
-                    print(snapshot.error);
-                    return TextWidget(
-                      text: 'Failed to load events',
-                      fontSize: 14,
-                      color: Colors.redAccent,
-                    );
-                  }
-                  final docs = snapshot.data?.docs ?? [];
-                  final now = DateTime.now();
+              stream: FirebaseFirestore.instance
+                  .collectionGroup('events')
+                  .orderBy('createdAt', descending: true)
+                  .limit(10)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  print(snapshot.error);
+                  return TextWidget(
+                    text: 'Failed to load events',
+                    fontSize: 14,
+                    color: Colors.redAccent,
+                  );
+                }
+                final docs = snapshot.data?.docs ?? [];
+                final now = DateTime.now();
 
-                  // Separate ongoing and upcoming events
-                  final ongoingEvents =
-                      <DocumentSnapshot<Map<String, dynamic>>>[];
-                  final upcomingEvents =
-                      <DocumentSnapshot<Map<String, dynamic>>>[];
+                // Separate ongoing and upcoming events
+                final ongoingEvents =
+                    <DocumentSnapshot<Map<String, dynamic>>>[];
+                final upcomingEvents =
+                    <DocumentSnapshot<Map<String, dynamic>>>[];
 
-                  for (final d in docs) {
-                    final data = d.data();
-                    // Skip paused and archived events
-                    if (data['isPaused'] == true ||
-                        data['isArchived'] == true) {
-                      continue;
-                    }
-
-                    DateTime? startDateTime;
-                    DateTime? endDateTime;
-
-                    // Parse start date
-                    final startDate = data['startDate'];
-                    if (startDate is Timestamp) {
-                      startDateTime = startDate.toDate();
-                    } else if (startDate is String && startDate.isNotEmpty) {
-                      try {
-                        startDateTime = DateTime.parse(startDate);
-                      } catch (_) {}
-                    }
-
-                    // Parse end date
-                    final endDate = data['endDate'];
-                    if (endDate is Timestamp) {
-                      endDateTime = endDate.toDate();
-                    } else if (endDate is String && endDate.isNotEmpty) {
-                      try {
-                        endDateTime = DateTime.parse(endDate);
-                      } catch (_) {}
-                    }
-
-                    // Skip ended events
-                    if (endDateTime != null && endDateTime.isBefore(now)) {
-                      continue;
-                    }
-
-                    // Check if event is ongoing (started but not ended)
-                    if (startDateTime != null &&
-                        startDateTime.isBefore(now) &&
-                        (endDateTime == null || endDateTime.isAfter(now))) {
-                      ongoingEvents.add(d);
-                    } else if (startDateTime != null &&
-                        startDateTime.isAfter(now)) {
-                      // Event is upcoming (hasn't started yet)
-                      upcomingEvents.add(d);
-                    }
+                for (final d in docs) {
+                  final data = d.data();
+                  // Skip paused and archived events
+                  if (data['isPaused'] == true || data['isArchived'] == true) {
+                    continue;
                   }
 
-                  // Prioritize ongoing events, then upcoming
-                  final allEvents = [...ongoingEvents, ...upcomingEvents];
+                  DateTime? startDateTime;
+                  DateTime? endDateTime;
 
-                  if (allEvents.isEmpty) {
-                    return TextWidget(
-                      text: 'No upcoming events',
-                      fontSize: 14,
-                      color: Colors.white60,
-                    );
+                  // Parse start date
+                  final startDate = data['startDate'];
+                  if (startDate is Timestamp) {
+                    startDateTime = startDate.toDate();
+                  } else if (startDate is String && startDate.isNotEmpty) {
+                    try {
+                      startDateTime = DateTime.parse(startDate);
+                    } catch (_) {}
                   }
 
-                  // Build event card widget for reuse
-                  Widget buildEventCard(
-                      DocumentSnapshot<Map<String, dynamic>> doc) {
-                    final eventData = doc.data() ?? {};
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => EventDetailsScreen(event: {
-                              ...eventData,
-                              'id': doc.id,
-                            }),
-                          ),
-                        );
-                      },
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(18),
-                        child: Stack(
-                          children: [
-                            Container(
-                              height: 220,
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: Colors.black,
-                                borderRadius: BorderRadius.circular(18),
-                                image: DecorationImage(
-                                    opacity: 0.65,
-                                    image: NetworkImage(
-                                      eventData['imageUrl'] ?? '',
-                                    ),
-                                    fit: BoxFit.cover),
-                              ),
-                            ),
-                            Positioned(
-                              left: 12,
-                              bottom: 36,
-                              right: 12,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Check if event is ongoing
-                                  Builder(
-                                    builder: (context) {
-                                      final startDate = eventData['startDate'];
-                                      final endDate = eventData['endDate'];
-                                      DateTime? startDateTime;
-                                      DateTime? endDateTime;
+                  // Parse end date
+                  final endDate = data['endDate'];
+                  if (endDate is Timestamp) {
+                    endDateTime = endDate.toDate();
+                  } else if (endDate is String && endDate.isNotEmpty) {
+                    try {
+                      endDateTime = DateTime.parse(endDate);
+                    } catch (_) {}
+                  }
 
-                                      if (startDate is Timestamp) {
-                                        startDateTime = startDate.toDate();
-                                      } else if (startDate is String &&
-                                          startDate.isNotEmpty) {
-                                        try {
-                                          startDateTime =
-                                              DateTime.parse(startDate);
-                                        } catch (_) {}
-                                      }
+                  // Skip ended events
+                  if (endDateTime != null && endDateTime.isBefore(now)) {
+                    continue;
+                  }
 
-                                      if (endDate is Timestamp) {
-                                        endDateTime = endDate.toDate();
-                                      } else if (endDate is String &&
-                                          endDate.isNotEmpty) {
-                                        try {
-                                          endDateTime = DateTime.parse(endDate);
-                                        } catch (_) {}
-                                      }
+                  // Check if event is ongoing (started but not ended)
+                  if (startDateTime != null &&
+                      startDateTime.isBefore(now) &&
+                      (endDateTime == null || endDateTime.isAfter(now))) {
+                    ongoingEvents.add(d);
+                  } else if (startDateTime != null &&
+                      startDateTime.isAfter(now)) {
+                    // Event is upcoming (hasn't started yet)
+                    upcomingEvents.add(d);
+                  }
+                }
 
-                                      final now = DateTime.now();
-                                      final isOngoing = startDateTime != null &&
-                                          startDateTime.isBefore(now) &&
-                                          (endDateTime == null ||
-                                              endDateTime.isAfter(now));
+                // Prioritize ongoing events, then upcoming
+                final allEvents = [...ongoingEvents, ...upcomingEvents];
 
-                                      return Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          if (isOngoing)
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.green,
-                                                borderRadius:
-                                                    BorderRadius.circular(6),
-                                              ),
-                                              child: TextWidget(
-                                                text:
-                                                    'TODAY - ${_formatDateTime(startDateTime)}',
-                                                fontSize: 11,
-                                                color: Colors.white,
-                                                isBold: true,
-                                              ),
-                                            ),
-                                          if (!isOngoing)
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.amber,
-                                                borderRadius:
-                                                    BorderRadius.circular(6),
-                                              ),
-                                              child: TextWidget(
-                                                text: 'UPCOMING',
-                                                fontSize: 11,
-                                                color: Colors.black,
-                                                isBold: true,
-                                              ),
-                                            ),
-                                          const SizedBox(height: 8),
-                                          TextWidget(
-                                            text:
-                                                (eventData['title'] ?? 'Event')
-                                                    .toString(),
-                                            fontSize: 18,
-                                            color: Colors.white,
-                                            isBold: true,
-                                            maxLines: 2,
-                                          ),
-                                          const SizedBox(height: 2),
-                                          // Date range display
-                                          Builder(
-                                            builder: (context) {
-                                              String dateRange = '';
-                                              if (startDateTime != null) {
-                                                final startStr =
-                                                    _formatEventDate(
-                                                        startDateTime);
-                                                if (endDateTime != null) {
-                                                  final endStr =
-                                                      _formatEventDate(
-                                                          endDateTime);
-                                                  if (startStr == endStr) {
-                                                    dateRange = startStr;
-                                                  } else {
-                                                    dateRange =
-                                                        '$startStr - $endStr';
-                                                  }
-                                                } else {
-                                                  dateRange = startStr;
-                                                }
-                                              }
-                                              return TextWidget(
-                                                text: dateRange,
-                                                fontSize: 12,
-                                                color: Colors.white70,
-                                                maxLines: 1,
-                                              );
-                                            },
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                if (allEvents.isEmpty) {
+                  return TextWidget(
+                    text: 'No upcoming events',
+                    fontSize: 14,
+                    color: Colors.white60,
+                  );
+                }
+
+                // Build event card widget for reuse
+                Widget buildEventCard(
+                    DocumentSnapshot<Map<String, dynamic>> doc) {
+                  final eventData = doc.data() ?? {};
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => EventDetailsScreen(event: {
+                            ...eventData,
+                            'id': doc.id,
+                          }),
                         ),
-                      ),
-                    );
-                  }
+                      );
+                    },
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: Stack(
+                        children: [
+                          Container(
+                            height: 220,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(18),
+                              image: DecorationImage(
+                                  opacity: 0.65,
+                                  image: CachedNetworkImageProvider(
+                                    eventData['imageUrl'] ?? '',
+                                  ),
+                                  fit: BoxFit.cover),
+                            ),
+                          ),
+                          Positioned(
+                            left: 12,
+                            bottom: 36,
+                            right: 12,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Check if event is ongoing
+                                Builder(
+                                  builder: (context) {
+                                    final startDate = eventData['startDate'];
+                                    final endDate = eventData['endDate'];
+                                    DateTime? startDateTime;
+                                    DateTime? endDateTime;
 
-                  // Show scrollable list of events
-                  return SizedBox(
-                    height: 240,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 24),
-                      child: PageView.builder(
-                        clipBehavior: Clip.none,
-                        padEnds: false,
-                        controller: PageController(viewportFraction: 0.93),
-                        itemCount: allEvents.length,
-                        itemBuilder: (context, idx) {
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 12),
-                            child: buildEventCard(allEvents[idx]),
-                          );
-                        },
+                                    if (startDate is Timestamp) {
+                                      startDateTime = startDate.toDate();
+                                    } else if (startDate is String &&
+                                        startDate.isNotEmpty) {
+                                      try {
+                                        startDateTime =
+                                            DateTime.parse(startDate);
+                                      } catch (_) {}
+                                    }
+
+                                    if (endDate is Timestamp) {
+                                      endDateTime = endDate.toDate();
+                                    } else if (endDate is String &&
+                                        endDate.isNotEmpty) {
+                                      try {
+                                        endDateTime = DateTime.parse(endDate);
+                                      } catch (_) {}
+                                    }
+
+                                    final now = DateTime.now();
+                                    final isOngoing = startDateTime != null &&
+                                        startDateTime.isBefore(now) &&
+                                        (endDateTime == null ||
+                                            endDateTime.isAfter(now));
+
+                                    return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        if (isOngoing)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.green,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: TextWidget(
+                                              text:
+                                                  'TODAY - ${_formatDateTime(startDateTime)}',
+                                              fontSize: 11,
+                                              color: Colors.white,
+                                              isBold: true,
+                                            ),
+                                          ),
+                                        if (!isOngoing)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.amber,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: TextWidget(
+                                              text: 'UPCOMING',
+                                              fontSize: 11,
+                                              color: Colors.black,
+                                              isBold: true,
+                                            ),
+                                          ),
+                                        const SizedBox(height: 8),
+                                        TextWidget(
+                                          text: (eventData['title'] ?? 'Event')
+                                              .toString(),
+                                          fontSize: 18,
+                                          color: Colors.white,
+                                          isBold: true,
+                                          maxLines: 2,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        // Date range display
+                                        Builder(
+                                          builder: (context) {
+                                            String dateRange = '';
+                                            if (startDateTime != null) {
+                                              final startStr = _formatEventDate(
+                                                  startDateTime);
+                                              if (endDateTime != null) {
+                                                final endStr = _formatEventDate(
+                                                    endDateTime);
+                                                if (startStr == endStr) {
+                                                  dateRange = startStr;
+                                                } else {
+                                                  dateRange =
+                                                      '$startStr - $endStr';
+                                                }
+                                              } else {
+                                                dateRange = startStr;
+                                              }
+                                            }
+                                            return TextWidget(
+                                              text: dateRange,
+                                              fontSize: 12,
+                                              color: Colors.white70,
+                                              maxLines: 1,
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   );
-                },
-              ),
+                }
+
+                // Show scrollable list of events
+                return SizedBox(
+                  height: 240,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 24),
+                    child: PageView.builder(
+                      clipBehavior: Clip.none,
+                      padEnds: false,
+                      controller: PageController(viewportFraction: 0.93),
+                      itemCount: allEvents.length,
+                      itemBuilder: (context, idx) {
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: buildEventCard(allEvents[idx]),
+                        );
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
             const SizedBox(height: 32),
             // Shared Collections Section
             Padding(
@@ -430,7 +423,8 @@ class CommunityTab extends StatelessWidget {
                     final shopId = job['shopId'];
                     final isPaused = job['isPaused'] as bool? ?? false;
                     final isArchived = job['isArchived'] as bool? ?? false;
-                    final status = (job['status'] as String? ?? 'pending').toLowerCase();
+                    final status =
+                        (job['status'] as String? ?? 'pending').toLowerCase();
 
                     // Only show active and closed jobs
                     final isActive = status == 'active';
@@ -452,11 +446,14 @@ class CommunityTab extends StatelessWidget {
                   }
 
                   // Prioritize open (active) jobs, then closed jobs
-                  final activeJobs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-                  final closedJobs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+                  final activeJobs =
+                      <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+                  final closedJobs =
+                      <QueryDocumentSnapshot<Map<String, dynamic>>>[];
 
                   for (final d in filteredJobs) {
-                    final status = (d.data()['status'] as String? ?? 'pending').toLowerCase();
+                    final status = (d.data()['status'] as String? ?? 'pending')
+                        .toLowerCase();
                     if (status == 'active') {
                       activeJobs.add(d);
                     } else if (status == 'closed') {
@@ -464,7 +461,8 @@ class CommunityTab extends StatelessWidget {
                     }
                   }
 
-                  final orderedJobs = <QueryDocumentSnapshot<Map<String, dynamic>>>[
+                  final orderedJobs =
+                      <QueryDocumentSnapshot<Map<String, dynamic>>>[
                     ...activeJobs,
                     ...closedJobs,
                   ];
@@ -472,11 +470,13 @@ class CommunityTab extends StatelessWidget {
                   return Column(
                     children: orderedJobs.map((d) {
                       final job = d.data();
-                      final status = (job['status'] as String? ?? 'pending').toLowerCase();
+                      final status =
+                          (job['status'] as String? ?? 'pending').toLowerCase();
                       final isClosed = status == 'closed';
                       final createdBy = job['createdBy'] as String?;
-                      final isOwner =
-                          currentUser != null && createdBy != null && createdBy == currentUser.uid;
+                      final isOwner = currentUser != null &&
+                          createdBy != null &&
+                          createdBy == currentUser.uid;
 
                       // Only the owner can open closed jobs
                       final canOpen = !isClosed || isOwner;

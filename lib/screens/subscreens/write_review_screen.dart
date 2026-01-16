@@ -1,4 +1,5 @@
 import 'package:cofi/utils/colors.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/text_widget.dart';
 import 'review_shop_screen.dart';
@@ -50,7 +51,7 @@ class WriteReviewScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                     color: Colors.grey[800],
                     image: DecorationImage(
-                      image: NetworkImage(logo),
+                      image: CachedNetworkImageProvider(logo),
                       fit: BoxFit.cover,
                     ),
                   ),

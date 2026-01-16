@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../utils/colors.dart';
 import '../../widgets/text_widget.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class YourReviewsScreen extends StatelessWidget {
   const YourReviewsScreen({super.key});
@@ -262,7 +263,7 @@ class YourReviewsScreen extends StatelessWidget {
                 color: Colors.grey[800],
                 borderRadius: BorderRadius.circular(12),
                 image: DecorationImage(
-                  image: NetworkImage(imagePath),
+                  image: CachedNetworkImageProvider(imagePath),
                   fit: BoxFit.cover,
                 ),
               ),

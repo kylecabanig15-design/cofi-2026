@@ -14,7 +14,7 @@ class GoogleSignInService {
   static Future<UserCredential?> signInWithGoogle() async {
     try {
       print('Starting Google Sign In...');
-      
+
       // First check if user is already signed in
       try {
         final isSignedIn = await _googleSignIn.isSignedIn();
@@ -25,18 +25,19 @@ class GoogleSignInService {
       } catch (e) {
         print('Disconnect error during sign in (ignoring): $e');
       }
-      
+
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      
+
       if (googleUser == null) {
         print('User cancelled');
         return null;
       }
 
       print('Got Google user: ${googleUser.email}');
-      
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
@@ -44,7 +45,7 @@ class GoogleSignInService {
 
       final userCredential = await _auth.signInWithCredential(credential);
       print('Signed in successfully');
-      
+
       await _createOrUpdateUser(userCredential.user!);
 
       return userCredential;
@@ -56,7 +57,8 @@ class GoogleSignInService {
 
   static Future<void> _createOrUpdateUser(User user) async {
     try {
-      final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      final userDoc =
+          FirebaseFirestore.instance.collection('users').doc(user.uid);
       final docSnapshot = await userDoc.get();
 
       if (!docSnapshot.exists) {

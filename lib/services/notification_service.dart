@@ -258,6 +258,10 @@ class NotificationService {
           await FirebaseFirestore.instance.collection('shops').get();
 
       for (final shopDoc in shopsSnapshot.docs) {
+        final shopData = shopDoc.data();
+        final isVerified = (shopData['isVerified'] as bool?) ?? false;
+        if (!isVerified) continue;
+
         final shopId = shopDoc.id;
         Query eventsQuery = FirebaseFirestore.instance
             .collection('shops')
@@ -305,6 +309,10 @@ class NotificationService {
           await FirebaseFirestore.instance.collection('shops').get();
 
       for (final shopDoc in shopsSnapshot.docs) {
+        final shopData = shopDoc.data();
+        final isVerified = (shopData['isVerified'] as bool?) ?? false;
+        if (!isVerified) continue;
+
         final shopId = shopDoc.id;
         Query jobsQuery = FirebaseFirestore.instance
             .collection('shops')
@@ -353,6 +361,10 @@ class NotificationService {
           await FirebaseFirestore.instance.collection('shops').get();
 
       for (final shopDoc in shopsSnapshot.docs) {
+        final shopData = shopDoc.data();
+        final isVerified = (shopData['isVerified'] as bool?) ?? false;
+        if (!isVerified) continue;
+        
         final shopId = shopDoc.id;
         Query jobsQuery = FirebaseFirestore.instance
             .collection('shops')
@@ -562,7 +574,9 @@ class NotificationService {
   // Check for new shops and create notifications
   Future<void> _checkForNewShops(String userId, Timestamp? lastCheck) async {
     try {
-      Query shopsQuery = FirebaseFirestore.instance.collection('shops');
+      Query shopsQuery = FirebaseFirestore.instance
+          .collection('shops')
+          .where('isVerified', isEqualTo: true);
 
       if (lastCheck != null) {
         shopsQuery = shopsQuery.where('postedAt', isGreaterThan: lastCheck);
