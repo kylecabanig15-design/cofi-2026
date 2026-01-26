@@ -3,9 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../widgets/text_widget.dart';
-import '../../utils/colors.dart';
-import '../screens/subscreens/cafe_details_screen.dart';
+import 'package:cofi/widgets/text_widget.dart';
+import 'package:cofi/utils/colors.dart';
+import 'package:cofi/features/cafe/cafe_details_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class ListBottomSheet extends StatefulWidget {

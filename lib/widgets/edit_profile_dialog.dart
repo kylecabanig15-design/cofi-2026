@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../utils/colors.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cofi/utils/colors.dart';
 
 class EditProfileDialog extends StatefulWidget {
   const EditProfileDialog({super.key});
@@ -13,6 +17,9 @@ class EditProfileDialog extends StatefulWidget {
 class _EditProfileDialogState extends State<EditProfileDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final ImagePicker _picker = ImagePicker();
+  File? _logoImage;
+  String? _photoUrl;
   bool _isLoading = false;
 
   @override
@@ -30,10 +37,46 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
           .get();
       final data = doc.data();
       if (data != null && mounted) {
-        _nameController.text = data['name'] ?? user.displayName ?? '';
+        setState(() {
+          _nameController.text = data['name'] ?? user.displayName ?? '';
+          _photoUrl = data['photoUrl'] ?? user.photoURL;
+        });
       } else if (mounted) {
-        _nameController.text = user.displayName ?? '';
+        setState(() {
+          _nameController.text = user.displayName ?? '';
+          _photoUrl = user.photoURL;
+        });
       }
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final XFile? pickedFile = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 50,
+    );
+    if (pickedFile != null) {
+      setState(() {
+        _logoImage = File(pickedFile.path);
+      });
+    }
+  }
+
+  Future<String?> _uploadLogoToFirebase(String uid) async {
+    if (_logoImage == null) return _photoUrl;
+
+    try {
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('user_profiles')
+          .child(uid)
+          .child('profile_pic.jpg');
+
+      await ref.putFile(_logoImage!);
+      return await ref.getDownloadURL();
+    } catch (e) {
+      debugPrint('Error uploading logo: $e');
+      return null;
     }
   }
 
@@ -47,13 +90,24 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       if (user != null) {
         final newName = _nameController.text.trim();
 
+        // Upload image if selected
+        final uploadedPhotoUrl = await _uploadLogoToFirebase(user.uid);
+
+        final updateData = {
+          'name': newName,
+          if (uploadedPhotoUrl != null) 'photoUrl': uploadedPhotoUrl,
+        };
+
         // Update Firestore
         await FirebaseFirestore.instance
             .collection('users')
             .doc(user.uid)
-            .update({'name': newName});
+            .update(updateData);
 
-        // Update Firebase Auth display name
+        // Update Firebase Auth
+        if (uploadedPhotoUrl != null) {
+          await user.updatePhotoURL(uploadedPhotoUrl);
+        }
         await user.updateDisplayName(newName);
 
         if (mounted) {
@@ -98,6 +152,52 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            GestureDetector(
+              onTap: _pickImage,
+              child: Stack(
+                children: [
+                  Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[800],
+                      shape: BoxShape.circle,
+                      border: Border.all(color: primary, width: 2),
+                    ),
+                    child: ClipOval(
+                      child: _logoImage != null
+                          ? Image.file(_logoImage!, fit: BoxFit.cover)
+                          : (_photoUrl != null && _photoUrl!.isNotEmpty)
+                              ? CachedNetworkImage(
+                                  imageUrl: _photoUrl!,
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => const Center(
+                                      child: CircularProgressIndicator()),
+                                  errorWidget: (context, url, error) =>
+                                      const Icon(Icons.person,
+                                          size: 50, color: Colors.white70),
+                                )
+                              : const Icon(Icons.person,
+                                  size: 50, color: Colors.white70),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.camera_alt,
+                          size: 20, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
             TextFormField(
               controller: _nameController,
               style: const TextStyle(color: Colors.white),

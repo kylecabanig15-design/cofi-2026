@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../utils/colors.dart';
+import 'package:cofi/utils/colors.dart';
 
 class SelectedShopCard extends StatelessWidget {
   final Map<String, dynamic> data;

@@ -4,8 +4,8 @@
 // import 'package:algecit/widgets/text_widget.dart';
 // import 'package:flutter/material.dart';
 
-// import '../screens/home_screen.dart';
-// import '../utils/colors.dart';
+// import 'package:cofi/features/home/home_screen.dart';
+// import 'package:cofi/utils/colors.dart';
 
 // class DrawerWidget extends StatelessWidget {
 //   const DrawerWidget({super.key});

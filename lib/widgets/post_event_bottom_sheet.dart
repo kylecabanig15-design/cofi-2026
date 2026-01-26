@@ -6,10 +6,10 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:io';
 import 'text_widget.dart';
-import '../screens/subscreens/custom_location_screen.dart';
+import 'package:cofi/features/map/custom_location_screen.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import '../utils/colors.dart';
+import 'package:cofi/utils/colors.dart';
 
 class PostEventBottomSheet extends StatefulWidget {
   const PostEventBottomSheet({super.key, required this.shopId});

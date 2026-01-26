@@ -66,7 +66,7 @@ class GoogleSignInService {
           'uid': user.uid,
           'email': user.email,
           'displayName': user.displayName,
-          'photoUrl': user.photoURL,
+          // photoUrl intentionally omitted - users will see CoFi logo by default
           'commitment': false,
           'address': '',
           'bookmarks': [],
@@ -76,12 +76,14 @@ class GoogleSignInService {
           'createdAt': FieldValue.serverTimestamp(),
           'lastLoginAt': FieldValue.serverTimestamp(),
         });
+        print('User document created');
       } else {
         await userDoc.update({
           'lastLoginAt': FieldValue.serverTimestamp(),
           'displayName': user.displayName,
           'photoUrl': user.photoURL,
         });
+        print('User document updated');
       }
     } catch (e) {
       print('Firestore error: $e');
@@ -99,6 +101,24 @@ class GoogleSignInService {
       await _googleSignIn.signOut();
     } catch (e) {
       print('Sign out error: $e');
+    }
+  }
+  static Future<void> reAuthenticateWithGoogle() async {
+    try {
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return;
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      await _auth.currentUser?.reauthenticateWithCredential(credential);
+    } catch (e) {
+      print('Re-authentication error: $e');
+      rethrow;
     }
   }
 }

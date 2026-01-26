@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../screens/subscreens/cafe_details_screen.dart';
+import 'package:cofi/features/cafe/cafe_details_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../utils/colors.dart';
-import '../widgets/text_widget.dart';
+import 'package:cofi/utils/colors.dart';
+import 'package:cofi/widgets/text_widget.dart';
 
 class CoffeeShopDetailsBottomSheet extends StatelessWidget {
   final String shopId;

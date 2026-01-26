@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../widgets/text_widget.dart';
-import '../../utils/colors.dart';
-import '../screens/subscreens/shop_selection_screen.dart';
+import 'package:cofi/widgets/text_widget.dart';
+import 'package:cofi/utils/colors.dart';
+import 'package:cofi/features/cafe/shop_selection_screen.dart';
 
 class CreateListBottomSheet extends StatefulWidget {
   const CreateListBottomSheet({super.key});

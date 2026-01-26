@@ -2,9 +2,9 @@ import 'package:cofi/widgets/post_event_bottom_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../widgets/text_widget.dart';
+import 'package:cofi/widgets/text_widget.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../screens/subscreens/event_details_screen.dart';
+import 'package:cofi/features/events/event_details_screen.dart';
 
 class MyEventsBottomSheet extends StatelessWidget {
   const MyEventsBottomSheet({super.key, required this.shopId});

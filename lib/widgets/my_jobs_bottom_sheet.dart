@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../utils/colors.dart';
-import '../widgets/text_widget.dart';
-import '../widgets/post_job_bottom_sheet.dart';
-import '../screens/job_details_screen.dart';
+import 'package:cofi/utils/colors.dart';
+import 'package:cofi/widgets/text_widget.dart';
+import 'package:cofi/widgets/post_job_bottom_sheet.dart';
+import 'package:cofi/features/jobs/job_details_screen.dart';
 
 class MyJobsBottomSheet extends StatelessWidget {
   const MyJobsBottomSheet({super.key, required this.shopId});
