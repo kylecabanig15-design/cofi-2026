@@ -1848,8 +1848,7 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                         child: ElevatedButton(
                           onPressed: _saving ? null : _saveEvent,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                const Color(0xFFE53E3E), // Red color
+                              backgroundColor: primary,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),

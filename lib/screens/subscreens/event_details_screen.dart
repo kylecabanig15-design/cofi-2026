@@ -86,87 +86,90 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                         // Dot Indicator
                         if (imageUrls.length > 1)
                           Positioned(
-                            bottom: 90,
-                            left: 0,
-                            right: 0,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: List.generate(
-                                imageUrls.length,
-                                (index) => Container(
-                                  margin:
-                                      const EdgeInsets.symmetric(horizontal: 4),
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    color: _currentImageIndex == index
-                                        ? Colors.white
-                                        : Colors.white.withOpacity(0.5),
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.2),
-                                        blurRadius: 2,
-                                        offset: const Offset(0, 1),
-                                      ),
-                                    ],
+                            top: 16,
+                            right: 16,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black26,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: List.generate(
+                                  imageUrls.length,
+                                  (index) => Container(
+                                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                                    width: _currentImageIndex == index ? 8 : 6,
+                                    height: _currentImageIndex == index ? 8 : 6,
+                                    decoration: BoxDecoration(
+                                      color: _currentImageIndex == index
+                                          ? Colors.white
+                                          : Colors.white.withOpacity(0.6),
+                                      shape: BoxShape.circle,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        // Left Arrow
-                        if (_currentImageIndex > 0)
+                        // Left arrow button
+                        if (imageUrls.length > 1)
                           Positioned(
-                            left: 8,
+                            left: 16,
                             top: 0,
-                            bottom: 100,
+                            bottom: 0,
                             child: Center(
-                              child: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.3),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: IconButton(
-                                  icon: const Icon(Icons.chevron_left,
-                                      color: Colors.white, size: 28),
-                                  onPressed: () {
-                                    _pageController.previousPage(
-                                      duration:
-                                          const Duration(milliseconds: 300),
-                                      curve: Curves.easeInOut,
-                                    );
-                                  },
+                              child: GestureDetector(
+                                onTap: () {
+                                  _pageController.previousPage(
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeInOut,
+                                  );
+                                },
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.black26,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  padding: const EdgeInsets.all(10),
+                                  child: const Icon(
+                                    Icons.arrow_back_ios_new,
+                                    color: Colors.white,
+                                    size: 22,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        // Right Arrow
-                        if (_currentImageIndex < imageUrls.length - 1)
+                        // Right arrow button
+                        if (imageUrls.length > 1)
                           Positioned(
-                            right: 8,
+                            right: 16,
                             top: 0,
-                            bottom: 100,
+                            bottom: 0,
                             child: Center(
-                              child: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.3),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: IconButton(
-                                  icon: const Icon(Icons.chevron_right,
-                                      color: Colors.white, size: 28),
-                                  onPressed: () {
-                                    _pageController.nextPage(
-                                      duration:
-                                          const Duration(milliseconds: 300),
-                                      curve: Curves.easeInOut,
-                                    );
-                                  },
+                              child: GestureDetector(
+                                onTap: () {
+                                  _pageController.nextPage(
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeInOut,
+                                  );
+                                },
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.black26,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  padding: const EdgeInsets.all(10),
+                                  child: const Icon(
+                                    Icons.arrow_forward_ios,
+                                    color: Colors.white,
+                                    size: 22,
+                                  ),
                                 ),
                               ),
                             ),
@@ -184,15 +187,93 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                         ),
                         Positioned(
                           left: 16,
+                          right: 16,
                           bottom: 24,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              TextWidget(
-                                text: (e['title'] ?? 'Event').toString(),
-                                fontSize: 24,
-                                color: Colors.white,
-                                isBold: true,
+                              Text(
+                                (e['title'] ?? 'Event').toString(),
+                                style: const TextStyle(
+                                  fontSize: 23,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'QRegular',
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 6),
+                              // Cafe/Shop name with logo
+                              StreamBuilder<DocumentSnapshot>(
+                                stream: FirebaseFirestore.instance
+                                    .collection('shops')
+                                    .doc(e['shopId'] as String?)
+                                    .snapshots(),
+                                builder: (context, snapshot) {
+                                  if (!snapshot.hasData || !snapshot.data!.exists) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  final shopData = snapshot.data!.data() as Map<String, dynamic>?;
+                                  final shopName = shopData?['name'] as String? ?? '';
+                                  final shopLogo = shopData?['logoUrl'] as String? ?? '';
+                                  if (shopName.isEmpty) return const SizedBox.shrink();
+                                  
+                                  return Row(
+                                    children: [
+                                      // Cafe logo
+                                      if (shopLogo.isNotEmpty)
+                                        Container(
+                                          width: 24,
+                                          height: 24,
+                                          margin: const EdgeInsets.only(right: 8),
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.white.withOpacity(0.3),
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: ClipOval(
+                                            child: CachedNetworkImage(
+                                              imageUrl: shopLogo,
+                                              fit: BoxFit.cover,
+                                              placeholder: (context, url) => Container(
+                                                color: Colors.grey[800],
+                                                child: const Icon(
+                                                  Icons.store,
+                                                  size: 12,
+                                                  color: Colors.white54,
+                                                ),
+                                              ),
+                                              errorWidget: (context, url, error) => Container(
+                                                color: Colors.grey[800],
+                                                child: const Icon(
+                                                  Icons.store,
+                                                  size: 12,
+                                                  color: Colors.white54,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      // Cafe name
+                                      Expanded(
+                                        child: Text(
+                                          shopName,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            color: Colors.white70,
+                                            fontFamily: 'QRegular',
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
                             ],
                           ),
