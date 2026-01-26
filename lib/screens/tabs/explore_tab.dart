@@ -69,32 +69,33 @@ class _ExploreTabState extends State<ExploreTab> {
     // STEP 1: Define default weights for visit tags and amenity tags
     // ========================================================================
     // Visit tags represent the purpose/context of a user's visit to a café.
+    
     // Higher weights indicate more significant matching factors.
     final Map<String, double> defaultVisitTagWeights = {
-      'Business Meeting': 1.0,
-      'Chill / Hangout': 0.8,
-      'Study Session': 1.0,
-      'Group Gathering': 0.7,
+      'Business Meeting': 0.8, // 39% of respondents
+      'Chill / Hangout': 0.7, // 39% of respondents
+      'Study Session': 0.9, // 50% of respondents
+      'Group Gathering': 0.6, // 31% of respondents
     };
 
     // Amenity tags represent the features/characteristics of a café.
     // These weights reflect the importance of each amenity for similarity.
     final Map<String, double> defaultAmenityTagWeights = {
-      'Specialty Coffee': 1.0,
+      'Specialty Coffee': 1.0, // 83% of respondents
       'Matcha Drinks': 0.8,
       'Pastries': 0.6,
-      'Work-Friendly (Wi-Fi + outlets)': 1.0,
-      'Pet-Friendly': 0.7,
+      'Work-Friendly (Wi-Fi + outlets)': 0.9, // 53% of respondents
+      'Pet-Friendly': 0.5, // 19% of respondents
       'Parking Available': 0.5,
       'Family Friendly': 0.6,
-      'Study Sessions': 1.0,
+      'Study Sessions': 0.9, // 53% of respondents
       'Night Café (Open Late)': 0.7,
       'Minimalist / Modern': 0.5,
       'Rustic / Cozy': 0.5,
       'Outdoor / Garden': 0.6,
       'Seaside / Scenic': 0.6,
-      'Artsy / Aesthetic': 0.5,
-      'Instagrammable': 0.4,
+      'Artsy / Aesthetic': 0.7, // 58% of respondents
+      'Instagrammable': 0.6, // Linked to Aesthetic
     };
 
     // Use provided weights or fall back to defaults

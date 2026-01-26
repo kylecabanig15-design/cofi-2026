@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../utils/colors.dart';
-import '../../services/google_sign_in_service.dart';
 import '../../widgets/text_widget.dart';
 import '../job_chat_screen.dart';
-import '../auth/login_screen.dart';
+import '../subscreens/settings_screen.dart';
 
 class ProfileTab extends StatelessWidget {
   final VoidCallback? onOpenExplore;
@@ -46,67 +45,14 @@ class ProfileTab extends StatelessWidget {
                     children: [
                       IconButton(
                           onPressed: () {
-                            showDialog(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
-                                backgroundColor: Colors.grey[900],
-                                title: const Text(
-                                  'Logout',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                content: const Text(
-                                  'Are you sure you want to logout?',
-                                  style: TextStyle(color: Colors.white70),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(ctx).pop(false),
-                                    child: const Text('Cancel'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () async {
-                                      // Close the dialog first
-                                      Navigator.of(ctx).pop();
-                                      try {
-                                        // Fully sign out from Firebase and Google
-                                        await GoogleSignInService.signOut();
-
-                                        // Navigate directly to login screen
-                                        if (context.mounted) {
-                                          Navigator.of(context)
-                                              .pushAndRemoveUntil(
-                                            MaterialPageRoute(
-                                              builder: (_) =>
-                                                  const LoginScreen(),
-                                            ),
-                                            (route) =>
-                                                false, // Remove all previous routes
-                                          );
-                                        }
-                                      } catch (e) {
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            SnackBar(
-                                              content:
-                                                  Text('Logout failed: $e'),
-                                            ),
-                                          );
-                                        }
-                                      }
-                                    },
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: Colors.redAccent,
-                                    ),
-                                    child: const Text('Logout'),
-                                  ),
-                                ],
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const SettingsScreen(),
                               ),
                             );
                           },
-                          icon: Icon(
-                            Icons.logout,
+                          icon: const Icon(
+                            Icons.settings,
                             color: Colors.white,
                           )),
                     ],
@@ -818,7 +764,7 @@ class ProfileTab extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Shop Name: ${data['name'] ?? 'Unknown'}',
+                            'Shop: ${data['name'] ?? 'Unknown'}',
                             style: const TextStyle(color: Colors.white70),
                           ),
                           const SizedBox(height: 8),

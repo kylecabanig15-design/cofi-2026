@@ -179,7 +179,7 @@ class BusinessProfileScreen extends StatelessWidget {
                         },
                         child: _buildSectionCard(
                           title: 'Events',
-                          subtitle: 'Show upcoming Events',
+                          subtitle: 'Show Events',
                           bottomSpacing: 20,
                         ),
                       ),
