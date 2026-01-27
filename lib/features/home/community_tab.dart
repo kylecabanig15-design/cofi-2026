@@ -1,11 +1,14 @@
+import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/features/events/event_details_screen.dart';
+import 'package:cofi/features/networking/all_shared_collections_screen.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/features/jobs/job_details_screen.dart';
+import 'package:cofi/widgets/premium_background.dart';
 
 class CommunityTab extends StatelessWidget {
   const CommunityTab({super.key});
@@ -13,7 +16,7 @@ class CommunityTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 0),
@@ -333,12 +336,33 @@ class CommunityTab extends StatelessWidget {
             // Shared Collections Section
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: TextWidget(
-                text: 'Shared Collections',
-                fontSize: 22,
-                color: Colors.white,
-                fontFamily: 'Baloo2',
-                isBold: true,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                   TextWidget(
+                    text: 'Shared Collections',
+                    fontSize: 22,
+                    color: Colors.white,
+                    fontFamily: 'Baloo2',
+                    isBold: true,
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AllSharedCollectionsScreen(),
+                        ),
+                      );
+                    },
+                    child: TextWidget(
+                      text: 'See All',
+                      fontSize: 14,
+                      color: primary,
+                      isBold: true,
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 16),
@@ -347,35 +371,54 @@ class CommunityTab extends StatelessWidget {
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: FirebaseFirestore.instance
                     .collection('sharedCollections')
-                    .orderBy('sharedAt', descending: true)
-                    .limit(5)
+                    .limit(15) // Fetch a small pool to randomize from
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (snapshot.hasError) {
-                    print(snapshot.error);
                     return TextWidget(
                       text: 'Failed to load shared collections',
                       fontSize: 14,
                       color: Colors.redAccent,
                     );
                   }
-                  final docs = snapshot.data?.docs ?? [];
-                  if (docs.isEmpty) {
+                  final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(snapshot.data?.docs ?? []);
+                  
+                  // Filter out private collections
+                  final publicDocs = docs.where((d) {
+                    final data = d.data();
+                    return data['isPrivate'] != true;
+                  }).toList();
+
+                  if (publicDocs.isEmpty) {
                     return TextWidget(
                       text: 'No shared collections yet',
                       fontSize: 14,
                       color: Colors.white60,
                     );
                   }
-                  return Column(
-                    children: docs.map((d) {
-                      final collection = d.data();
-                      return _buildSharedCollectionItem(
-                          context, collection, d.id);
-                    }).toList(),
+
+                  // RANDOMIZE and limit to 5 (Spotify Style)
+                  publicDocs.shuffle();
+                  final displayedDocs = publicDocs.take(5).toList();
+                  
+                  return SizedBox(
+                    height: 180,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 0),
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: displayedDocs.length,
+                      separatorBuilder: (context, index) => const SizedBox(width: 16),
+                      itemBuilder: (context, index) {
+                        final d = displayedDocs[index];
+                        final collection = d.data();
+                        return _buildSharedCollectionCard(
+                            context, collection, d.id);
+                      },
+                    ),
                   );
                 },
               ),
@@ -741,48 +784,129 @@ class CommunityTab extends StatelessWidget {
   //   return '';
   // }
 
-  Widget _buildSharedCollectionItem(BuildContext context,
+  Widget _buildSharedCollectionCard(BuildContext context,
       Map<String, dynamic> collection, String collectionId) {
     final title = collection['title'] ?? 'Untitled Collection';
-    final sharedAt = collection['sharedAt'] as Timestamp?;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 0),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: primary,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(
-            Icons.collections_bookmark,
-            color: Colors.white,
-            size: 24,
+    final shopCount = collection['shopCount'] ?? 0;
+    final List<String> previewLogos = ((collection['previewLogos'] as List?)?.cast<String>() ?? []);
+    
+    return GestureDetector(
+      onTap: () {
+        _showCollectionDetailsBottomSheet(context, collectionId, collection);
+      },
+      child: Container(
+        width: 240,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: Colors.white.withOpacity(0.05),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.1),
+            width: 1,
           ),
         ),
-        title: TextWidget(
-          text: title,
-          fontSize: 16,
-          color: Colors.white,
-          isBold: true,
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          children: [
+            // Responsive Logo Background (Spotify Style)
+            Positioned.fill(
+              child: previewLogos.isEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=2070&auto=format&fit=crop',
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(color: Colors.grey[900]),
+                      errorWidget: (context, url, error) => Container(color: Colors.grey[900]),
+                    )
+                  : (previewLogos.length < 4)
+                      ? CachedNetworkImage(
+                          imageUrl: previewLogos[0],
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(color: Colors.grey[900]),
+                          errorWidget: (context, url, error) => Container(color: Colors.grey[900]),
+                        )
+                      : GridView.count(
+                          crossAxisCount: 2,
+                          padding: EdgeInsets.zero,
+                          physics: const NeverScrollableScrollPhysics(),
+                          children: [
+                            for (var i = 0; i < 4; i++)
+                              Container(
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.white.withOpacity(0.05), width: 0.5),
+                                ),
+                                child: CachedNetworkImage(
+                                  imageUrl: previewLogos[i],
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => Container(color: Colors.white10),
+                                  errorWidget: (context, url, error) => Container(color: Colors.grey[850]),
+                                ),
+                              ),
+                          ],
+                        ),
+            ),
+            // High-legibility Gradient Overlay
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.1),
+                      Colors.black.withOpacity(0.4),
+                      Colors.black.withOpacity(0.9),
+                    ],
+                    stops: const [0.0, 0.4, 0.85],
+                  ),
+                ),
+              ),
+            ),
+            // Content
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: primary.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: primary.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.collections_bookmark,
+                      color: primary,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextWidget(
+                    text: title,
+                    fontSize: 18,
+                    color: Colors.white,
+                    isBold: true,
+                    maxLines: 1,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.local_cafe, color: Colors.white70, size: 12),
+                      const SizedBox(width: 4),
+                      TextWidget(
+                        text: '$shopCount Shops',
+                        fontSize: 12,
+                        color: Colors.white70,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        subtitle: TextWidget(
-          text:
-              '${collection['shopCount']} shops • ${sharedAt != null ? _formatTimestamp(sharedAt) : 'Recently'}',
-          fontSize: 13,
-          color: Colors.white70,
-        ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          color: Colors.white54,
-          size: 16,
-        ),
-        onTap: () {
-          _showCollectionDetailsBottomSheet(context, collectionId, collection);
-        },
       ),
     );
   }
@@ -798,122 +922,131 @@ class CommunityTab extends StatelessWidget {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.35,
         decoration: BoxDecoration(
-          color: Colors.grey[900],
+          color: const Color(0xFF121212),
           borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
+            topLeft: Radius.circular(30),
+            topRight: Radius.circular(30),
+          ),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.1),
+            width: 1,
           ),
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle bar
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Visual Icon
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.collections_bookmark,
+                color: primary,
+                size: 48,
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Title
             Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white38,
-                  borderRadius: BorderRadius.circular(2),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  fontFamily: 'Baloo2',
                 ),
               ),
             ),
-            // Header
+            const SizedBox(height: 8),
+            // Metadata
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.local_cafe, color: Colors.white54, size: 14),
+                const SizedBox(width: 4),
+                TextWidget(
+                  text: '$shopCount coffee shops',
+                  fontSize: 14,
+                  color: Colors.white54,
+                ),
+                const SizedBox(width: 12),
+                Icon(Icons.access_time_filled, color: Colors.white54, size: 14),
+                const SizedBox(width: 4),
+                TextWidget(
+                  text: sharedAt != null ? _formatTimestamp(sharedAt) : 'Recently',
+                  fontSize: 14,
+                  color: Colors.white54,
+                ),
+                const SizedBox(width: 12),
+                Icon(Icons.person, color: Colors.white54, size: 14),
+                const SizedBox(width: 4),
+                TextWidget(
+                  text: collection['sharedBy'] ?? 'Community',
+                  fontSize: 14,
+                  color: Colors.white54,
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+            // Action Button
             Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: TextWidget(
-                      text: title,
-                      fontSize: 18,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () {
-                      Navigator.pop(context);
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
+              child: InkWell(
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(
+                    context,
+                    '/sharedCollection',
+                    arguments: {
+                      'collectionId': collectionId,
+                      'title': title,
                     },
-                  ),
-                ],
-              ),
-            ),
-            // Collection info
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: primary,
-                      borderRadius: BorderRadius.circular(8),
+                  );
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [primary, primary.withValues(alpha: 0.8)],
                     ),
-                    child: const Icon(
-                      Icons.collections_bookmark,
-                      color: Colors.white,
-                      size: 28,
-                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: primary.withValues(alpha: 0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        TextWidget(
-                          text: '$shopCount coffee shops',
-                          fontSize: 14,
-                          color: Colors.white70,
-                        ),
-                        TextWidget(
-                          text: sharedAt != null
-                              ? _formatTimestamp(sharedAt)
-                              : 'Recently',
-                          fontSize: 13,
-                          color: Colors.white54,
-                        ),
-                      ],
+                  child: const Center(
+                    child: Text(
+                      'Explore Collection',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-
-            // View button
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.pushNamed(
-                      context,
-                      '/sharedCollection',
-                      arguments: {
-                        'collectionId': collectionId,
-                        'title': title,
-                      },
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: TextWidget(
-                    text: 'View Full Collection',
-                    fontSize: 16,
-                    color: Colors.white,
-                    isBold: true,
                   ),
                 ),
               ),

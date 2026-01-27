@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cofi/widgets/premium_background.dart';
 
 class InterestSelectionScreen extends StatefulWidget {
   final bool isEditing;
@@ -63,34 +64,38 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
     'Instagrammable': false,
   };
 
-  // Map each interest to an appropriate online image
+  // Map each interest to a high-quality professional image
   Map<String, String> interestImages = {
     'Specialty Coffee':
-        'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400',
+        'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=800',
     'Matcha Drinks':
-        'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400',
+        'https://images.unsplash.com/photo-1515823064-d6e0c04616a7?w=800',
     'Pastries':
-        'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=400',
+        'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=800',
     'Work-Friendly (Wi-Fi + outlets)':
-        'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=400',
+        'https://images.unsplash.com/photo-1497215728101-856f4ea42174?w=800',
     'Pet-Friendly':
-        'https://images.unsplash.com/photo-1583337130417-3346a1be7dee?w=400',
+        'https://images.unsplash.com/photo-1537151608828-ea2b11777ee8?w=800',
     'Parking Available':
-        'https://images.unsplash.com/photo-1470224114660-3f6686c562eb?q=80&w=735&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+        'https://images.unsplash.com/photo-1506521781263-d8422e82f27a?w=800',
     'Family Friendly':
-        'https://images.unsplash.com/photo-1511884642898-4c92249e20b6?w=400',
-    'Study Sessions': 'https://picsum.photos/seed/study/400/300.jpg',
+        'https://images.unsplash.com/photo-1540479859555-17af45c78602?w=800',
+    'Study Sessions': 
+        'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800',
     'Night Café (Open Late)':
-        'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400',
-    'Minimalist / Modern': 'https://picsum.photos/seed/modern/400/300.jpg',
-    'Rustic / Cozy': 'https://picsum.photos/seed/cozy/400/300.jpg',
+        'https://images.unsplash.com/photo-1511018556340-d16986a1c194?w=800',
+    'Minimalist / Modern': 
+        'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?w=800',
+    'Rustic / Cozy': 
+        'https://images.unsplash.com/photo-1521017432531-fbd92d768814?w=800',
     'Outdoor / Garden':
-        'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400',
-    'Seaside / Scenic': 'https://picsum.photos/seed/seaside/400/300.jpg',
+        'https://images.unsplash.com/photo-1544145945-f904253db0ad?w=800',
+    'Seaside / Scenic': 
+        'https://images.unsplash.com/photo-1519046904884-53103b34b206?w=800',
     'Artsy / Aesthetic':
-        'https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400',
+        'https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=800',
     'Instagrammable':
-        'https://images.unsplash.com/photo-1568702846914-96b305d2aaeb?w=400',
+        'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800',
   };
 
   bool _isLoading = false;
@@ -411,11 +416,13 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
   Widget build(BuildContext context) {
     int selectedCount = _getSelectedInterests().length;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        elevation: 0,
+    return PremiumBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
         leading: widget.isEditing
             ? IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -545,6 +552,7 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
               const SizedBox(height: 16),
               Expanded(
                 child: GridView.builder(
+                  physics: const BouncingScrollPhysics(),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     childAspectRatio: 0.8,
@@ -562,69 +570,113 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
                           interests[interest] = !interests[interest]!;
                         });
                       },
-                      child: Card(
-                        elevation: isSelected ? 8 : 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: isSelected
-                              ? BorderSide(color: primary, width: 2)
-                              : BorderSide.none,
+                      splashColor: Colors.transparent,
+                      highlightColor: Colors.transparent,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        transform: Matrix4.identity()
+                          ..scale(isSelected ? 0.98 : 1.0),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isSelected ? primary : Colors.white10,
+                            width: isSelected ? 2 : 1,
+                          ),
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: primary.withOpacity(0.3),
+                                    blurRadius: 12,
+                                    spreadRadius: 2,
+                                  )
+                                ]
+                              : [],
                         ),
-                        color: isSelected
-                            ? primary.withValues(alpha: 0.2)
-                            : const Color(0xFF1E1E1E),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        clipBehavior: Clip.antiAlias,
+                        child: Stack(
                           children: [
-                            Expanded(
-                              flex: 3,
-                              child: Container(
-                                width: double.infinity,
-                                decoration: BoxDecoration(
-                                  borderRadius: const BorderRadius.only(
-                                    topLeft: Radius.circular(12),
-                                    topRight: Radius.circular(12),
-                                  ),
-                                  image: DecorationImage(
-                                    image: CachedNetworkImageProvider(
-                                        interestImages[interest]!),
-                                    fit: BoxFit.cover,
+                            // Image
+                            Positioned.fill(
+                              child: CachedNetworkImage(
+                                imageUrl: interestImages[interest]!,
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  color: Colors.white.withValues(alpha: 0.05),
+                                  child: const Center(
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor:
+                                          AlwaysStoppedAnimation(Colors.white10),
+                                    ),
                                   ),
                                 ),
-                                child: isSelected
-                                    ? Container(
-                                        decoration: BoxDecoration(
-                                          borderRadius: const BorderRadius.only(
-                                            topLeft: Radius.circular(12),
-                                            topRight: Radius.circular(12),
-                                          ),
-                                          color: primary.withValues(alpha: 0.3),
-                                        ),
-                                        child: const Icon(
-                                          Icons.check_circle,
-                                          color: Colors.white,
-                                          size: 28,
-                                        ),
-                                      )
-                                    : null,
+                                errorWidget: (context, url, error) =>
+                                    const Icon(Icons.error),
                               ),
                             ),
-                            Expanded(
-                              flex: 1,
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text(
-                                  interest,
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: isSelected
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
+                            // Overlay Gradient
+                            Positioned.fill(
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Colors.transparent,
+                                      isSelected
+                                          ? primary.withOpacity(0.8)
+                                          : Colors.black.withOpacity(0.8),
+                                    ],
                                   ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
+                              ),
+                            ),
+                            // Content
+                            Positioned(
+                              bottom: 12,
+                              left: 12,
+                              right: 12,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (isSelected)
+                                    AnimatedContainer(
+                                      duration: const Duration(milliseconds: 300),
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.2),
+                                            blurRadius: 4,
+                                          )
+                                        ],
+                                      ),
+                                      child: Icon(
+                                        Icons.check_rounded,
+                                        color: primary,
+                                        size: 14,
+                                      ),
+                                    ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    interest,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.w600,
+                                      letterSpacing: 0.5,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -637,35 +689,42 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
-                height: 50,
+                height: 56,
                 decoration: BoxDecoration(
-                  color: primary,
-                  borderRadius: BorderRadius.circular(1000),
+                  gradient: LinearGradient(
+                    colors: [primary, primary.withOpacity(0.8)],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: primary.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: TextButton(
                   onPressed: _isLoading ? null : _saveInterestsAndContinue,
                   style: TextButton.styleFrom(
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(100),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    backgroundColor: primary,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: primary.withValues(alpha: 0.7),
                     padding: EdgeInsets.zero,
                   ),
                   child: Center(
                     child: _isLoading
                         ? const SizedBox(
-                            width: 20,
-                            height: 20,
+                            width: 24,
+                            height: 24,
                             child: CircularProgressIndicator(
                               color: Colors.white,
-                              strokeWidth: 2,
+                              strokeWidth: 3,
                             ),
                           )
                         : TextWidget(
-                            text: widget.isEditing ? 'Save Changes' : 'Continue',
-                            fontSize: 16,
+                            text:
+                                widget.isEditing ? 'Save Changes' : 'Continue',
+                            fontSize: 18,
                             color: Colors.white,
                             isBold: true,
                           ),
@@ -676,6 +735,7 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 }

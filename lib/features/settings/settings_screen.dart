@@ -659,144 +659,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Admin Section (Premium Redesign)
-          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-            stream: user != null
-                ? FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(user.uid)
-                    .snapshots()
-                : null,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const SizedBox.shrink();
-              }
 
-              if (snapshot.hasError || !snapshot.hasData) {
-                return const SizedBox.shrink();
-              }
-
-              final data = snapshot.data?.data();
-              if (data == null) return const SizedBox.shrink();
-
-              // Check if user is admin (Strict boolean check)
-              final bool isAdmin = data['isAdmin'] == true;
-
-              if (!isAdmin) return const SizedBox.shrink();
-
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: InkWell(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const AdminDashboardScreen(),
-                      ),
-                    );
-                  },
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          primary.withOpacity(0.2),
-                          Colors.indigo.withOpacity(0.1),
-                          Colors.black.withOpacity(0.4),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: primary.withOpacity(0.3),
-                        width: 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: primary.withOpacity(0.1),
-                          blurRadius: 15,
-                          offset: const Offset(0, 5),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: primary.withOpacity(0.2),
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: primary.withOpacity(0.4),
-                                blurRadius: 10,
-                                spreadRadius: 2,
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.admin_panel_settings_rounded,
-                            color: Colors.white,
-                            size: 32,
-                          ),
-                        ),
-                        const SizedBox(width: 18),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  TextWidget(
-                                    text: 'Admin Dashboard',
-                                    fontSize: 18,
-                                    color: Colors.white,
-                                    isBold: true,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  //Container(
-                                  //  padding: const EdgeInsets.symmetric(
-                                  //      horizontal: 8, vertical: 2),
-                                  //  decoration: BoxDecoration(
-                                  //    color: primary,
-                                  //    borderRadius: BorderRadius.circular(6),
-                                  //  ),
-                                  //child: const Text(
-                                    //  'PRO',
-                                    //  style: TextStyle(
-                                    //    color: Colors.white,
-                                    //    fontSize: 10,
-                                    //    fontWeight: FontWeight.w800,
-                                    //    letterSpacing: 1,
-                                    //  ),
-                                    //),
-                                  //),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              TextWidget(
-                                text: 'Manage shop approvals, claims, and system metrics.',
-                                fontSize: 13,
-                                color: Colors.white70,
-                                maxLines: 2,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(
-                          Icons.arrow_forward_ios_rounded,
-                          color: Colors.white38,
-                          size: 18,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
 
           // Account Settings Section
           _buildSectionCard(
@@ -819,12 +682,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   final data = snapshot.data?.data();
                   final accountType =
                       data?['accountType'] as String? ?? 'user';
+                  final isAdmin = data?['isAdmin'] == true;
+                  
                   return _buildListTile(
                     icon: Icons.badge_outlined,
                     title: 'Account Type',
-                    subtitle: accountType == 'business'
-                        ? 'Business Account'
-                        : 'User Account',
+                    subtitle: isAdmin
+                        ? 'Admin Account'
+                        : (accountType == 'business'
+                            ? 'Business Account'
+                            : 'User Account'),
                     showChevron: false,
                   );
                 },

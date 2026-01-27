@@ -10,6 +10,7 @@ import 'package:cofi/widgets/button_widget.dart';
 import 'dart:async'; // Added for TimeoutException
 import 'package:cofi/features/auth/auth_gate.dart';
 import 'package:cofi/utils/auth_error_handler.dart';
+import 'package:cofi/widgets/premium_background.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -192,19 +193,18 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // Update email verification status in Firestore
-      await FirebaseFirestore.instance
+      // Update email verification status in Firestore (non-blocking for UX)
+      FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user!.uid)
-          .update({'emailVerified': true});
+          .update({'emailVerified': true})
+          .catchError((e) => print('Error updating email status: $e'));
 
       if (!mounted) return;
       
-      // No need to manually navigate. AuthGate listens to authStateChanges.
-      // Just ensure we don't interfere.
-      if (mounted) {
-        // Optional: Show loading or just wait for stream
-      }
+      // Force navigation to home/gate to ensure UI updates
+      Navigator.of(context).pushReplacementNamed('/');
+
     } on Exception catch (e) {
       if (mounted) {
         _showErrorDialog(context, 'Login Issue', AuthErrorHandler.getFriendlyMessage(e));
@@ -406,14 +406,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: background,
-      body: Container(
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          color: Colors.black,
-        ),
-        child: SafeArea(
+    return PremiumBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          bottom: false,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: SingleChildScrollView(
@@ -563,7 +560,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: primary,
                       textColor: Colors.white,
                       radius: 100,
-                      onPressed: _isLoading ? () {} : () => _login(),
+                      isLoading: _isLoading,
+                      onPressed: _login,
                     ),
                   ),
 

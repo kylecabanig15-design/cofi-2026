@@ -11,6 +11,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:get_storage/get_storage.dart';
+import 'package:cofi/widgets/premium_background.dart';
 
 class ExploreTab extends StatefulWidget {
   final VoidCallback? onOpenCommunity;
@@ -460,18 +461,20 @@ class _ExploreTabState extends State<ExploreTab> {
       'Open now',
     ];
 
-    return RefreshIndicator(
-      color: primary,
-      backgroundColor: Colors.black,
-      onRefresh: () async {
-        // TRIGGER FOR ALGORITHM DEMONSTRATION
-        // Clears cache and forces a full re-run of Cosine Similarity
-        await _loadRecommendationScores(forceRefresh: true);
-        
-        // Also refresh other streams if needed (optional)
-        if (mounted) setState(() {});
-      },
-      child: ListView(
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: RefreshIndicator(
+          color: primary,
+          backgroundColor: Colors.black,
+          onRefresh: () async {
+            // TRIGGER FOR ALGORITHM DEMONSTRATION
+            // Clears cache and forces a full re-run of Cosine Similarity
+            await _loadRecommendationScores(forceRefresh: true);
+            
+            // Also refresh other streams if needed (optional)
+            if (mounted) setState(() {});
+          },
+          child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 12),
         children: [
         const SizedBox(height: 16),
@@ -519,9 +522,9 @@ class _ExploreTabState extends State<ExploreTab> {
         ),
         const SizedBox(height: 6),
         // Tag filters
-        _buildTagFilters(),
+        // _buildTagFilters(),
         const SizedBox(height: 18),
-        if (_query.isEmpty) ...[
+        if (_query.isEmpty && _selectedTags.isEmpty) ...[
           _sectionTitle('Monthly Featured Cafe Shops'),
           const SizedBox(height: 10),
           if (_userStream != null)
@@ -551,7 +554,7 @@ class _ExploreTabState extends State<ExploreTab> {
                     // Sort featured shops using collaborative algorithm
                     return FutureBuilder<
                         List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
-                      future: _sortFeaturedShopsWithAlgorithm(docs),
+                      future: Future.value(_sortFeaturedShops(docs)),
                       builder: (context, sortedSnap) {
                         if (!sortedSnap.hasData) {
                           return const SizedBox(
@@ -720,7 +723,7 @@ class _ExploreTabState extends State<ExploreTab> {
                               filtered[i].id,
                               _bookmarks.contains(filtered[i].id),
                             ),
-                            rank: _selectedChip == 0 ? (i + 1) : null,
+                            rank: (_selectedChip == 0 && _selectedTags.isEmpty) ? (i + 1) : null,
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -738,8 +741,9 @@ class _ExploreTabState extends State<ExploreTab> {
             child: Text('Sign in to see shops',
                 style: TextStyle(color: Colors.white70)),
           ),
-      ],
+        ],
       ),
+    ),
     );
   }
 
@@ -861,7 +865,7 @@ class _ExploreTabState extends State<ExploreTab> {
     }
 
     // Sort based on selected chip or recommendation score
-    if (_selectedChip == 0) {
+    if (_selectedChip == 0 && _selectedTags.isEmpty) {
       // 0: For You - Sort by (Collaborative Score + Interest Match Bonus)
       list.sort((a, b) {
         // 1) Get Collaborative Score (if available)
@@ -910,8 +914,8 @@ class _ExploreTabState extends State<ExploreTab> {
         print('   #${i+1} ${d.data()['name']} | Final Score: ${(collab + bonus).toStringAsFixed(2)} '
               '(Collab: ${collab.toStringAsFixed(2)} + Interests: ${bonus.toStringAsFixed(2)} [${matches.join(', ')}])');
       }
-    } else if (_selectedChip == 1) {
-      // 1: Popular - Sort by ratings, then by review count
+    } else if (_selectedChip == 1 || (_selectedChip == 0 && _selectedTags.isNotEmpty)) {
+      // 1: Popular OR (For You with tag filters) - Sort by ratings, then by review count
        list.sort((a, b) {
         num ra = a.data().containsKey('ratings') && a.data()['ratings'] is num
             ? a.data()['ratings'] as num

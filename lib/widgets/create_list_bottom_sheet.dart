@@ -384,6 +384,7 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
                                 'createdAt': now,
                                 'updatedAt': now,
                                 'type': 'custom',
+                                'isPrivate': true, // Default to private
                               });
 
                               // Add selected shops to the items subcollection
@@ -399,12 +400,13 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
                                   .where((e) => e.value)
                                   .map((e) => e.key)
                                   .toList();
-                              docRef = await listsCol.add({
+                                docRef = await listsCol.add({
                                 'name': name,
                                 'description': description,
                                 'createdAt': now,
                                 'updatedAt': now,
                                 'type': 'filter',
+                                'isPrivate': true, // Default to private
                                 if (selectedTags.isNotEmpty)
                                   'filters': {
                                     'tags': selectedTags,
@@ -413,13 +415,24 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
                             }
 
                             if (context.mounted) {
-                              Navigator.pop(context, docRef.id);
+                              // Show success feedback FIRST, then pop on OK
+                              _showStatusDialog(
+                                context, 
+                                'Collection created successfully', 
+                                isSuccess: true,
+                                onConfirm: () {
+                                   if (context.mounted) {
+                                      Navigator.pop(context, docRef.id);
+                                   }
+                                }
+                              );
                             }
                           } catch (e) {
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                    content: Text('Failed to create list: $e')),
+                              _showStatusDialog(
+                                context, 
+                                'Failed to create collection: $e', 
+                                isSuccess: false,
                               );
                             }
                           }
@@ -439,6 +452,77 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
                     color: Colors.white,
                     isBold: true,
                   ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showStatusDialog(BuildContext context, String message, {required bool isSuccess, IconData? icon, VoidCallback? onConfirm}) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.grey[900],
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.5),
+                blurRadius: 20,
+                spreadRadius: 5,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isSuccess ? primary.withOpacity(0.1) : Colors.redAccent.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon ?? (isSuccess ? Icons.check_circle_outline : Icons.error_outline),
+                  color: isSuccess ? primary : Colors.redAccent,
+                  size: 40,
+                ),
+              ),
+              const SizedBox(height: 20),
+              TextWidget(
+                text: isSuccess ? 'Success' : 'Oops!',
+                fontSize: 20,
+                color: Colors.white,
+                isBold: true,
+              ),
+              const SizedBox(height: 8),
+              TextWidget(
+                text: message,
+                fontSize: 14,
+                color: Colors.white70,
+                align: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    if (onConfirm != null) onConfirm();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isSuccess ? primary : Colors.grey[800],
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const TextWidget(text: 'OK', fontSize: 16, color: Colors.white, isBold: true),
                 ),
               ),
             ],

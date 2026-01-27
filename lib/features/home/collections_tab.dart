@@ -60,7 +60,7 @@ class _CollectionsTabState extends State<CollectionsTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: ListView(
           children: [
@@ -557,6 +557,8 @@ class _CollectionsTabState extends State<CollectionsTab> {
                 ),
               ],
             ),
+            const Spacer(),
+            const Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 16),
           ],
         ),
       ),

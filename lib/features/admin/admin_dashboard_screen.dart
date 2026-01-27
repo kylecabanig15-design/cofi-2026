@@ -4,6 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/features/cafe/submit_shop_screen.dart';
+import 'package:cofi/features/settings/settings_screen.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cofi/widgets/list_bottom_sheet.dart';
 
 /// ============================================================================
 /// ADMIN DASHBOARD SCREEN (Panel Requirement: RBAC)
@@ -125,50 +128,116 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         toolbarHeight: 90,
         title: Padding(
           padding: const EdgeInsets.only(top: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              TextWidget(
-                text: 'Admin Center',
-                fontSize: 26,
-                color: Colors.white,
-                isBold: true,
+              // Profile Image
+              StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: FirebaseAuth.instance.currentUser != null
+                    ? FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(FirebaseAuth.instance.currentUser!.uid)
+                        .snapshots()
+                    : null,
+                builder: (context, snapshot) {
+                  final data = snapshot.data?.data();
+                  final photoUrl = (data?['photoUrl'] as String?)?.trim();
+
+                  return Container(
+                    width: 50,
+                    height: 50,
+                    decoration: const BoxDecoration(
+                      color: primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: ClipOval(
+                      child: (photoUrl != null && photoUrl.isNotEmpty)
+                          ? CachedNetworkImage(
+                              imageUrl: photoUrl,
+                              width: 50,
+                              height: 50,
+                              fit: BoxFit.cover,
+                              errorWidget: (context, url, error) =>
+                                  const Icon(Icons.person, color: Colors.white),
+                            )
+                          : const Icon(Icons.person, color: Colors.white),
+                    ),
+                  );
+                },
               ),
-              TextWidget(
-                text: 'Manage & verify coffee community',
-                fontSize: 13,
-                color: Colors.white54,
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                   StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseAuth.instance.currentUser != null
+                        ? FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(FirebaseAuth.instance.currentUser!.uid)
+                            .snapshots()
+                        : null,
+                    builder: (context, snapshot) {
+                      final data = snapshot.data?.data();
+                      final name = (data?['name'] as String?)?.trim();
+                      final displayName = (name?.isNotEmpty == true)
+                          ? name!
+                          : (FirebaseAuth.instance.currentUser?.displayName ?? 'Admin');
+                      
+                      return TextWidget(
+                        text: displayName,
+                        fontSize: 20,
+                        color: Colors.white,
+                        isBold: true,
+                      );
+                    },
+                  ),
+                  TextWidget(
+                    text: 'Admin Center',
+                    fontSize: 13,
+                    color: primary,
+                    isBold: true,
+                  ),
+                ],
               ),
             ],
           ),
         ),
         actions: [
-          // Migration Button
-          Container(
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.construction_rounded, color: Colors.blue, size: 20),
-              tooltip: 'Migrate Legacy Shops',
-              onPressed: _runLegacyShopMigration,
-            ),
+          // Settings Button
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.white),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
+            },
           ),
+          // Sync Logos Button
+          //Container(
+          //   margin: const EdgeInsets.only(right: 8),
+          //   decoration: BoxDecoration(
+          //     color: Colors.purple.withOpacity(0.1),
+          //     borderRadius: BorderRadius.circular(12),
+          //   ),
+          //   child: IconButton(
+          //     icon: const Icon(Icons.sync_rounded, color: Colors.purple, size: 20),
+          //     tooltip: 'Sync Shared Logos',
+          //     onPressed: _runLogoSync,
+          //   ),
+          // ),
           // Cleanup Button
-          Container(
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.cleaning_services_rounded, color: Colors.orange, size: 20),
-              tooltip: 'Cleanup Firestore',
-              onPressed: _showCleanupDialog,
-            ),
-          ),
+          //Container(
+          //   margin: const EdgeInsets.only(right: 16),
+          //   decoration: BoxDecoration(
+          //     color: Colors.orange.withOpacity(0.1),
+          //     borderRadius: BorderRadius.circular(12),
+          //   ),
+          //   child: IconButton(
+          //     icon: const Icon(Icons.cleaning_services_rounded, color: Colors.orange, size: 20),
+          //     tooltip: 'Cleanup Firestore',
+          //     onPressed: _showCleanupDialog,
+          //   ),
+          // ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(170),
@@ -579,12 +648,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                                       style: TextStyle(fontSize: 11, color: Colors.redAccent, fontWeight: FontWeight.bold),
                                     ),
                                   ),
+
                                 const SizedBox(width: 8),
                                 TextButton(
                                   onPressed: () => _revertToPending(shopId),
                                   child: const Text('Revert to Pending',
                                       style: TextStyle(fontSize: 12, color: Colors.blue)),
                                 ),
+                                                                if (approvalStatus == 'rejected')
+                                  TextButton.icon(
+                                    onPressed: () => _archiveShop(shopId),
+                                    icon: const Icon(Icons.archive_rounded, size: 14, color: Colors.orange),
+                                    label: const Text(
+                                      'ARCHIVE',
+                                      style: TextStyle(fontSize: 11, color: Colors.orange, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
                               ],
                             ),
                           ],
@@ -1782,7 +1861,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         content: const Text(
           'This tool will perform the following actions:\n\n'
           '• Remove "junk" shops (missing name/address)\n'
-          '• Remove orphaned reviews/comments from deleted accounts\n\n'
+          '• Remove orphaned reviews/comments from deleted accounts\n'
+          '• Remove broken Shared Collections (missing original source)\n\n'
           'This operation is irreversible and may take some time. Proceed with caution.',
           style: TextStyle(color: Colors.white70),
         ),
@@ -1899,6 +1979,30 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       }
       
       Navigator.pop(context); // Close loading dialog
+
+      // 2. Fetch all shared collections
+      final sharedSnapshot = await firestore.collection('sharedCollections').get();
+      for (final sharedDoc in sharedSnapshot.docs) {
+        final data = sharedDoc.data();
+        final userId = data['userId'] as String?;
+        final listId = data['listId'] as String?;
+        final title = data['title'] as String? ?? 'Untitled Collection';
+
+        if (userId != null && listId != null) {
+          final listRef = firestore.collection('users').doc(userId).collection('lists').doc(listId);
+          final listSnap = await listRef.get();
+
+          if (!listSnap.exists) {
+            candidates.add(CleanupCandidate(
+              id: sharedDoc.id,
+              type: 'collection',
+              reason: 'Original Collection Not Found',
+              description: title,
+              reference: sharedDoc.reference,
+            ));
+          }
+        }
+      }
 
       if (candidates.isEmpty) {
         if (mounted) {
@@ -2029,6 +2133,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       case 'shop': return Icons.storefront;
       case 'review': return Icons.star_rate_rounded;
       case 'comment': return Icons.comment_rounded;
+      case 'collection': return Icons.folder_delete_rounded;
       default: return Icons.help;
     }
   }
@@ -2038,6 +2143,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       case 'shop': return Colors.orange;
       case 'review': return Colors.amber;
       case 'comment': return Colors.blueAccent;
+      case 'collection': return Colors.redAccent;
       default: return Colors.grey;
     }
   }
@@ -2083,6 +2189,254 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         );
       }
     }
+  }
+
+  Future<void> _runLogoSync() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: Colors.purple),
+            SizedBox(height: 16),
+            TextWidget(text: 'Syncing logos...', color: Colors.white, fontSize: 16),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      int updatedCount = 0;
+      int skippedCount = 0;
+      int errorCount = 0;
+      int emptyCount = 0;
+      int deletedCount = 0;
+      final Map<String, String> logoLessCafes = {}; // id -> name
+      final firestore = FirebaseFirestore.instance;
+      
+      final sharedSnapshot = await firestore.collection('sharedCollections').get();
+
+      for (final sharedDoc in sharedSnapshot.docs) {
+        final data = sharedDoc.data();
+        final userId = data['userId'];
+        final listId = data['listId'];
+
+        if (userId != null && listId != null) {
+          final result = await ListBottomSheet.syncLogos(userId, listId, deleteIfEmpty: true);
+          if (result.success) {
+            // Collect any missing logos found in this collection
+            for (var cafe in result.missingLogos) {
+              if (cafe['id'] != null) {
+                logoLessCafes[cafe['id']!] = cafe['name'] ?? 'Unknown Cafe';
+              }
+            }
+
+            // Fetch the updated doc to check final result
+            final updatedDoc = await sharedDoc.reference.get();
+            if (!updatedDoc.exists) {
+              deletedCount++;
+              continue;
+            }
+
+            final updatedData = updatedDoc.data();
+            final preview = updatedData?['previewLogos'] as List?;
+            final count = updatedData?['shopCount'] as int? ?? 0;
+            
+            if (count == 0 || (preview == null || preview.isEmpty)) {
+              emptyCount++;
+            }
+            updatedCount++;
+          } else {
+            errorCount++;
+          }
+        } else {
+          skippedCount++;
+        }
+      }
+
+      Navigator.pop(context); // Close loading dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: Colors.grey[900],
+            title: const TextWidget(text: 'Sync & Cleanup Complete', color: Colors.white, fontSize: 20, isBold: true),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSyncResultRow('✅ Updated Collections:', '$updatedCount', Colors.green),
+                _buildSyncResultRow('🗑️ Deleted Ghost (Empty):', '$deletedCount', Colors.redAccent),
+                _buildSyncResultRow('⚠️ Empty (Non-Deleted):', '$emptyCount', Colors.orange),
+                _buildSyncResultRow('🚫 Skipped (Invalid Data):', '$skippedCount', Colors.blue),
+                _buildSyncResultRow('❌ Failed (Network/Error):', '$errorCount', Colors.red),
+                const SizedBox(height: 16),
+                if (logoLessCafes.isNotEmpty)
+                  Center(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange.withOpacity(0.2),
+                        foregroundColor: Colors.orange,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showLogoAuditSheet(logoLessCafes);
+                      },
+                      icon: const Icon(Icons.search),
+                      label: TextWidget(text: 'Review ${logoLessCafes.length} Logo-less Cafes', color: Colors.orange, fontSize: 13),
+                    ),
+                  )
+                else
+                  const TextWidget(
+                    text: 'All shops in these collections have logos! ✨',
+                    color: Colors.white54,
+                    fontSize: 12,
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Sync failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _showLogoAuditSheet(Map<String, String> cafes) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          height: MediaQuery.of(context).size.height * 0.8,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const TextWidget(text: 'Logo-less Cafe Audit', fontSize: 22, color: Colors.white, isBold: true),
+                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close, color: Colors.white)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TextWidget(
+                text: 'These shops were found in shared collections but missing a logo URL. You can remove them from the system below.',
+                fontSize: 14,
+                color: Colors.white70,
+              ),
+              const SizedBox(height: 24),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: cafes.length,
+                  itemBuilder: (context, index) {
+                    final shopId = cafes.keys.elementAt(index);
+                    final shopName = cafes[shopId]!;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(color: Colors.orange.withOpacity(0.2), shape: BoxShape.circle),
+                            child: const Icon(Icons.no_photography, color: Colors.orange, size: 20),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                TextWidget(text: shopName, color: Colors.white, fontSize: 15, isBold: true),
+                                TextWidget(text: 'ID: $shopId', color: Colors.white54, fontSize: 11),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                            onPressed: () => _confirmDeleteShop(context, shopId, shopName, () {
+                              setModalState(() => cafes.remove(shopId));
+                            }),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteShop(BuildContext context, String shopId, String name, VoidCallback onDeleted) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text('Delete Shop?'),
+        content: Text('Are you sure you want to permanently delete "$name"? This will remove it from all collections and the main database.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await FirebaseFirestore.instance.collection('shops').doc(shopId).delete();
+                onDeleted();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Deleted $name')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSyncResultRow(String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          TextWidget(text: label, color: Colors.white, fontSize: 14),
+          TextWidget(text: value, color: color, fontSize: 14, isBold: true),
+        ],
+      ),
+    );
   }
 
   Future<void> _checkUserExists(String userId, Map<String, bool> cache) async {

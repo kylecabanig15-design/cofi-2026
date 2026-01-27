@@ -9,6 +9,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'explore_tab.dart';
 import 'community_tab.dart';
 import 'package:cofi/features/networking/notification_screen.dart';
+import 'package:cofi/widgets/premium_background.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialTabIndex;
@@ -65,10 +66,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: _currentIndex == 0
-          ? AppBar(
-              backgroundColor: Colors.black,
+    return PremiumBackground(
+      child: Scaffold(
+        appBar: _currentIndex == 0
+            ? AppBar(
+                backgroundColor: Colors.transparent,
               elevation: 0,
               automaticallyImplyLeading: false,
               title: Image.asset(
@@ -153,11 +155,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.transparent,
       bottomNavigationBar: _buildBottomNavBar(),
       body: SafeArea(
         child: _tabs[_currentIndex],
       ),
+    ),
     );
   }
 
