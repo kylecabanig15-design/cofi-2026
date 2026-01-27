@@ -21,26 +21,67 @@ class _MapViewScreenState extends State<MapViewScreen> {
   bool _isLoadingLocation = true;
   Map<String, dynamic>? _selectedShopData;
   String? _selectedShopId;
+  bool _locationPermissionGranted = false;
 
   @override
   void initState() {
     super.initState();
+    // ----------------------------------------------------------------------
+    // STEP A: Coordinate Acquisition (Permission & GPS)
+    // ----------------------------------------------------------------------
     _getUserLocation();
   }
 
   Future<void> _getUserLocation() async {
     try {
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      print('Location service enabled: $serviceEnabled');
+      if (!serviceEnabled) {
+        print('Location services are disabled.');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Please enable Location Services')));
+        }
+        setState(() => _isLoadingLocation = false);
+        return;
+      }
+
       // Check if location permissions are granted
-      var status = await Permission.location.status;
+      print('Checking location permission status...');
+      var status = await Permission.locationWhenInUse.status;
+      print('Initial status: $status');
+      
+      if (status.isPermanentlyDenied) {
+        print('Location permission permanently denied.');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location permission permanently denied. Please enable in settings.'),
+              action: SnackBarAction(label: 'Settings', onPressed: openAppSettings),
+            ),
+          );
+        }
+        setState(() => _isLoadingLocation = false);
+        return;
+      }
+
       if (!status.isGranted) {
-        status = await Permission.location.request();
+        print('Requesting location permission...');
+        status = await Permission.locationWhenInUse.request();
+        print('New status: $status');
         if (!status.isGranted) {
           setState(() {
             _isLoadingLocation = false;
+            _locationPermissionGranted = false;
           });
           return;
         }
       }
+
+      setState(() {
+        _locationPermissionGranted = true;
+      });
 
       // Get current position
       final position = await Geolocator.getCurrentPosition(
@@ -59,9 +100,12 @@ class _MapViewScreenState extends State<MapViewScreen> {
         );
       }
     } catch (e) {
-      setState(() {
-        _isLoadingLocation = false;
-      });
+      print('Error getting user location: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingLocation = false;
+        });
+      }
     }
   }
 
@@ -80,6 +124,21 @@ class _MapViewScreenState extends State<MapViewScreen> {
 
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
+    // Prioritize selected shop location if one is selected
+    if (_selectedShopId != null && _selectedShopData != null) {
+      final lat = (_selectedShopData!['latitude'] as num?)?.toDouble();
+      final lng = (_selectedShopData!['longitude'] as num?)?.toDouble();
+      if (lat != null && lng != null) {
+        _mapController!.animateCamera(
+          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 18),
+        );
+      }
+    } else if (_userLocation != null) {
+      // Otherwise fallback to user location
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(_userLocation!, 14),
+      );
+    }
   }
 
   void _onCameraMove(CameraPosition position) {
@@ -245,6 +304,18 @@ class _MapViewScreenState extends State<MapViewScreen> {
     );
   }
 
+  // ========================================================================
+  // HAVERSINE FORMULA & GEOSPATIAL LOGIC
+  // ========================================================================
+  //
+  // This section of the codebase handles the visual and logical representation
+  // of café locations. It calculates distances using the HAVERSINE FORMULA.
+  //
+  // Formula:
+  //   a = sin²(Δlat/2) + cos(lat1) * cos(lat2) * sin²(Δlon/2)
+  //   c = 2 * asin(sqrt(a))
+  //   Distance (d) = R * c
+  // ========================================================================
   Widget _buildMapLayer(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
     final markers = <Marker>{};
     for (final doc in docs) {
@@ -262,8 +333,22 @@ class _MapViewScreenState extends State<MapViewScreen> {
       );
     }
 
-     final initialCenter = _userLocation ??
-        (markers.isNotEmpty
+     LatLng? initialCenter;
+    
+    // 1. Try selected shop
+    if (_selectedShopId != null && _selectedShopData != null) {
+      final lat = (_selectedShopData!['latitude'] as num?)?.toDouble();
+      final lng = (_selectedShopData!['longitude'] as num?)?.toDouble();
+      if (lat != null && lng != null) {
+        initialCenter = LatLng(lat, lng);
+      }
+    }
+
+    // 2. Try user location
+    initialCenter ??= _userLocation;
+
+    // 3. Fallback to markers or default
+    initialCenter ??= (markers.isNotEmpty
             ? markers.first.position
             : const LatLng(7.0647, 125.6088));
 
@@ -276,8 +361,8 @@ class _MapViewScreenState extends State<MapViewScreen> {
         zoom: 14,
       ),
       markers: markers,
-      myLocationEnabled: _userLocation != null,
-      myLocationButtonEnabled: false,
+      myLocationEnabled: _locationPermissionGranted,
+      myLocationButtonEnabled: true,
       zoomControlsEnabled: false,
       onTap: (_) {
         if (_selectedShopId != null) {
@@ -294,8 +379,14 @@ class _MapViewScreenState extends State<MapViewScreen> {
   Widget _buildCafeListSheet(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, Set<String> bookmarks) {
     if (docs.isEmpty) return const SizedBox.shrink();
 
-    // Sort docs by distance if user location is available
     final sortedDocs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(docs);
+
+    // ----------------------------------------------------------------------
+    // STEP C: Distance Ranking (Ascending Sort)
+    // ----------------------------------------------------------------------
+    // Uses the Haversine logic (Geolocator.distanceBetween) to sort the 
+    // list so that the physically closest café is at index 0.
+    // ========================================================================
     if (_userLocation != null) {
       sortedDocs.sort((a, b) {
         final dataA = a.data();
@@ -305,6 +396,11 @@ class _MapViewScreenState extends State<MapViewScreen> {
         final latB = (dataB['latitude'] as num?)?.toDouble() ?? 0;
         final lngB = (dataB['longitude'] as num?)?.toDouble() ?? 0;
 
+        // ------------------------------------------------------------------
+        // STEP B: Real-time Distance Computation
+        // ------------------------------------------------------------------
+        // Geolocator.distanceBetween abstracts the Haversine math 
+        // for native high-performance computation.
         final distA = Geolocator.distanceBetween(
           _userLocation!.latitude,
           _userLocation!.longitude,
@@ -317,7 +413,7 @@ class _MapViewScreenState extends State<MapViewScreen> {
           latB,
           lngB,
         );
-        return distA.compareTo(distB);
+        return distA.compareTo(distB); // Return ascending order (nearest first)
       });
     }
 

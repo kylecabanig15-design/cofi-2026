@@ -32,8 +32,6 @@ class AuthGate extends StatelessWidget {
         return StreamBuilder<User?>(
           stream: FirebaseAuth.instance.authStateChanges(),
           builder: (context, snapshot) {
-            print(
-                'Auth state: ${snapshot.connectionState}, user: ${snapshot.data?.email}');
 
             if (snapshot.hasError) {
               print('Auth error: ${snapshot.error}');
@@ -77,8 +75,6 @@ class AuthGate extends StatelessWidget {
                   .doc(user.uid)
                   .snapshots(),
               builder: (context, userSnapshot) {
-                print(
-                    'User profile snapshot state: ${userSnapshot.connectionState}');
 
                 if (userSnapshot.hasError) {
                   print('User profile error: ${userSnapshot.error}');
@@ -90,7 +86,6 @@ class AuthGate extends StatelessWidget {
                 }
 
                 if (!userSnapshot.hasData || userSnapshot.data == null) {
-                  print('No user profile found');
                   return const SplashScreen();
                 }
 
@@ -98,11 +93,9 @@ class AuthGate extends StatelessWidget {
                     userSnapshot.data!.data() as Map<String, dynamic>?;
 
                 if (userData == null) {
-                  print('User data is null');
                   return const SplashScreen();
                 }
 
-                print('User data: $userData');
 
                 // Check if user has accountType
                 final hasAccountType = userData.containsKey('accountType') &&
@@ -118,30 +111,23 @@ class AuthGate extends StatelessWidget {
                 final hasCommitment = userData.containsKey('commitment') &&
                     userData['commitment'] == true;
 
-                print('Has account type: $hasAccountType');
-                print('Has commitment: $hasCommitment');
-                print('Has interests: $hasInterests');
 
                 // If missing accountType, go through account type selection
                 if (!hasAccountType) {
-                  print('Showing account type selection');
                   return const AccountTypeSelectionScreen();
                 }
 
                 // If missing commitment, go through community commitment
                 if (!hasCommitment) {
-                  print('Showing community commitment');
                   return const CommunityCommitmentScreen();
                 }
 
                 // If missing interests, go through interests selection
                 if (!hasInterests) {
-                  print('Showing interest selection');
                   return const InterestSelectionScreen();
                 }
 
                 // All checks passed -> go home
-                print('All checks passed, showing home');
                 return const HomeScreen();
               },
             );
