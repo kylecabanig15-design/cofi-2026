@@ -102,10 +102,9 @@ class AuthGate extends StatelessWidget {
                     userData['accountType'] != null &&
                     (userData['accountType'] as String?)?.isNotEmpty == true;
 
-                // Check if user has interests
+                // Check if user has interests (or skipped -> empty list is valid)
                 final hasInterests = userData.containsKey('interests') &&
-                    userData['interests'] != null &&
-                    (userData['interests'] as List?)?.isNotEmpty == true;
+                    userData['interests'] != null;
 
                 // Check if user has commitment
                 final hasCommitment = userData.containsKey('commitment') &&

@@ -111,6 +111,7 @@ class _SignupScreenState extends State<SignupScreen> {
           'reviews': [],
           'accountType': widget.accountType,
           'emailVerified': false, // Track email verification status
+          'isAdmin': false, // NEW: Explicitly initialize
           'createdAt': FieldValue.serverTimestamp(),
           // Notification preferences
           'notificationPreferences': {

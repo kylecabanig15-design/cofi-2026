@@ -116,24 +116,48 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
                                   _showDeleteListConfirmation(context),
                             ),
                           ),
-                        // Share button for user-created lists
-                        if (widget.listId != null && widget.userId != null)
-                          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        // Privacy Toggle (Eye Icon) - Replaces Share button
+                        if (widget.listId != null && widget.userId != null && widget.userId == FirebaseAuth.instance.currentUser?.uid)
+                          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                             stream: FirebaseFirestore.instance
-                                .collection('sharedCollections')
-                                .where('userId', isEqualTo: widget.userId)
-                                .where('listId', isEqualTo: widget.listId)
+                                .collection('users')
+                                .doc(widget.userId)
+                                .collection('lists')
+                                .doc(widget.listId)
                                 .snapshots(),
                             builder: (context, snapshot) {
+                              final data = snapshot.data?.data();
+                              final isPrivate = data?['isPrivate'] ?? false;
+                              
                               return SizedBox(
                                 width: 40,
                                 height: 40,
                                 child: IconButton(
                                   padding: EdgeInsets.zero,
-                                  icon: const Icon(Icons.share,
-                                      color: Colors.white, size: 24),
-                                  onPressed: () =>
-                                      _showShareConfirmation(context),
+                                  icon: Icon(
+                                    isPrivate ? Icons.visibility_off : Icons.visibility,
+                                    color: isPrivate ? Colors.grey : primary,
+                                    size: 24,
+                                  ),
+                                  onPressed: () {
+                                    FirebaseFirestore.instance
+                                        .collection('users')
+                                        .doc(widget.userId)
+                                        .collection('lists')
+                                        .doc(widget.listId)
+                                        .update({'isPrivate': !isPrivate});
+                                    
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          !isPrivate 
+                                            ? 'List is now Private' 
+                                            : 'List is now Public'
+                                        ),
+                                        duration: const Duration(seconds: 1),
+                                      ),
+                                    );
+                                  },
                                 ),
                               );
                             },

@@ -11,6 +11,7 @@ import 'package:cofi/features/cafe/reviews_screen.dart';
 import 'package:cofi/features/cafe/log_visit_screen.dart';
 import 'package:cofi/features/cafe/write_review_screen.dart';
 import 'package:cofi/features/cafe/menu_photos_screen.dart';
+import 'package:cofi/features/business/claim_shop_screen.dart';
 
 class _ContactItem {
   final String label;
@@ -150,11 +151,12 @@ class CafeDetailsScreen extends StatelessWidget {
         (s['schedule'] ?? {}) as Map<String, dynamic>;
     final num ratings = (s['ratings'] is num) ? s['ratings'] as num : 0;
     final List reviews = (s['reviews'] as List?) ?? const [];
-    final String ratingText =
-        '${ratings.toStringAsFixed(1)} (${reviews.length}) · Verified';
+    final String ratingText = '${ratings.toStringAsFixed(1)} (${reviews.length})';
     final String scheduleText = _scheduleToText(schedule);
     final Map<String, dynamic> contacts =
         (s['contacts'] ?? {}) as Map<String, dynamic>;
+    final bool isVerified = (s['isVerified'] as bool?) ?? false;
+    final String submissionType = (s['submissionType'] as String?) ?? 'community';
 
     // Get location data
     final double latitude =
@@ -208,6 +210,7 @@ class CafeDetailsScreen extends StatelessWidget {
                             : [logoUrl ?? '']
                                 .where((url) => url.isNotEmpty)
                                 .toList(),
+                        // REMOVED isVerified and submissionType from here as we're moving them to the rating row
                       ),
                       Positioned(
                         top: 16,
@@ -243,7 +246,7 @@ class CafeDetailsScreen extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   _buildHeaderRatingWidget(shopId, ratings,
-                                      reviews.length, ratingText),
+                                      reviews.length, ratingText, isVerified, submissionType),
                                   const SizedBox(height: 4),
                                   TextWidget(
                                     text: name,
@@ -343,7 +346,7 @@ class CafeDetailsScreen extends StatelessWidget {
               child: Container(
                 color: Colors.black,
                 padding: const EdgeInsets.only(bottom: 16),
-                child: _buildActionButtons(context),
+                child: _buildActionButtons(context, submissionType, name),
               ),
             ),
           ],
@@ -353,7 +356,7 @@ class CafeDetailsScreen extends StatelessWidget {
   }
 
   Widget _buildHeaderRatingWidget(
-      String? shopId, num ratings, int embeddedCount, String fallbackText) {
+      String? shopId, num ratings, int embeddedCount, String fallbackText, bool isVerified, String submissionType) {
     if (shopId != null && shopId.isNotEmpty) {
       final query = FirebaseFirestore.instance
           .collection('shops')
@@ -371,23 +374,26 @@ class CafeDetailsScreen extends StatelessWidget {
           final count = ratingValues.length;
           final avg =
               count == 0 ? 0.0 : ratingValues.reduce((a, b) => a + b) / count;
-          final text = '${avg.toStringAsFixed(1)} ($count) · Verified';
+          final text = '${avg.toStringAsFixed(1)} ($count)';
           return Row(
             children: [
               const Icon(Icons.star, color: Colors.amber, size: 20),
               const SizedBox(width: 4),
               TextWidget(text: text, fontSize: 14, color: Colors.white),
+              const SizedBox(width: 8),
+              _buildSubmissionBadge(isVerified, submissionType, isInline: true),
             ],
           );
         },
       );
     }
-    // Fallback to provided values if no shopId
     return Row(
       children: [
         const Icon(Icons.star, color: Colors.amber, size: 20),
         const SizedBox(width: 4),
         TextWidget(text: fallbackText, fontSize: 14, color: Colors.white),
+        const SizedBox(width: 8),
+        _buildSubmissionBadge(isVerified, submissionType, isInline: true),
       ],
     );
   }
@@ -687,7 +693,81 @@ class CafeDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildGallerySlider({required List<String> galleryImages}) {
+  Widget _buildSubmissionBadge(bool isVerified, String submissionType, {bool hasRankBadge = false, bool isFeatured = false, bool isInline = false}) {
+    if (!isVerified && !isFeatured) return const SizedBox.shrink();
+    
+    // UI/UX MASTER PALETTE: Cohesive with CoFi's Maroon (#8B0C17)
+    final Color badgeColor = isFeatured 
+        ? primary 
+        : (submissionType == 'business' 
+            ? const Color(0xFF546E7A) // Cool Slate
+            : const Color(0xFFF1C40F)); // Premium Gold
+            
+    final IconData badgeIcon = isFeatured
+        ? Icons.auto_awesome 
+        : (submissionType == 'business' ? Icons.verified : Icons.people);
+        
+    final String badgeText = isFeatured
+        ? 'FEATURED SHOP'
+        : (submissionType == 'business' ? 'Verified' : 'Community Added');
+
+    final badgeWidget = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (isInline) ...[
+          const TextWidget(
+            text: ' • ',
+            fontSize: 16, // Slightly larger for better dot visibility
+            color: Colors.white70,
+            isBold: true,
+          ),
+        ],
+        Icon(
+          badgeIcon,
+          color: isInline ? badgeColor : Colors.white,
+          size: 18, // Increased to match stars (20px) better
+        ),
+        const SizedBox(width: 4),
+        Text(
+          badgeText,
+          style: TextStyle(
+            color: isInline ? badgeColor : Colors.white,
+            fontSize: 13, // Increased to match rating text (14pt) better
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ],
+    );
+
+    if (isInline) return badgeWidget;
+
+    return Positioned(
+      top: hasRankBadge ? 46 : 12,
+      left: 12,
+      child: Container(
+        decoration: BoxDecoration(
+          color: badgeColor,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.25),
+              blurRadius: 6,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        child: badgeWidget,
+      ),
+    );
+  }
+
+  Widget _buildGallerySlider({
+    required List<String> galleryImages,
+    bool isVerified = false,
+    String submissionType = 'community',
+  }) {
     final images = galleryImages.where((url) => url.isNotEmpty).toList();
 
     if (images.isEmpty) {
@@ -698,8 +778,13 @@ class CafeDetailsScreen extends StatelessWidget {
           borderRadius: const BorderRadius.vertical(
               top: Radius.circular(18), bottom: Radius.circular(18)),
         ),
-        child: const Center(
-          child: Icon(Icons.image, color: Colors.white38, size: 50),
+        child: Stack(
+          children: [
+            const Center(
+              child: Icon(Icons.image, color: Colors.white38, size: 50),
+            ),
+            _buildSubmissionBadge(isVerified, submissionType),
+          ],
         ),
       );
     }
@@ -743,6 +828,7 @@ class CafeDetailsScreen extends StatelessWidget {
                   );
                 },
               ),
+              _buildSubmissionBadge(isVerified, submissionType),
               // Left arrow button
               if (images.length > 1)
                 Align(
@@ -1350,13 +1436,67 @@ class CafeDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButtons(context) {
+  Widget _buildActionButtons(BuildContext context, String submissionType, String shopName) {
     final sm = shop ?? const <String, dynamic>{};
     final List embeddedReviews = (sm['reviews'] as List?) ?? const [];
+    final user = FirebaseAuth.instance.currentUser;
+
     return Padding(
-      padding: EdgeInsets.fromLTRB(24, 16, 24, 16),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
       child: Column(
         children: [
+          if (user != null && submissionType == 'community')
+            StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(user.uid)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                final userData = snapshot.data?.data();
+                final accountType = userData?['accountType'] as String? ?? 'user';
+
+                if (accountType != 'business') return const SizedBox.shrink();
+
+                return Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ClaimShopScreen(),
+                              settings: RouteSettings(
+                                arguments: {
+                                  'preselectShopId': shopId,
+                                  'preselectShopName': shopName,
+                                },
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.verified, color: Colors.white),
+                        label: const TextWidget(
+                          text: 'Claim this Shop',
+                          fontSize: 16,
+                          color: Colors.white,
+                          isBold: true,
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primary,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                );
+              },
+            ),
           ElevatedButton(
             onPressed: () {
               Navigator.push(

@@ -10,6 +10,8 @@ import 'package:cofi/utils/auth_error_handler.dart';
 import 'privacy_policy_screen.dart';
 import 'terms_of_service_screen.dart';
 import 'help_support_screen.dart';
+import 'package:cofi/features/auth/interest_selection_screen.dart';
+import 'package:cofi/features/admin/admin_dashboard_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -21,13 +23,14 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
 
+
   @override
   void initState() {
     super.initState();
-    _loadNotificationPreference();
+    _loadSettings();
   }
 
-  Future<void> _loadNotificationPreference() async {
+  Future<void> _loadSettings() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       final doc = await FirebaseFirestore.instance
@@ -57,6 +60,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     }
   }
+
+
 
   void _showEditProfileDialog() {
     showDialog(
@@ -364,6 +369,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final reAuthed = await _reauthenticateUser(user);
       if (!reAuthed) return;
 
+      // Re-fetch user to get fresh tokens/state
+      final freshUser = FirebaseAuth.instance.currentUser;
+      if (freshUser == null) return;
+
       // Show loading indicator
       if (mounted) {
         showDialog(
@@ -375,16 +384,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
 
-      // Step 2: Delete user document from Firestore
+      // Step 2: Comprehensive Data Cleanup
+      await _performDeepCleanup(freshUser.uid);
+
+      // Step 3: Delete user document from Firestore
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(user.uid)
+          .doc(freshUser.uid)
           .delete();
 
-      // Step 3: Delete the Firebase Auth user account
-      await user.delete();
+      // Step 4: Delete the Firebase Auth user account
+      await freshUser.delete();
 
-      // Step 4: Ensure Google Sign In is also signed out
+      // Step 5: Ensure Google Sign In is also signed out
       await GoogleSignInService.signOut();
 
       // Close loading dialog
@@ -412,6 +424,126 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SnackBar(content: Text(AuthErrorHandler.getFriendlyMessage(e))),
         );
       }
+    }
+  }
+
+  Future<void> _performDeepCleanup(String uid) async {
+    final firestore = FirebaseFirestore.instance;
+
+    // 1. Lists & Items within them
+    try {
+      final listsRef = firestore.collection('users').doc(uid).collection('lists');
+      final lists = await listsRef.get();
+      for (var list in lists.docs) {
+        try {
+          final items = await list.reference.collection('items').get();
+          final batch = firestore.batch();
+          for (var item in items.docs) {
+            batch.delete(item.reference);
+          }
+          await batch.commit();
+          await list.reference.delete();
+        } catch (e) {
+          debugPrint('Error cleaning up list ${list.id}: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching lists for cleanup: $e');
+    }
+
+    // 2. Shop Claims
+    try {
+      final claims = await firestore.collection('shop_claims').where('claimantId', isEqualTo: uid).get();
+      if (claims.docs.isNotEmpty) {
+        final batch = firestore.batch();
+        for (var doc in claims.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      }
+    } catch (e) {
+      debugPrint('Error cleaning up shop claims: $e');
+    }
+
+    // 3. Shared Collections
+    try {
+      final shared = await firestore.collection('sharedCollections').where('userId', isEqualTo: uid).get();
+      if (shared.docs.isNotEmpty) {
+        final batch = firestore.batch();
+        for (var doc in shared.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      }
+    } catch (e) {
+      debugPrint('Error cleaning up shared collections: $e');
+    }
+
+    // 4. Jobs (This often fails due to missing index)
+    try {
+      final jobs = await firestore.collectionGroup('jobs').where('createdBy', isEqualTo: uid).get();
+      for (var doc in jobs.docs) {
+        await firestore.collection('allJobs').doc(doc.id).delete();
+        await doc.reference.delete();
+      }
+    } catch (e) {
+      debugPrint('Error cleaning up jobs (Check index): $e');
+    }
+
+    // 5. Reviews across all shops
+    try {
+      final reviews = await firestore.collectionGroup('reviews').where('userId', isEqualTo: uid).get();
+      if (reviews.docs.isNotEmpty) {
+        final batch = firestore.batch();
+        for (var doc in reviews.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      }
+    } catch (e) {
+      debugPrint('Error cleaning up reviews: $e');
+    }
+
+    // 6. Community Event Comments
+    try {
+      final comments = await firestore.collectionGroup('comments').where('userId', isEqualTo: uid).get();
+      if (comments.docs.isNotEmpty) {
+        final batch = firestore.batch();
+        for (var doc in comments.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      }
+    } catch (e) {
+      debugPrint('Error cleaning up comments: $e');
+    }
+
+    // 7. Community Shops (Added by user)
+    try {
+      final shopsAdded = await firestore.collection('shops').where('posterId', isEqualTo: uid).get();
+      if (shopsAdded.docs.isNotEmpty) {
+        final batch = firestore.batch();
+        for (var doc in shopsAdded.docs) {
+          batch.update(doc.reference, {'posterId': null});
+        }
+        await batch.commit();
+      }
+    } catch (e) {
+      debugPrint('Error anonymizing posted shops: $e');
+    }
+
+    // 8. Dissociate Business Ownership & revert status (CRITICAL FIX)
+    try {
+      final shopsOwned = await firestore.collection('shops').where('ownerId', isEqualTo: uid).get();
+      for (var doc in shopsOwned.docs) {
+        await doc.reference.update({
+          'ownerId': null, 
+          'isVerified': false,
+          'submissionType': 'community'
+        });
+      }
+    } catch (e) {
+      debugPrint('Error dissociating business ownership: $e');
     }
   }
 
@@ -527,6 +659,145 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Admin Section (Premium Redesign)
+          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: user != null
+                ? FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .snapshots()
+                : null,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SizedBox.shrink();
+              }
+
+              if (snapshot.hasError || !snapshot.hasData) {
+                return const SizedBox.shrink();
+              }
+
+              final data = snapshot.data?.data();
+              if (data == null) return const SizedBox.shrink();
+
+              // Check if user is admin (Strict boolean check)
+              final bool isAdmin = data['isAdmin'] == true;
+
+              if (!isAdmin) return const SizedBox.shrink();
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AdminDashboardScreen(),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          primary.withOpacity(0.2),
+                          Colors.indigo.withOpacity(0.1),
+                          Colors.black.withOpacity(0.4),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: primary.withOpacity(0.3),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: primary.withOpacity(0.1),
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: primary.withOpacity(0.2),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: primary.withOpacity(0.4),
+                                blurRadius: 10,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.admin_panel_settings_rounded,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                        ),
+                        const SizedBox(width: 18),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  TextWidget(
+                                    text: 'Admin Dashboard',
+                                    fontSize: 18,
+                                    color: Colors.white,
+                                    isBold: true,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  //Container(
+                                  //  padding: const EdgeInsets.symmetric(
+                                  //      horizontal: 8, vertical: 2),
+                                  //  decoration: BoxDecoration(
+                                  //    color: primary,
+                                  //    borderRadius: BorderRadius.circular(6),
+                                  //  ),
+                                  //child: const Text(
+                                    //  'PRO',
+                                    //  style: TextStyle(
+                                    //    color: Colors.white,
+                                    //    fontSize: 10,
+                                    //    fontWeight: FontWeight.w800,
+                                    //    letterSpacing: 1,
+                                    //  ),
+                                    //),
+                                  //),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              TextWidget(
+                                text: 'Manage shop approvals, claims, and system metrics.',
+                                fontSize: 13,
+                                color: Colors.white70,
+                                maxLines: 2,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          color: Colors.white38,
+                          size: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+
           // Account Settings Section
           _buildSectionCard(
             title: 'Account',
@@ -570,31 +841,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // Preferences Section
           _buildSectionCard(
-            title: 'Preferences',
+            title: 'Privacy & Preferences',
             children: [
+
+              _buildListTile(
+                icon: Icons.interests,
+                title: 'My Interests',
+                subtitle: 'Update your cafe preferences',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const InterestSelectionScreen(
+                        isEditing: true,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const Divider(color: Colors.white12, height: 1),
               _buildSwitchTile(
-                icon: Icons.notifications_outlined,
-                title: 'Notifications',
+                icon: Icons.notifications_active_outlined, // Changed icon slightly to differentiate
+                title: 'Push Notifications',
+                subtitle: 'Receive alerts about new cafes',
                 value: _notificationsEnabled,
                 onChanged: _toggleNotifications,
-              ),
-              const Divider(color: Colors.white12, height: 1),
-              _buildListTile(
-                icon: Icons.language,
-                title: 'Language',
-                subtitle: 'English',
-                showChevron: false,
-              ),
-              const Divider(color: Colors.white12, height: 1),
-              _buildListTile(
-                icon: Icons.dark_mode,
-                title: 'Theme',
-                subtitle: 'Dark',
-                showChevron: false,
               ),
             ],
           ),
           const SizedBox(height: 16),
+
+          
 
           // App Information Section
           _buildSectionCard(
@@ -793,6 +1070,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildSwitchTile({
     required IconData icon,
     required String title,
+    String? subtitle,
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
@@ -802,6 +1080,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title,
         style: const TextStyle(color: Colors.white, fontSize: 16),
       ),
+      subtitle: subtitle != null
+          ? Text(
+              subtitle,
+              style: const TextStyle(color: Colors.white54, fontSize: 13),
+            )
+          : null,
       trailing: Switch(
         value: value,
         onChanged: onChanged,

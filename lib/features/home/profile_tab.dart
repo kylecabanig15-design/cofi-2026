@@ -238,6 +238,7 @@ class ProfileTab extends StatelessWidget {
               },
             ),
             const SizedBox(height: 32),
+
             // Find the perfect cafe
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -840,10 +841,12 @@ class ProfileTab extends StatelessWidget {
                 };
               } else {
                 label = 'Submit A Shop';
-                subtitle = 'Coming Soon';
+                subtitle = 'Submit your cafe for review';
                 statusIcon = Icons.store;
-                statusColor = Colors.grey;
-                onTap = null;
+                statusColor = primary;
+                onTap = () {
+                  Navigator.pushNamed(context, '/submitShop');
+                };
               }
 
               return GestureDetector(
@@ -1400,4 +1403,6 @@ class ProfileTab extends StatelessWidget {
       ],
     );
   }
+
+
 }

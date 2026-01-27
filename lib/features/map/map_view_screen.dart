@@ -376,45 +376,55 @@ class _MapViewScreenState extends State<MapViewScreen> {
     );
   }
 
+  // ========================================================================
+  // HARD 1KM DISTANCE THRESHOLD (Panel Requirement)
+  // ========================================================================
+  // The "Nearby" feature must only show cafés within 1km radius.
+  // This is a hard filter, NOT user-configurable.
+  static const double _nearbyThresholdMeters = 1000.0;
+
+  /// Calculate distance from user to a shop in meters
+  double _calculateDistanceToShop(Map<String, dynamic> data) {
+    if (_userLocation == null) return double.infinity;
+    final lat = (data['latitude'] as num?)?.toDouble() ?? 0;
+    final lng = (data['longitude'] as num?)?.toDouble() ?? 0;
+    return Geolocator.distanceBetween(
+      _userLocation!.latitude,
+      _userLocation!.longitude,
+      lat,
+      lng,
+    );
+  }
+
   Widget _buildCafeListSheet(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, Set<String> bookmarks) {
     if (docs.isEmpty) return const SizedBox.shrink();
 
-    final sortedDocs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(docs);
-
     // ----------------------------------------------------------------------
-    // STEP C: Distance Ranking (Ascending Sort)
+    // STEP 1: FILTER - Only include shops within 1km radius
     // ----------------------------------------------------------------------
-    // Uses the Haversine logic (Geolocator.distanceBetween) to sort the 
-    // list so that the physically closest café is at index 0.
-    // ========================================================================
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> filteredDocs = [];
+    
     if (_userLocation != null) {
-      sortedDocs.sort((a, b) {
-        final dataA = a.data();
-        final dataB = b.data();
-        final latA = (dataA['latitude'] as num?)?.toDouble() ?? 0;
-        final lngA = (dataA['longitude'] as num?)?.toDouble() ?? 0;
-        final latB = (dataB['latitude'] as num?)?.toDouble() ?? 0;
-        final lngB = (dataB['longitude'] as num?)?.toDouble() ?? 0;
-
-        // ------------------------------------------------------------------
-        // STEP B: Real-time Distance Computation
-        // ------------------------------------------------------------------
-        // Geolocator.distanceBetween abstracts the Haversine math 
-        // for native high-performance computation.
-        final distA = Geolocator.distanceBetween(
-          _userLocation!.latitude,
-          _userLocation!.longitude,
-          latA,
-          lngA,
-        );
-        final distB = Geolocator.distanceBetween(
-          _userLocation!.latitude,
-          _userLocation!.longitude,
-          latB,
-          lngB,
-        );
-        return distA.compareTo(distB); // Return ascending order (nearest first)
+      for (final doc in docs) {
+        final distance = _calculateDistanceToShop(doc.data());
+        if (distance <= _nearbyThresholdMeters) {
+          filteredDocs.add(doc);
+        }
+      }
+      
+      // ----------------------------------------------------------------------
+      // STEP 2: SORT - Ascending order (nearest first)
+      // ----------------------------------------------------------------------
+      // Uses the Haversine logic (Geolocator.distanceBetween) to sort the 
+      // list so that the physically closest café is at index 0.
+      filteredDocs.sort((a, b) {
+        final distA = _calculateDistanceToShop(a.data());
+        final distB = _calculateDistanceToShop(b.data());
+        return distA.compareTo(distB);
       });
+    } else {
+      // No location - show all but warn user
+      filteredDocs = List.from(docs);
     }
 
     return DraggableScrollableSheet(
@@ -452,7 +462,9 @@ class _MapViewScreenState extends State<MapViewScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Text(
-                  'Nearby Cafes (${docs.length})',
+                  _userLocation != null 
+                      ? 'Nearby Cafes (${filteredDocs.length} within 1km)'
+                      : 'Nearby Cafes (${filteredDocs.length})',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -462,14 +474,40 @@ class _MapViewScreenState extends State<MapViewScreen> {
                 ),
               ),
               const Divider(height: 1, color: Colors.white24),
-              // List
+              // List or Empty State
               Expanded(
-                child: ListView.builder(
+                child: filteredDocs.isEmpty && _userLocation != null
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.location_off, size: 48, color: Colors.grey[600]),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No cafes within 1km',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[400],
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Try exploring the map for more options',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
                   controller: scrollController,
                   padding: EdgeInsets.zero,
-                  itemCount: sortedDocs.length,
+                  itemCount: filteredDocs.length,
                   itemBuilder: (context, index) {
-                    final doc = sortedDocs[index];
+                    final doc = filteredDocs[index];
                     final data = doc.data();
                     final name = (data['name'] as String?) ?? 'Unknown';
                     final address = (data['address'] as String?) ?? '';

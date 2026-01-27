@@ -73,6 +73,7 @@ class GoogleSignInService {
           'visited': [],
           'reviews': [],
           'emailVerified': user.emailVerified,
+          'isAdmin': false, // NEW: Explicitly initialize
           'createdAt': FieldValue.serverTimestamp(),
           'lastLoginAt': FieldValue.serverTimestamp(),
         });

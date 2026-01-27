@@ -200,14 +200,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
       
-      // Manual navigation check for race condition
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (mounted && FirebaseAuth.instance.currentUser != null) {
-        print('Manually navigating to AuthGate from LoginScreen (_login)');
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const AuthGate()),
-          (route) => false,
-        );
+      // No need to manually navigate. AuthGate listens to authStateChanges.
+      // Just ensure we don't interfere.
+      if (mounted) {
+        // Optional: Show loading or just wait for stream
       }
     } on Exception catch (e) {
       if (mounted) {
@@ -229,18 +225,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (userCredential != null && mounted) {
         // Success
-        // Wait briefly for AuthGate to react
-        await Future.delayed(const Duration(milliseconds: 500));
-
-        // If we are still here and mounted, it means AuthGate might have missed it
-        // Check if user is actually logged in
-        if (FirebaseAuth.instance.currentUser != null && mounted) {
-          print('Manually navigating to AuthGate from LoginScreen');
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const AuthGate()),
-            (route) => false,
-          );
+        await FirebaseAuth.instance.currentUser?.reload();
+        if (mounted) {
+           Navigator.of(context).pushReplacementNamed('/');
         }
+
       } else if (mounted && userCredential == null) {
         _showErrorDialog(
           context,

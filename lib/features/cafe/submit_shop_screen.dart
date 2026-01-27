@@ -408,6 +408,45 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
           );
         }
       } else {
+        // ======================================================================
+        // RBAC SUBMISSION LOGIC (Panel Requirement)
+        // ======================================================================
+        // - 'user' accounts create 'community' submissions
+        // - 'business' accounts create 'business' submissions with ownerId link
+        // - All submissions start as 'pending_approval' until admin approves
+        
+        // Fetch user's account type from Firestore
+        String submissionType = 'community'; // Default for regular users
+        String? ownerId;
+        
+        if (user != null) {
+          try {
+            final userDoc = await FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.uid)
+                .get();
+            final userData = userDoc.data();
+            final accountType = userData?['accountType'] as String? ?? 'user';
+            
+            // DEBUG: Log the account type
+            print('🔍 [SHOP SUBMISSION] User accountType: $accountType');
+            
+            if (accountType == 'business') {
+              submissionType = 'business';
+              ownerId = user.uid; // Link shop to business owner
+              print('✅ [SHOP SUBMISSION] Setting submissionType to BUSINESS');
+            } else {
+              print('ℹ️ [SHOP SUBMISSION] Setting submissionType to COMMUNITY (accountType was: $accountType)');
+            }
+          } catch (e) {
+            // Default to community if fetch fails
+            print('❌ [SHOP SUBMISSION] Error fetching accountType: $e');
+            submissionType = 'community';
+          }
+        }
+        
+        print('📤 [SHOP SUBMISSION] Final submissionType: $submissionType');
+        
         // Create new shop
         final data = {
           'name': name,
@@ -436,7 +475,13 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
           'ratingCount': 0,
           'visits': [],
           'menu': [],
-          'isVerified': false, // New field for shop verification
+          // ================================================================
+          // RBAC Fields (Panel Requirement)
+          // ================================================================
+          'isVerified': false,
+          'submissionType': submissionType, // 'community' or 'business'
+          'approvalStatus': 'pending_approval', // Requires admin approval
+          if (ownerId != null) 'ownerId': ownerId, // Link for business accounts
         };
 
         final ref =

@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get_storage/get_storage.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:cofi/models/notification_model.dart';
 
 class NotificationService {
@@ -11,10 +14,40 @@ class NotificationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GetStorage _storage = GetStorage();
   static const String _unreadCountKey = 'unread_notifications_count';
+  
+  // ========================================================================
+  // AUDITORY ALERT CONFIGURATION (Panel Requirement)
+  // ========================================================================
+  // Sound triggers ONLY when similarity score exceeds this threshold.
+  // This ensures alerts are preference-matched, not for every notification.
+  static const double _soundThreshold = 0.7;
+  
+  // Flutter Local Notifications plugin for auditory alerts
+  final FlutterLocalNotificationsPlugin _localNotifications = 
+      FlutterLocalNotificationsPlugin();
+  
+  bool _isInitialized = false;
 
-  // Initialize the service
+  // Initialize the service with local notifications and PH locale
   Future<void> init() async {
+    if (_isInitialized) return;
+    
     await GetStorage.init();
+    await initializeDateFormatting('en_PH', null);
+    
+    // Initialize local notifications for auditory alerts
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosSettings = DarwinInitializationSettings(
+      requestSoundPermission: true,
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+    );
+    
+    await _localNotifications.initialize(
+      const InitializationSettings(android: androidSettings, iOS: iosSettings),
+    );
+    
+    _isInitialized = true;
   }
 
   // Get notifications for the current user
@@ -461,6 +494,11 @@ class NotificationService {
   }
 
   // Create a notification for recommendation-based café suggestions
+  // ========================================================================
+  // PREFERENCE-MATCHED AUDITORY ALERTS (Panel Requirement)
+  // ========================================================================
+  // Sound triggers ONLY if the similarity score exceeds _soundThreshold (0.7).
+  // This ensures users are only alerted for high-relevance recommendations.
   Future<void> createRecommendationNotification(
     String shopId,
     String shopName,
@@ -473,6 +511,9 @@ class NotificationService {
     // Only create notification if recommendation score is high enough (> 0.5)
     if (recommendationScore <= 0.5) return;
 
+    // Format timestamp in Philippines (PH) locale
+    final formattedTime = formatPhilippinesDate(DateTime.now());
+    
     final notification = NotificationModel(
       id: _firestore.collection('users').doc().id,
       title: 'Recommended Café',
@@ -485,7 +526,64 @@ class NotificationService {
     );
 
     await _saveNotification(user.uid, notification);
+    
+    // ========================================================================
+    // AUDITORY ALERT: Only trigger sound if preference match is high (≥ 0.7)
+    // ========================================================================
+    if (recommendationScore >= _soundThreshold) {
+      await _showLocalNotificationWithSound(
+        title: '🎯 Perfect Match Found!',
+        body: '$shopName matches ${(recommendationScore * 100).toInt()}% of your preferences • $formattedTime',
+      );
+    }
   }
+  
+  // ========================================================================
+  // LOCAL NOTIFICATION WITH SOUND
+  // ========================================================================
+  // Uses the default system notification sound for maximum compatibility.
+  // Custom sounds can be added to res/raw (Android) and Runner (iOS).
+  Future<void> _showLocalNotificationWithSound({
+    required String title,
+    required String body,
+  }) async {
+    const androidDetails = AndroidNotificationDetails(
+      'cofi_high_importance',
+      'CoFi High Importance',
+      channelDescription: 'High priority notifications for preference-matched recommendations',
+      importance: Importance.high,
+      priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
+      // Uses default system sound for compatibility
+      // To use custom sound: sound: RawResourceAndroidNotificationSound('notification_sound'),
+    );
+    
+    const iosDetails = DarwinNotificationDetails(
+      presentSound: true,
+      presentAlert: true,
+      presentBadge: true,
+      // Uses default system sound for compatibility
+      // To use custom sound: sound: 'notification_sound.aiff',
+    );
+    
+    await _localNotifications.show(
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      title,
+      body,
+      const NotificationDetails(android: androidDetails, iOS: iosDetails),
+    );
+  }
+  
+  // ========================================================================
+  // PHILIPPINES DATE FORMATTING (Panel Requirement)
+  // ========================================================================
+  // All timestamps must follow PH format: "January 27, 2026 3:00 PM"
+  String formatPhilippinesDate(DateTime dateTime) {
+    final formatter = DateFormat('MMMM d, y h:mm a', 'en_PH');
+    return formatter.format(dateTime);
+  }
+
 
   // Check for and create recommendation notifications based on user interests
   Future<void> createRecommendationsBasedOnInterests() async {

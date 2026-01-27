@@ -7,7 +7,8 @@ import 'package:cofi/widgets/text_widget.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class InterestSelectionScreen extends StatefulWidget {
-  const InterestSelectionScreen({super.key});
+  final bool isEditing;
+  const InterestSelectionScreen({super.key, this.isEditing = false});
 
   @override
   State<InterestSelectionScreen> createState() =>
@@ -15,6 +16,35 @@ class InterestSelectionScreen extends StatefulWidget {
 }
 
 class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isEditing) {
+      _loadExistingInterests();
+    }
+  }
+
+  Future<void> _loadExistingInterests() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final doc =
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    if (doc.exists) {
+      final data = doc.data();
+      final userInterests =
+          (data?['interests'] as List?)?.cast<String>() ?? [];
+      
+      setState(() {
+        for (var interest in userInterests) {
+          if (interests.containsKey(interest)) {
+            interests[interest] = true;
+          }
+        }
+      });
+    }
+  }
+
   Map<String, bool> interests = {
     'Specialty Coffee': false,
     'Matcha Drinks': false,
@@ -111,14 +141,30 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
             .doc(user.uid)
             .update({
           'interests': _getSelectedInterests(),
-          'emailVerified': true,
+          'emailVerified': user.emailVerified,
           'updatedAt': FieldValue.serverTimestamp(),
         });
+
+        // If we are editing, just pop back
+        if (widget.isEditing) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Interests updated successfully!')),
+            );
+            Navigator.of(context).pop();
+          }
+          return;
+        }
+        
+        // If onboarding, continue
+        // Ensure we check if user needs to select commitment or account type
+        // But for now, let auth_gate handle routing
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(
+            content: const Text('Error saving interests. Please try again.')),
         );
       }
     } finally {
@@ -370,17 +416,96 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () async {
-            // Sign out and go back to login
-            await GoogleSignInService.signOut();
-            await FirebaseAuth.instance.signOut();
-            if (context.mounted) {
-              Navigator.of(context).pop();
-            }
-          },
-        ),
+        leading: widget.isEditing
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.of(context).pop(),
+              )
+            : IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () async {
+                  // SAFE NAVIGATION: Check if we can pop first.
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  } else {
+                    // Only sign out if we can't go back (root) and user wants to abort
+                    // Or maybe just minimize app/do nothing?
+                    // For now, let's just confirm with the user
+                    final shouldLogout = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        backgroundColor: Colors.grey[900],
+                        title: const Text('Go back to login?', style: TextStyle(color: Colors.white)),
+                        actions: [
+                          TextButton(onPressed: ()=>Navigator.pop(context, false), child: const Text('Cancel')),
+                          TextButton(onPressed: ()=>Navigator.pop(context, true), child: const Text('Yes', style: TextStyle(color: Colors.red))),
+                        ],
+                      ),
+                    );
+                    if (shouldLogout == true) {
+                      await GoogleSignInService.signOut();
+                      await FirebaseAuth.instance.signOut();
+                      if (context.mounted) Navigator.of(context).pop();
+                    }
+                  }
+                },
+              ),
+        actions: [
+          if (!widget.isEditing)
+            TextButton(
+              onPressed: _isLoading ? null : () async {
+                final user = FirebaseAuth.instance.currentUser;
+                if (user != null) {
+                  setState(() => _isLoading = true);
+                  
+                  try {
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(user.uid)
+                        .update({
+                      'interests': [], // Empty interests = skipped
+                      'updatedAt': FieldValue.serverTimestamp(),
+                    });
+                    
+                    if (mounted) {
+                      // Show quick confirmation
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Skipped! You can set interests later in settings.'),
+                          duration: Duration(seconds: 2),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                      
+                      // AuthGate will now redirect to HomeScreen
+                      // since interests field exists (even if empty)
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  } finally {
+                    if (mounted) setState(() => _isLoading = false);
+                  }
+                }
+              },
+              child: _isLoading 
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white70,
+                      ),
+                    )
+                  : const Text('Skip', style: TextStyle(color: Colors.white70)),
+            ),
+        ],
       ),
       body: SafeArea(
         child: Padding(
@@ -389,23 +514,23 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Center(
-                child: const Text(
-                  'Interest',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
+                child: TextWidget(
+                  text: widget.isEditing 
+                      ? 'Update Your Interests' 
+                      : 'Choose Your Interests',
+                  fontSize: 24,
+                  color: Colors.white,
+                  isBold: true,
                 ),
               ),
               const SizedBox(height: 8),
               Center(
-                child: const Text(
-                  'Pick things you\'d like to see in your home feed.',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
+                child: TextWidget(
+                  text: widget.isEditing
+                      ? 'Select the types of cafes you prefer'
+                      : 'Select at least one to get personalized recommendations',
+                  fontSize: 14,
+                  color: Colors.white70,
                 ),
               ),
               const SizedBox(height: 24),
@@ -528,24 +653,23 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
                     disabledBackgroundColor: primary.withValues(alpha: 0.7),
                     padding: EdgeInsets.zero,
                   ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          '$selectedCount of ${interests.length} Selected',
-                          style: const TextStyle(
-                            color: Colors.white,
+                  child: Center(
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : TextWidget(
+                            text: widget.isEditing ? 'Save Changes' : 'Continue',
                             fontSize: 16,
-                            fontFamily: 'Medium',
-                            fontWeight: FontWeight.w500,
+                            color: Colors.white,
+                            isBold: true,
                           ),
-                        ),
+                  ),
                 ),
               ),
             ],
