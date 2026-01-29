@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/widgets/text_widget.dart';
+import 'package:cofi/utils/formatters.dart';
 
 class ReviewShopScreen extends StatefulWidget {
   final String shopId;
@@ -214,21 +215,25 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TextWidget(
-                        text: widget.shopName,
-                        fontSize: 16,
-                        color: Colors.white,
-                        isBold: true,
-                      ),
-                      TextWidget(
-                        text: widget.shopAddress,
-                        fontSize: 14,
-                        color: Colors.white70,
-                      ),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextWidget(
+                          text: widget.shopName,
+                          fontSize: 16,
+                          color: Colors.white,
+                          isBold: true,
+                          maxLines: 1,
+                        ),
+                        TextWidget(
+                          text: formatAddress(widget.shopAddress),
+                          fontSize: 14,
+                          color: Colors.white70,
+                          maxLines: 1,
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),

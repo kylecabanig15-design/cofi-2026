@@ -1,18 +1,20 @@
 import 'package:cofi/widgets/my_events_bottom_sheet.dart';
 import 'package:cofi/widgets/my_jobs_bottom_sheet.dart';
 import 'package:cofi/widgets/post_job_bottom_sheet.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cofi/widgets/text_widget.dart';
+import 'package:cofi/widgets/post_event_bottom_sheet.dart';
+import 'package:cofi/features/events/event_archives_screen.dart';
+import 'package:cofi/features/jobs/job_archives_screen.dart';
+import 'package:cofi/features/cafe/reviews_screen.dart';
+import 'package:cofi/features/jobs/job_chat_screen.dart';
+import 'package:cofi/utils/colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:cofi/utils/colors.dart';
-import 'package:cofi/widgets/text_widget.dart';
-import 'package:cofi/widgets/post_event_bottom_sheet.dart';
-import 'package:cofi/features/jobs/job_chat_screen.dart';
-import 'package:cofi/features/cafe/reviews_screen.dart';
-import 'package:cofi/features/events/event_archives_screen.dart';
-import 'package:cofi/features/jobs/job_archives_screen.dart';
+import 'package:cofi/features/business/shop_verification_sheet.dart';
 
 class BusinessProfileScreen extends StatelessWidget {
   const BusinessProfileScreen({super.key});
@@ -75,221 +77,287 @@ class BusinessProfileScreen extends StatelessWidget {
           color: Colors.white,
           isBold: true,
         ),
+        actions: const [],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 24),
+        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance.collection('shops').doc(shopId).snapshots(),
+          builder: (context, snapshot) {
+            final shopData = snapshot.data?.data();
+            final logoUrl = shopData?['logoUrl'] as String?;
+             final isVerified = (shopData?['isVerified'] as bool?) ?? false;
+             final approvalStatus = shopData?['approvalStatus'] as String? ?? '';
+            final opacity = isVerified ? 1.0 : 0.5;
+             return Padding(
+               padding: const EdgeInsets.symmetric(horizontal: 24),
+               child: SingleChildScrollView(
+                 child: Column(
+                   crossAxisAlignment: CrossAxisAlignment.start,
+                   children: [
+                     const SizedBox(height: 24),
 
-                // Business Profile Card
-                StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                  stream: FirebaseFirestore.instance
-                      .collection('shops')
-                      .doc(shopId)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return _buildBusinessProfileCard(
-                        context,
-                        shopName,
-                        shopId,
-                        null, // logoUrl
-                        null, // isVerified
-                      );
-                    }
-                    final shopData = snapshot.data?.data();
-                    final logoUrl = shopData?['logoUrl'] as String?;
-                    return _buildBusinessProfileCard(
-                      context,
-                      shopName,
-                      shopId,
-                      logoUrl,
-                      null, // isVerified
-                    );
-                  },
-                ),
+                     // Business Profile Card
+                     _buildBusinessProfileCard(
+                       context,
+                       shopName,
+                       shopId,
+                       logoUrl,
+                       isVerified,
+                     ),
 
-                const SizedBox(height: 24),
+                     // VERIFICATION WARNING BANNER
+                     if (!isVerified)
+                       GestureDetector(
+                         onTap: () {
+                           if (approvalStatus == 'awaiting_verification') {
+                             showModalBottomSheet(
+                               context: context,
+                               isScrollControlled: true,
+                               backgroundColor: Colors.transparent,
+                               enableDrag: true,
+                               builder: (context) => ShopVerificationSheet(
+                                 shopId: shopId,
+                                 shopName: shopName,
+                                 isVerificationFlow: true,
+                               ),
+                             );
+                           }
+                         },
+                         child: Container(
+                           margin: const EdgeInsets.only(top: 24),
+                           padding: const EdgeInsets.all(16),
+                           decoration: BoxDecoration(
+                             color: Colors.orange.withOpacity(0.1),
+                             borderRadius: BorderRadius.circular(12),
+                             border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                           ),
+                           child: Row(
+                             children: [
+                               const Icon(Icons.info_outline, color: Colors.orange, size: 24),
+                               const SizedBox(width: 16),
+                               Expanded(
+                                 child: Column(
+                                   crossAxisAlignment: CrossAxisAlignment.start,
+                                   children: [
+                                     TextWidget(
+                                       text: approvalStatus == 'awaiting_verification' 
+                                           ? 'Requirements Missing (Tap to Upload)' 
+                                           : 'Pending Verification',
+                                       fontSize: 16,
+                                       color: Colors.orange,
+                                       isBold: true,
+                                     ),
+                                     const SizedBox(height: 4),
+                                     TextWidget(
+                                       text: approvalStatus == 'awaiting_verification'
+                                           ? 'Please finish your setup by uploading the required business documents.'
+                                           : 'Your shop is currently being reviewed. Management features will be enabled once verified.',
+                                       fontSize: 13,
+                                       color: Colors.white70,
+                                     ),
+                                   ],
+                                 ),
+                               ),
+                             ],
+                           ),
+                         ),
+                       ),
 
-                // Dashboard grid: always 2 columns, center single cards
-                Wrap(
-                  spacing: 16,
-                  runSpacing: 16,
-                  children: [
-                    // Row 1: Reviews - Post an Event
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width / 2 - 32,
-                      child: GestureDetector(
-                        onTap: () {
-                          final fallback =
-                              (shop?['reviews'] as List?) ?? const [];
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ReviewsScreen(
-                                shopId: shopId,
-                                fallbackReviews: fallback,
+                    const SizedBox(height: 24),
+
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      children: [
+                        // Row 1: Reviews - Post an Event
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width / 2 - 32,
+                          child: Opacity(
+                            opacity: opacity,
+                            child: GestureDetector(
+                              onTap: !isVerified ? () => _showLockedSnakbar(context) : () {
+                                final fallback = (shopData?['reviews'] as List?) ?? const [];
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ReviewsScreen(
+                                      shopId: shopId,
+                                      fallbackReviews: fallback,
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                                stream: FirebaseFirestore.instance
+                                    .collection('shops')
+                                    .doc(shopId)
+                                    .collection('reviews')
+                                    .snapshots(),
+                                builder: (context, snapshot) {
+                                  final count = snapshot.data?.docs.length ?? 0;
+                                  final subtitle = count == 0 ? 'No reviews yet' : '$count Reviews';
+                                  return _buildSectionCard(
+                                    title: 'Reviews',
+                                    subtitle: subtitle,
+                                    bottomSpacing: 20,
+                                  );
+                                },
                               ),
                             ),
-                          );
-                        },
-                        child:
-                            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                          stream: FirebaseFirestore.instance
-                              .collection('shops')
-                              .doc(shopId)
-                              .collection('reviews')
-                              .snapshots(),
-                          builder: (context, snapshot) {
-                            final count = snapshot.data?.docs.length ?? 0;
-                            final subtitle = count == 0
-                                ? 'No reviews yet'
-                                : '$count Reviews';
-                            return _buildSectionCard(
-                              title: 'Reviews',
-                              subtitle: subtitle,
-                              bottomSpacing: 20,
-                            );
-                          },
+                          ),
                         ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width / 2 - 32,
-                      child: GestureDetector(
-                        onTap: () {
-                          PostEventBottomSheet.show(context, shopId: shopId);
-                        },
-                        child: _buildSectionCard(
-                          title: 'Post an Event',
-                          subtitle: 'List my upcoming events',
-                        ),
-                      ),
-                    ),
-                    // Row 2: Events - Event Archives
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width / 2 - 32,
-                      child: GestureDetector(
-                        onTap: () {
-                          MyEventsBottomSheet.show(context, shopId: shopId);
-                        },
-                        child: _buildSectionCard(
-                          title: 'Events',
-                          subtitle: 'Show Events',
-                          bottomSpacing: 20,
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width / 2 - 32,
-                      child: GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => EventArchivesScreen(
-                                shopId: shopId,
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width / 2 - 32,
+                          child: Opacity(
+                            opacity: opacity,
+                            child: GestureDetector(
+                              onTap: !isVerified ? () => _showLockedSnakbar(context) : () {
+                                PostEventBottomSheet.show(context, shopId: shopId);
+                              },
+                              child: _buildSectionCard(
+                                title: 'Post an Event',
+                                subtitle: 'List my upcoming events',
                               ),
                             ),
-                          );
-                        },
-                        child: _buildSectionCard(
-                          title: 'Event Archives',
-                          subtitle: 'View past events',
-                          bottomSpacing: 20,
+                          ),
                         ),
-                      ),
-                    ),
-                    // Row 3: Post a Job - My Jobs
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width / 2 - 32,
-                      child: GestureDetector(
-                        onTap: () {
-                          PostJobBottomSheet.show(context, shopId: shopId);
-                        },
-                        child: _buildSectionCard(
-                          title: 'Post a Job',
-                          subtitle: 'List a job - find staff fast',
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width / 2 - 32,
-                      child: GestureDetector(
-                        onTap: () {
-                          MyJobsBottomSheet.show(context, shopId: shopId);
-                        },
-                        child: _buildSectionCard(
-                          title: 'My Jobs',
-                          subtitle: 'View my submitted jobs',
-                        ),
-                      ),
-                    ),
-                    // Row 4: Applications - Job Archives
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width / 2 - 32,
-                      child: GestureDetector(
-                        onTap: () {
-                          _showJobApplicationsBottomSheet(context, shopId);
-                        },
-                        child: StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance
-                              .collection('shops')
-                              .doc(shopId)
-                              .collection('jobs')
-                              .snapshots(),
-                          builder: (context, snapshot) {
-                            int totalApplications = 0;
-                            if (snapshot.hasData) {
-                              for (var doc in snapshot.data!.docs) {
-                                final applications =
-                                    doc['applications'] as List? ?? [];
-                                totalApplications += applications.length;
-                              }
-                            }
-                            final subtitle = totalApplications == 0
-                                ? 'No applications yet'
-                                : '$totalApplications Applications';
-                            return _buildSectionCard(
-                              title: 'Applications',
-                              subtitle: subtitle,
-                              bottomSpacing: 20,
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width / 2 - 32,
-                      child: GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => JobArchivesScreen(
-                                shopId: shopId,
+                        // Row 2: Events - Event Archives
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width / 2 - 32,
+                          child: Opacity(
+                            opacity: opacity,
+                            child: GestureDetector(
+                              onTap: !isVerified ? () => _showLockedSnakbar(context) : () {
+                                MyEventsBottomSheet.show(context, shopId: shopId);
+                              },
+                              child: _buildSectionCard(
+                                title: 'Events',
+                                subtitle: 'Show Events',
+                                bottomSpacing: 20,
                               ),
                             ),
-                          );
-                        },
-                        child: _buildSectionCard(
-                          title: 'Job Archives',
-                          subtitle: 'View archived jobs',
-                          bottomSpacing: 20,
+                          ),
                         ),
-                      ),
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width / 2 - 32,
+                          child: Opacity(
+                            opacity: opacity,
+                            child: GestureDetector(
+                              onTap: !isVerified ? () => _showLockedSnakbar(context) : () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => EventArchivesScreen(
+                                      shopId: shopId,
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: _buildSectionCard(
+                                title: 'Event Archives',
+                                subtitle: 'View past events',
+                                bottomSpacing: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Row 3: Post a Job - My Jobs
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width / 2 - 32,
+                          child: Opacity(
+                            opacity: opacity,
+                            child: GestureDetector(
+                              onTap: !isVerified ? () => _showLockedSnakbar(context) : () {
+                                PostJobBottomSheet.show(context, shopId: shopId);
+                              },
+                              child: _buildSectionCard(
+                                title: 'Post a Job',
+                                subtitle: 'List a job - find staff fast',
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width / 2 - 32,
+                          child: Opacity(
+                            opacity: opacity,
+                            child: GestureDetector(
+                              onTap: !isVerified ? () => _showLockedSnakbar(context) : () {
+                                MyJobsBottomSheet.show(context, shopId: shopId);
+                              },
+                              child: _buildSectionCard(
+                                title: 'My Jobs',
+                                subtitle: 'View my submitted jobs',
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Row 4: Applications - Job Archives
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width / 2 - 32,
+                          child: Opacity(
+                            opacity: opacity,
+                            child: GestureDetector(
+                              onTap: !isVerified ? () => _showLockedSnakbar(context) : () {
+                                _showJobApplicationsBottomSheet(context, shopId);
+                              },
+                              child: StreamBuilder<QuerySnapshot>(
+                                stream: FirebaseFirestore.instance
+                                    .collection('shops')
+                                    .doc(shopId)
+                                    .collection('jobs')
+                                    .snapshots(),
+                                builder: (context, snapshot) {
+                                  int totalApplications = 0;
+                                  if (snapshot.hasData) {
+                                    for (var doc in snapshot.data!.docs) {
+                                      final applications = doc['applications'] as List? ?? [];
+                                      totalApplications += applications.length;
+                                    }
+                                  }
+                                  final subtitle = totalApplications == 0 ? 'No applications yet' : '$totalApplications Applications';
+                                  return _buildSectionCard(
+                                    title: 'Applications',
+                                    subtitle: subtitle,
+                                    bottomSpacing: 20,
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width / 2 - 32,
+                          child: Opacity(
+                            opacity: opacity,
+                            child: GestureDetector(
+                              onTap: !isVerified ? () => _showLockedSnakbar(context) : () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => JobArchivesScreen(
+                                      shopId: shopId,
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: _buildSectionCard(
+                                title: 'Job Archives',
+                                subtitle: 'View archived jobs',
+                                bottomSpacing: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
+
+                    const SizedBox(height: 32),
                   ],
                 ),
-
-                const SizedBox(height: 32),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -453,6 +521,16 @@ class BusinessProfileScreen extends StatelessWidget {
     );
   }
 
+  void _showLockedSnakbar(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Verification Required: This feature will be enabled once your shop is verified by an admin.'),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   void _showJobApplicationsBottomSheet(BuildContext context, String shopId) {
     showModalBottomSheet(
       context: context,
@@ -461,6 +539,8 @@ class BusinessProfileScreen extends StatelessWidget {
       builder: (context) => JobApplicationsBottomSheet(shopId: shopId),
     );
   }
+
+
 }
 
 class JobApplicationsBottomSheet extends StatefulWidget {
@@ -613,10 +693,12 @@ class _JobApplicationsBottomSheetState
     );
   }
 
+
+
   Widget _buildApplicationCard(Map<String, dynamic> application, String jobId) {
     final appliedAt = application['appliedAt'] as Timestamp?;
     final date = appliedAt != null
-        ? '${appliedAt.toDate().day}/${appliedAt.toDate().month}/${appliedAt.toDate().year}'
+        ? DateFormat('MMM dd, yyyy').format(appliedAt.toDate())
         : 'Unknown date';
 
     return Container(

@@ -1,9 +1,13 @@
-import 'package:cofi/utils/colors.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/utils/auth_error_handler.dart';
 import 'package:cofi/widgets/text_widget.dart';
+import 'package:cofi/widgets/button_widget.dart';
+import 'package:cofi/features/auth/login_screen.dart';
+import 'package:cofi/features/auth/interest_selection_screen.dart';
+import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/premium_background.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -123,6 +127,8 @@ class _SignupScreenState extends State<SignupScreen> {
           },
         }, SetOptions(merge: true));
       }
+
+      if (!mounted) return;
 
       if (!mounted) return;
 
@@ -268,7 +274,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       );
                       if (picked != null) {
                         _birthdayController.text =
-                            "${picked.month.toString().padLeft(2, '0')}/${picked.day.toString().padLeft(2, '0')}/${picked.year}";
+                            DateFormat('MMM dd, yyyy').format(picked);
                       }
                     },
                   ),

@@ -1,3 +1,4 @@
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/utils/colors.dart';
@@ -44,7 +45,7 @@ class AllSharedCollectionsScreen extends StatelessWidget {
           }
           final docs = snapshot.data?.docs ?? [];
           
-          // Filter out private collections
+          // Filter out private collections (legacy docs might miss the isPrivate field)
           final publicDocs = docs.where((d) {
             final data = d.data();
             return data['isPrivate'] != true;
@@ -172,18 +173,6 @@ class AllSharedCollectionsScreen extends StatelessWidget {
   }
 
   String _formatTimestamp(Timestamp timestamp) {
-    final date = timestamp.toDate();
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
-    }
+    return DateFormat('MMM dd, yyyy').format(timestamp.toDate());
   }
 }

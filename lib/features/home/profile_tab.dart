@@ -1,3 +1,4 @@
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,6 +7,7 @@ import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/features/jobs/job_chat_screen.dart';
 import 'package:cofi/features/settings/settings_screen.dart';
+import 'package:cofi/features/business/shop_verification_sheet.dart';
 
 class ProfileTab extends StatelessWidget {
   final VoidCallback? onOpenExplore;
@@ -747,11 +749,16 @@ class ProfileTab extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: TextWidget(
-            text: 'Contribute to Community',
-            fontSize: 18,
-            color: Colors.white,
-            isBold: true,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextWidget(
+                text: 'Contribute to Community',
+                fontSize: 18,
+                color: Colors.white,
+                isBold: true,
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 16),
@@ -760,8 +767,10 @@ class ProfileTab extends StatelessWidget {
           child: StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('shops')
-                .where('posterId', isEqualTo: uid)
-                .limit(1)
+                .where(Filter.or(
+                  Filter('posterId', isEqualTo: uid),
+                  Filter('postedBy.uid', isEqualTo: uid),
+                ))
                 .snapshots(),
             builder: (context, snapshot) {
               final hasShop =
@@ -773,71 +782,13 @@ class ProfileTab extends StatelessWidget {
               VoidCallback? onTap;
 
               if (hasShop) {
-                final doc = snapshot.data!.docs.first;
-                final data = doc.data() as Map<String, dynamic>;
-                final isVerified = data['isVerified'] ?? false;
-
-                if (isVerified) {
-                  label = 'Submission Approved';
-                  subtitle = 'Your shop is live';
-                  statusIcon = Icons.check_circle;
-                  statusColor = Colors.green;
-                } else {
-                  label = 'Submission Pending';
-                  subtitle = 'Your shop is under review';
-                  statusIcon = Icons.pending;
-                  statusColor = Colors.orange;
-                }
-
+                final count = snapshot.data!.docs.length;
+                label = 'My Contributions';
+                subtitle = 'You have contributed $count café${count > 1 ? 's' : ''}';
+                statusIcon = Icons.stars_rounded;
+                statusColor = Colors.amber;
                 onTap = () {
-                  // User can only view submission status, not manage
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      backgroundColor: Colors.grey[900],
-                      title: Row(
-                        children: [
-                          Icon(statusIcon, color: statusColor, size: 28),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              label,
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ],
-                      ),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Shop: ${data['name'] ?? 'Unknown'}',
-                            style: const TextStyle(color: Colors.white70),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Status: ${isVerified ? 'Approved' : 'Pending Verification'}',
-                            style: TextStyle(color: statusColor),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            isVerified
-                                ? 'Your shop is now visible to all users!'
-                                : 'Your shop will be visible once approved by our team.',
-                            style: const TextStyle(
-                                color: Colors.white60, fontSize: 14),
-                          ),
-                        ],
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
-                          child: const Text('Close'),
-                        ),
-                      ],
-                    ),
-                  );
+                  Navigator.pushNamed(context, '/myContributions');
                 };
               } else {
                 label = 'Submit A Shop';
@@ -1155,7 +1106,7 @@ class ProfileTab extends StatelessWidget {
                               final appliedAt =
                                   appData['appliedAt'] as Timestamp?;
                               final dateStr = appliedAt != null
-                                  ? '${appliedAt.toDate().day}/${appliedAt.toDate().month}/${appliedAt.toDate().year}'
+                                  ? DateFormat('MMM dd, yyyy').format(appliedAt.toDate())
                                   : 'Unknown date';
 
                               Color statusColor = Colors.orange;
@@ -1298,104 +1249,131 @@ class ProfileTab extends StatelessWidget {
           child: StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('shops')
-                .where('posterId', isEqualTo: uid)
-                .limit(1)
+                .where(Filter.or(
+                  Filter('posterId', isEqualTo: uid),
+                  Filter('postedBy.uid', isEqualTo: uid),
+                ))
                 .snapshots(),
-            builder: (context, snapshot) {
-              final hasShop =
-                  snapshot.hasData && snapshot.data!.docs.isNotEmpty;
-              String label =
-                  hasShop ? 'Manage My Shop' : 'Claim or Submit Shop';
-              String subtitle = hasShop
-                  ? 'View dashboard & analytics'
-                  : 'Get started with your business';
+            builder: (context, shopSnapshot) {
+              return StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('shop_claims')
+                    .where('claimantId', isEqualTo: uid)
+                    .where('status', isEqualTo: 'pending')
+                    .limit(1)
+                    .snapshots(),
+                builder: (context, claimSnapshot) {
+                  final hasShop =
+                      shopSnapshot.hasData && shopSnapshot.data!.docs.isNotEmpty;
+                  final hasPendingClaim =
+                      claimSnapshot.hasData && claimSnapshot.data!.docs.isNotEmpty;
 
-              if (hasShop) {
-                final doc = snapshot.data!.docs.first;
-                final data = doc.data() as Map<String, dynamic>;
-                final isVerified = data['isVerified'] ?? false;
+                  if (!hasShop && hasPendingClaim) {
+                    final claimDoc = claimSnapshot.data!.docs.first;
+                    final claimData = claimDoc.data() as Map<String, dynamic>;
+                    final claimedShopId = claimData['shopId'] as String?;
+                    final claimId = claimDoc.id;
+                    final shopName = claimData['shopName'] ?? 'Unknown Shop';
 
-                if (!isVerified) {
-                  label = 'Shop Under Verification';
-                  subtitle = 'Dashboard available after approval';
-                }
-              }
+                    if (claimedShopId != null) {
+                      return StreamBuilder<DocumentSnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('shops')
+                            .doc(claimedShopId)
+                            .snapshots(),
+                        builder: (context, shopCheckSnap) {
+                          bool shopExists = true;
+                          if (shopCheckSnap.hasData && !shopCheckSnap.data!.exists) {
+                            shopExists = false;
+                          }
 
-              void navigate() {
-                if (hasShop) {
-                  final doc = snapshot.data!.docs.first;
-                  final data = doc.data() as Map<String, dynamic>;
-                  Navigator.pushNamed(
-                    context,
-                    '/businessProfile',
-                    arguments: {
-                      ...data,
-                      'id': doc.id,
-                    },
+                          if (!shopExists) {
+                             return _buildOrphanedClaimCard(context, claimId, shopName);
+                          }
+
+                          // Default pending review state
+                          return _buildBusinessCardContent(
+                            context: context,
+                            label: 'Verification Pending',
+                            subtitle: 'Application currently under review',
+                            icon: Icons.hourglass_top,
+                            color: Colors.orange,
+                            onTap: () {
+                                _showReviewDialog(context);
+                            },
+                          );
+                        },
+                      );
+                    }
+                  }
+
+                  String label;
+                  String subtitle;
+                  IconData icon;
+                  Color color;
+                  VoidCallback onTap;
+
+                  if (hasShop) {
+                    final doc = shopSnapshot.data!.docs.first;
+                    final data = doc.data() as Map<String, dynamic>;
+                    final shopId = doc.id;
+                    final shopName = data['name'] ?? '';
+                    final isVerified = data['isVerified'] ?? false;
+                    if (isVerified) {
+                      label = 'Manage My Shop';
+                      subtitle = 'View dashboard & analytics';
+                      icon = Icons.business;
+                      color = const Color(0xFF2563EB); // Blue
+                      onTap = () {
+                        Navigator.pushNamed(
+                          context,
+                          '/businessProfile',
+                          arguments: {
+                            ...data,
+                            'id': doc.id,
+                          },
+                        );
+                      };
+                    } else if (hasPendingClaim) {
+                      label = 'Verification Pending';
+                      subtitle = 'Application currently under review';
+                      icon = Icons.hourglass_top;
+                      color = Colors.orange;
+                      onTap = () {
+                        _showReviewDialog(context);
+                      };
+                    } else {
+                      // NOT VERIFIED and NO PENDING CLAIM
+                      // This happens after rejection or before starting verification.
+                      // Return to the default "Claim or Submit Shop" state.
+                      label = 'Claim or Submit Shop';
+                      subtitle = 'Get started with your business';
+                      icon = Icons.business;
+                      color = const Color(0xFF2563EB);
+                      onTap = () {
+                        Navigator.pushNamed(context, '/businessDashboard');
+                      };
+                    }
+                  } else {
+                    // No Shop, No Pending Claim
+                     label = 'Claim or Submit Shop';
+                     subtitle = 'Get started with your business';
+                     icon = Icons.business;
+                     color = const Color(0xFF2563EB);
+                     onTap = () {
+                        Navigator.pushNamed(context, '/businessDashboard');
+                     };
+                  }
+
+                  return _buildBusinessCardContent(
+                    context: context,
+                    label: label,
+                    subtitle: subtitle,
+                    icon: icon,
+                    color: color,
+                    onTap: onTap,
                   );
-                } else {
-                  // Show options: Claim existing shop or Submit new shop
-                  Navigator.pushNamed(context, '/businessDashboard');
-                }
-              }
-
-              return GestureDetector(
-                onTap: navigate,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2563EB).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(32),
-                    border: Border.all(
-                      color: const Color(0xFF2563EB).withValues(alpha: 0.3),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      const SizedBox(width: 16),
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF2563EB),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Center(
-                            child: Icon(Icons.business,
-                                color: Colors.white, size: 28),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            TextWidget(
-                              text: label,
-                              fontSize: 18,
-                              color: Colors.white,
-                              isBold: true,
-                            ),
-                            if (subtitle.isNotEmpty)
-                              TextWidget(
-                                text: subtitle,
-                                fontSize: 14,
-                                color: Colors.white70,
-                              ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.arrow_forward_ios,
-                            color: Colors.white, size: 22),
-                        onPressed: navigate,
-                      ),
-                    ],
-                  ),
-                ),
+                },
               );
             },
           ),
@@ -1404,5 +1382,177 @@ class ProfileTab extends StatelessWidget {
     );
   }
 
+  void _showReviewDialog(BuildContext context) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.black,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: primary.withOpacity(0.3)),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.hourglass_empty, color: primary),
+              const SizedBox(width: 12),
+              const Text('Review in Progress',
+                  style: TextStyle(color: Colors.white)),
+            ],
+          ),
+          content: const Text(
+            'Your shop submission or ownership claim is currently being reviewed by our admin team. You will gain access to the business dashboard once approved.',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('OK',
+                  style: TextStyle(
+                      color: primary,
+                      fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+  }
 
+  Widget _buildBusinessCardContent({
+    required BuildContext context,
+    required String label,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(
+            color: color.withOpacity(0.3),
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(width: 16),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Icon(icon, color: Colors.white, size: 28),
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextWidget(
+                    text: label,
+                    fontSize: 18,
+                    color: Colors.white,
+                    isBold: true,
+                  ),
+                  if (subtitle.isNotEmpty)
+                    TextWidget(
+                      text: subtitle,
+                      fontSize: 14,
+                      color: Colors.white70,
+                    ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios,
+                  color: Colors.white, size: 22),
+              onPressed: onTap,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrphanedClaimCard(BuildContext context, String claimId, String shopName) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(
+            color: Colors.red.withOpacity(0.3),
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(width: 16),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Center(
+                  child: Icon(Icons.domain_disabled_rounded, color: Colors.red, size: 24),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                   TextWidget(text: 'Shop Not Found', fontSize: 16, color: Colors.redAccent, isBold: true),
+                   TextWidget(text: '"$shopName" is no longer available.', fontSize: 12, color: Colors.white54),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: TextButton(
+                  onPressed: () => _deleteOrphanedClaim(context, claimId),
+                  style: TextButton.styleFrom(
+                      backgroundColor: Colors.red.withOpacity(0.1),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('DISMISS', style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      );
+  }
+
+  Future<void> _deleteOrphanedClaim(BuildContext context, String claimId) async {
+      try {
+          await FirebaseFirestore.instance.collection('shop_claims').doc(claimId).delete();
+          if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('Invalid claim removed'),
+                  backgroundColor: Colors.green,
+              ));
+          }
+      } catch (e) {
+          if (context.mounted) {
+             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                 content: Text('Error removing claim: $e'),
+                 backgroundColor: Colors.red,
+             ));
+          }
+      }
+  }
 }

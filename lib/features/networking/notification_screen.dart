@@ -49,34 +49,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
           isBold: true,
         ),
         actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            color: Colors.grey[800],
-            onSelected: (value) {
-              if (value == 'mark_all_read') {
-                _notificationService.markAllAsRead();
-                setState(() {});
-              } else if (value == 'clear_all') {
-                _showClearAllDialog();
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem<String>(
-                value: 'mark_all_read',
-                child: Text(
-                  'Mark all as read',
-                  style: TextStyle(color: Colors.white),
-                ),
+          TextButton(
+            onPressed: () => _showClearAllDialog(),
+            child: const Text(
+              'Clear All',
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
               ),
-              const PopupMenuItem<String>(
-                value: 'clear_all',
-                child: Text(
-                  'Clear all',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            ],
+            ),
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: StreamBuilder<List<NotificationModel>>(
@@ -156,6 +140,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   Widget _buildNotificationItem(NotificationModel notification) {
+    final bool isAlert = notification.isAlert;
+    
     return GestureDetector(
       onTap: () {
         // Mark as read when tapped
@@ -167,62 +153,70 @@ class _NotificationScreenState extends State<NotificationScreen> {
         _navigateToRelatedContent(notification);
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        color: notification.isRead
-            ? Colors.transparent
-            : Colors.white.withValues(alpha: 0.05),
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          // ALERT: Gradient background for premium feel
+          // NOTIFICATION: Simple dark background
+          gradient: isAlert
+              ? LinearGradient(
+                  colors: [
+                    _getNotificationColor(notification.type).withOpacity(0.15),
+                    _getNotificationColor(notification.type).withOpacity(0.05),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: isAlert 
+              ? null 
+              : (notification.isRead 
+                  ? Colors.transparent 
+                  : Colors.white.withValues(alpha: 0.03)),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isAlert 
+                ? _getNotificationColor(notification.type).withOpacity(0.4)
+                : Colors.white12,
+            width: isAlert ? 2 : 1,
+          ),
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Notification icon/image
+            // Alert/Notification icon with enhanced sizing for alerts
             Container(
-              width: 48,
-              height: 48,
+              width: isAlert ? 56 : 48,
+              height: isAlert ? 56 : 48,
               decoration: BoxDecoration(
                 color: _getNotificationColor(notification.type),
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(isAlert ? 16 : 24),
+                boxShadow: isAlert
+                    ? [
+                        BoxShadow(
+                          color: _getNotificationColor(notification.type)
+                              .withOpacity(0.4),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ]
+                    : null,
               ),
               child: notification.imageUrl != null
                   ? ClipRRect(
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(isAlert ? 16 : 24),
                       child: CachedNetworkImage(
                         imageUrl: notification.imageUrl!,
-                        width: 48,
-                        height: 48,
+                        width: isAlert ? 56 : 48,
+                        height: isAlert ? 56 : 48,
                         fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: _getNotificationColor(notification.type),
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          child: Icon(
-                            _getNotificationIcon(notification.type),
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                        ),
-                        errorWidget: (context, url, error) => Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: _getNotificationColor(notification.type),
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          child: Icon(
-                            _getNotificationIcon(notification.type),
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                        ),
+                        placeholder: (context, url) => _buildIconContainer(
+                            notification.type, isAlert),
+                        errorWidget: (context, url, error) =>
+                            _buildIconContainer(notification.type, isAlert),
                       ),
                     )
-                  : Icon(
-                      _getNotificationIcon(notification.type),
-                      color: Colors.white,
-                      size: 24,
-                    ),
+                  : _buildIconContainer(notification.type, isAlert),
             ),
 
             const SizedBox(width: 16),
@@ -235,11 +229,52 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: TextWidget(
-                          text: notification.title,
-                          fontSize: 16,
-                          color: Colors.white,
-                          isBold: !notification.isRead,
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: TextWidget(
+                                text: notification.title,
+                                fontSize: isAlert ? 17 : 16,
+                                color: Colors.white,
+                                isBold: isAlert || !notification.isRead,
+                              ),
+                            ),
+                            // Sound badge for alerts
+                            if (isAlert) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: primary.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: primary.withOpacity(0.5),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.volume_up,
+                                      color: primary,
+                                      size: 12,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    TextWidget(
+                                      text: 'ALERT',
+                                      fontSize: 10,
+                                      color: primary,
+                                      isBold: true,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                       if (!notification.isRead)
@@ -253,18 +288,41 @@ class _NotificationScreenState extends State<NotificationScreen> {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   TextWidget(
                     text: notification.body,
                     fontSize: 14,
                     color: Colors.white70,
-                    maxLines: 2,
+                    maxLines: 3,
                   ),
-                  const SizedBox(height: 4),
-                  TextWidget(
-                    text: _formatTimestamp(notification.createdAt),
-                    fontSize: 12,
-                    color: Colors.white54,
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      TextWidget(
+                        text: _formatTimestamp(notification.createdAt),
+                        fontSize: 12,
+                        color: Colors.white54,
+                      ),
+                      if (notification.priority == 'high') ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: TextWidget(
+                            text: 'HIGH PRIORITY',
+                            fontSize: 10,
+                            color: Colors.orange,
+                            isBold: true,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
@@ -283,6 +341,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
+  Widget _buildIconContainer(String type, bool isAlert) {
+    return Icon(
+      _getNotificationIcon(type),
+      color: Colors.white,
+      size: isAlert ? 28 : 24,
+    );
+  }
+
   Color _getNotificationColor(String type) {
     switch (type) {
       case 'event':
@@ -293,6 +359,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
         return Colors.orange;
       case 'shop':
         return Colors.blue;
+      case 'recommendation':
+        return primary; // Distinct coffee/brown color for recommendations
+      case 'review':
+        return Colors.amber; // Gold color for review alerts
       default:
         return primary;
     }
@@ -308,6 +378,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
         return Icons.work_history;
       case 'shop':
         return Icons.store;
+      case 'recommendation':
+        return Icons.auto_awesome; // Sparkle icon for AI recommendations
+      case 'review':
+        return Icons.rate_review; // Review icon
       default:
         return Icons.notifications;
     }
@@ -493,8 +567,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
           TextButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
-              // Implementation for clearing all notifications would go here
-              setState(() {});
+              await _notificationService.deleteAllNotifications();
+              if (mounted) {
+                setState(() {});
+              }
             },
             style: TextButton.styleFrom(
               foregroundColor: Colors.redAccent,

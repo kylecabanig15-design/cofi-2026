@@ -5,6 +5,7 @@ import 'package:cofi/widgets/text_widget.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/features/cafe/cafe_details_screen.dart';
 import 'package:cofi/widgets/list_bottom_sheet.dart';
+import 'package:cofi/utils/formatters.dart';
 
 class SharedCollectionScreen extends StatefulWidget {
   const SharedCollectionScreen({super.key});
@@ -422,7 +423,7 @@ class _SharedCollectionScreenState extends State<SharedCollectionScreen> {
                         
                         return Expanded(
                           child: TextWidget(
-                            text: '${avgRating.toStringAsFixed(1)} • $address',
+                            text: '${avgRating.toStringAsFixed(1)} • ${formatAddress(address)}',
                             fontSize: 12,
                             color: Colors.white54,
                             maxLines: 1,

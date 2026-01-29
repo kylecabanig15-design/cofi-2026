@@ -1,9 +1,11 @@
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:cofi/models/notification_model.dart';
 
 class NotificationService {
@@ -46,11 +48,34 @@ class NotificationService {
     await _localNotifications.initialize(
       const InitializationSettings(android: androidSettings, iOS: iosSettings),
     );
+
+    // Request runtime permission for Android 13+
+    if (await Permission.notification.isDenied) {
+      print('🔔 [NOTIFICATIONS] Requesting permission...');
+      await Permission.notification.request();
+    }
+    
+    // Create high importance channel for Android to ensure sound and importance are locked in
+    final androidPlugin =
+        _localNotifications.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidPlugin != null) {
+      await androidPlugin.createNotificationChannel(AndroidNotificationChannel(
+        'cofi_high_importance',
+        'CoFi High Importance',
+        description: 'High priority notifications for preference-matched recommendations',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        vibrationPattern: Int64List.fromList([0, 500, 200, 500]),
+      ));
+    }
     
     _isInitialized = true;
   }
 
   // Get notifications for the current user
+  // PRIORITY SORTING: Alerts first, then by creation date
   Stream<List<NotificationModel>> getUserNotifications() {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -63,9 +88,23 @@ class NotificationService {
         .collection('notifications')
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => NotificationModel.fromFirestore(doc.data(), doc.id))
-            .toList());
+        .map((snapshot) {
+          final notifications = snapshot.docs
+              .map((doc) => NotificationModel.fromFirestore(doc.data(), doc.id))
+              .toList();
+          
+          // Sort: Alerts first, then by creation date
+          notifications.sort((a, b) {
+            // Alerts come first
+            if (a.isAlert != b.isAlert) {
+              return a.isAlert ? -1 : 1;
+            }
+            // Within same alert status, newer first
+            return b.createdAt.compareTo(a.createdAt);
+          });
+          
+          return notifications;
+        });
   }
 
   // Create a notification for a new event
@@ -76,8 +115,8 @@ class NotificationService {
 
     final notification = NotificationModel(
       id: _firestore.collection('users').doc().id,
-      title: 'New Event Posted',
-      body: 'Check out the new event: $eventTitle',
+      title: '🎉 Happening Soon in Davao',
+      body: '$eventTitle is now live! Don\'t miss out on this exciting café experience.',
       type: 'event',
       relatedId: eventId,
       imageUrl: imageUrl,
@@ -96,8 +135,8 @@ class NotificationService {
 
     final notification = NotificationModel(
       id: _firestore.collection('users').doc().id,
-      title: 'New Job Posted',
-      body: '$shopName is hiring: $jobTitle',
+      title: '💼 Career Opportunity Available',
+      body: '$shopName is looking for a $jobTitle. Join their team and brew your future!',
       type: 'job',
       relatedId: jobId,
       createdAt: DateTime.now(),
@@ -109,22 +148,34 @@ class NotificationService {
 
   // Create a notification for a new shop submission
   Future<void> createShopNotification(
-      String shopId, String shopName, String? imageUrl) async {
+      String shopId, String shopName, String? imageUrl, {bool isAlert = false}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     final notification = NotificationModel(
       id: _firestore.collection('users').doc().id,
-      title: 'New Shop Submitted',
-      body: 'Check out the new coffee shop: $shopName',
+      title: isAlert ? '🎯 Taste Match Discovery!' : '☕ New Discovery in Davao',
+      body: isAlert 
+          ? 'We found a new café that matches your interests: $shopName! Check it out.'
+          : '$shopName has joined the CoFi community. Be among the first to explore their unique brew!',
       type: 'shop',
       relatedId: shopId,
       imageUrl: imageUrl,
       createdAt: DateTime.now(),
       isRead: false,
+      isAlert: isAlert,
+      priority: isAlert ? 'high' : 'low',
     );
 
     await _saveNotification(user.uid, notification);
+
+    if (isAlert) {
+      final formattedTime = formatPhilippinesDate(DateTime.now());
+      await _showLocalNotificationWithSound(
+        title: '🎯 Taste Match Discovery!',
+        body: '$shopName perfectly matches your coffee interests • $formattedTime',
+      );
+    }
   }
 
   // Save notification to Firestore
@@ -230,7 +281,6 @@ class NotificationService {
             .doc(notificationId)
             .delete();
 
-        // Update unread count if it was unread
         if (wasUnread) {
           final currentCount = _storage.read(_unreadCountKey) ?? 0;
           if (currentCount > 0) {
@@ -243,29 +293,53 @@ class NotificationService {
     }
   }
 
+  // Delete all notifications for the current user
+  Future<void> deleteAllNotifications() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final batch = _firestore.batch();
+      final notifications = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('notifications')
+          .get();
+
+      for (final doc in notifications.docs) {
+        batch.delete(doc.reference);
+      }
+
+      await batch.commit();
+      
+      // Reset unread count
+      _storage.write(_unreadCountKey, 0);
+    } catch (e) {
+      print('Error deleting all notifications: $e');
+    }
+  }
+
   // Check for new data in collections and create notifications
   Future<void> checkForNewData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     try {
-      // Get the last check time from storage
-      final lastCheckKey = 'last_notification_check';
+      // Get the last check time from storage (USER SPECIFIC)
+    final lastCheckKey = 'last_notification_check_${user.uid}';
       final lastCheck = _storage.read(lastCheckKey);
       final now = DateTime.now();
 
       // Convert to Timestamp for Firestore query
-      Timestamp? lastCheckTimestamp;
-      if (lastCheck != null) {
-        lastCheckTimestamp =
-            Timestamp.fromDate(DateTime.fromMillisecondsSinceEpoch(lastCheck));
-      }
+      // DEFAULT: Only check last 24 hours if no previous check exists
+      // This prevents 'old' data from spamming the user on first launch
+      final oneDayAgo = now.subtract(const Duration(hours: 24));
+      Timestamp lastCheckTimestamp = lastCheck != null
+          ? Timestamp.fromDate(DateTime.fromMillisecondsSinceEpoch(lastCheck))
+          : Timestamp.fromDate(oneDayAgo);
 
       // Check for new events
       await _checkForNewEvents(user.uid, lastCheckTimestamp);
-
-      // Check for new jobs
-      await _checkForNewJobs(user.uid, lastCheckTimestamp);
 
       // Check for new jobs
       await _checkForNewJobs(user.uid, lastCheckTimestamp);
@@ -275,6 +349,13 @@ class NotificationService {
 
       // Check for new shops
       await _checkForNewShops(user.uid, lastCheckTimestamp);
+
+      // Check for new reviews on recommended/visited shops
+    await _checkForNewReviews(user.uid, lastCheckTimestamp);
+
+    // FIRST TIME / STARTUP RECOMMENDATIONS: 
+    // This ensures new accounts see recommendations even if no shops were "just posted"
+    await createRecommendationsBasedOnInterests();
 
       // Update the last check time
       _storage.write(lastCheckKey, now.millisecondsSinceEpoch);
@@ -299,12 +380,8 @@ class NotificationService {
         Query eventsQuery = FirebaseFirestore.instance
             .collection('shops')
             .doc(shopId)
-            .collection('events');
-
-        if (lastCheck != null) {
-          eventsQuery =
-              eventsQuery.where('createdAt', isGreaterThan: lastCheck);
-        }
+            .collection('events')
+            .where('createdAt', isGreaterThan: lastCheck);
 
         final eventsSnapshot = await eventsQuery.get();
 
@@ -350,11 +427,8 @@ class NotificationService {
         Query jobsQuery = FirebaseFirestore.instance
             .collection('shops')
             .doc(shopId)
-            .collection('jobs');
-
-        if (lastCheck != null) {
-          jobsQuery = jobsQuery.where('createdAt', isGreaterThan: lastCheck);
-        }
+            .collection('jobs')
+            .where('createdAt', isGreaterThan: lastCheck);
 
         final jobsSnapshot = await jobsQuery.get();
 
@@ -402,11 +476,8 @@ class NotificationService {
         Query jobsQuery = FirebaseFirestore.instance
             .collection('shops')
             .doc(shopId)
-            .collection('jobs');
-
-        if (lastCheck != null) {
-          jobsQuery = jobsQuery.where('createdAt', isGreaterThan: lastCheck);
-        }
+            .collection('jobs')
+            .where('createdAt', isGreaterThan: lastCheck);
 
         final jobsSnapshot = await jobsQuery.get();
 
@@ -479,11 +550,21 @@ class NotificationService {
       statusText = 'Rejected';
     }
 
+    String statusTitle = 'Job Application Update';
+    String statusBody = '$applicantName\'s application for $jobTitle at $shopName is $statusText';
+
+    if (status == 'accepted') {
+      statusTitle = '🎊 Application Accepted!';
+      statusBody = 'Congratulations! Your application for $jobTitle at $shopName has been accepted. Check your email for next steps!';
+    } else if (status == 'rejected') {
+      statusTitle = '📋 Application Status Update';
+      statusBody = 'Your application for $jobTitle at $shopName has been reviewed. Thank you for your interest in joining the community.';
+    }
+
     final notification = NotificationModel(
       id: _firestore.collection('users').doc().id,
-      title: 'Job Application Update',
-      body:
-          '$applicantName\'s application for $jobTitle at $shopName is $statusText',
+      title: statusTitle,
+      body: statusBody,
       type: 'job_application',
       relatedId: applicationId,
       createdAt: appliedAt?.toDate() ?? DateTime.now(),
@@ -505,6 +586,7 @@ class NotificationService {
     double recommendationScore,
     String? imageUrl,
   ) async {
+    print('🚀 [NOTIFICATIONS] Creating recommendation notification: $shopName (Score: $recommendationScore)');
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
@@ -514,23 +596,38 @@ class NotificationService {
     // Format timestamp in Philippines (PH) locale
     final formattedTime = formatPhilippinesDate(DateTime.now());
     
+    // Determine if this is an ALERT (sound-enabled) based on score
+    final isAlert = recommendationScore >= _soundThreshold; // 0.7 or higher
+    
+    if (isAlert) {
+      print('🎯 [NOTIFICATION LOGIC] PERFECT MATCH: $recommendationScore >= 0.7');
+    } else {
+      print('⚖️ [NOTIFICATION LOGIC] STANDARD: $recommendationScore < 0.7');
+    }
+    
+    final priority = isAlert ? 'high' : 'medium';
+    
     final notification = NotificationModel(
       id: _firestore.collection('users').doc().id,
-      title: 'Recommended Café',
-      body: 'We think you\'ll love $shopName based on your preferences',
+      title: isAlert ? '🎯 Perfect Match Found!' : 'Recommended Café',
+      body: isAlert 
+          ? 'We think you\'ll love $shopName! ${(recommendationScore * 100).toInt()}% match'
+          : 'We think you\'ll love $shopName based on your preferences',
       type: 'recommendation',
       relatedId: shopId,
       imageUrl: imageUrl,
       createdAt: DateTime.now(),
       isRead: false,
+      isAlert: isAlert, // TRUE if score >= 0.7 (triggers sound)
+      priority: priority,
     );
 
     await _saveNotification(user.uid, notification);
     
     // ========================================================================
-    // AUDITORY ALERT: Only trigger sound if preference match is high (≥ 0.7)
+    // AUDITORY ALERT: Only trigger sound if preference match is high (>= 0.7)
     // ========================================================================
-    if (recommendationScore >= _soundThreshold) {
+    if (isAlert) {
       await _showLocalNotificationWithSound(
         title: '🎯 Perfect Match Found!',
         body: '$shopName matches ${(recommendationScore * 100).toInt()}% of your preferences • $formattedTime',
@@ -547,19 +644,20 @@ class NotificationService {
     required String title,
     required String body,
   }) async {
-    const androidDetails = AndroidNotificationDetails(
+    print('🔔 [NOTIFICATIONS] Showing notification: $title');
+    final androidDetails = AndroidNotificationDetails(
       'cofi_high_importance',
       'CoFi High Importance',
       channelDescription: 'High priority notifications for preference-matched recommendations',
-      importance: Importance.high,
-      priority: Priority.high,
+      importance: Importance.max,
+      priority: Priority.max,
+      showWhen: true,
       playSound: true,
       enableVibration: true,
-      // Uses default system sound for compatibility
-      // To use custom sound: sound: RawResourceAndroidNotificationSound('notification_sound'),
+      vibrationPattern: Int64List.fromList([0, 500, 200, 500]),
     );
     
-    const iosDetails = DarwinNotificationDetails(
+    final iosDetails = DarwinNotificationDetails(
       presentSound: true,
       presentAlert: true,
       presentBadge: true,
@@ -571,7 +669,7 @@ class NotificationService {
       DateTime.now().millisecondsSinceEpoch ~/ 1000,
       title,
       body,
-      const NotificationDetails(android: androidDetails, iOS: iosDetails),
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
     );
   }
   
@@ -669,16 +767,120 @@ class NotificationService {
     }
   }
 
+  // Check for new reviews on recommended and visited shops
+  Future<void> _checkForNewReviews(String userId, Timestamp? lastCheck) async {
+    try {
+      // Only check reviews for shops the current user OWNS (Business Owners only)
+    final shopsOwnedSnapshot = await _firestore
+        .collection('shops')
+        .where('ownerId', isEqualTo: userId)
+        .get();
+
+    final relevantShops = shopsOwnedSnapshot.docs.map((doc) => doc.id).toList();
+
+    if (relevantShops.isEmpty) return;
+
+      for (final shopId in relevantShops) {
+        Query reviewsQuery = _firestore
+            .collection('shops')
+            .doc(shopId)
+            .collection('reviews')
+            .orderBy('createdAt', descending: true); // Get newest first
+
+        if (lastCheck != null) {
+          reviewsQuery = reviewsQuery.where('createdAt', isGreaterThan: lastCheck);
+        }
+
+        // ANTI-SPAM: Only check for the most recent high-rated review per shop
+        final reviewsSnapshot = await reviewsQuery.limit(1).get();
+        if (reviewsSnapshot.docs.isEmpty) continue;
+
+        // Get shop name for the notification
+        final shopDoc = await _firestore.collection('shops').doc(shopId).get();
+        final shopName = shopDoc.data()?['name'] ?? 'a café you like';
+
+        final reviewDoc = reviewsSnapshot.docs.first;
+        final reviewData = reviewDoc.data() as Map<String, dynamic>;
+        if (reviewData['userId'] == userId) continue; // Skip own reviews
+
+        final reviewerName = reviewData['authorName'] ?? 'A user';
+        final reviewText = reviewData['text'] ?? '';
+        final rating = (reviewData['rating'] as num?)?.toDouble() ?? 0.0;
+        final imageUrl = reviewData['authorPhotoUrl'];
+
+        // Only create notification if it's high-rated (Professional quality control)
+        if (rating >= 4.0) {
+          await createReviewNotification(
+            reviewDoc.id,
+            shopId,
+            shopName,
+            reviewerName,
+            reviewText,
+            rating,
+            imageUrl,
+          );
+        }
+      }
+    } catch (e) {
+      print('Error checking for new reviews: $e');
+    }
+  }
+
+  // Create a notification for a new review
+  Future<void> createReviewNotification(
+    String reviewId,
+    String shopId,
+    String shopName,
+    String reviewerName,
+    String reviewText,
+    double rating,
+    String? imageUrl,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Truncate review text for the body
+    final displayBody = reviewText.length > 60 
+        ? '${reviewText.substring(0, 57)}...' 
+        : reviewText;
+
+    // Determine if this is an ALERT (sound-enabled) based on rating
+    final isAlert = rating >= 4.0;
+    
+    final notification = NotificationModel(
+      id: _firestore.collection('users').doc().id,
+      title: '⭐ New Review for $shopName',
+      body: '$reviewerName left a review: "$displayBody"',
+      type: 'review',
+      relatedId: shopId,
+      imageUrl: imageUrl,
+      createdAt: DateTime.now(),
+      isRead: false,
+      isAlert: isAlert,
+      priority: isAlert ? 'high' : 'medium',
+    );
+
+    await _saveNotification(user.uid, notification);
+
+    if (isAlert) {
+      await _showLocalNotificationWithSound(
+        title: '⭐ Top Rated Review on $shopName!',
+        body: '$reviewerName gave your shop a high rating. Check it out!',
+      );
+    }
+  }
+
   // Check for new shops and create notifications
   Future<void> _checkForNewShops(String userId, Timestamp? lastCheck) async {
     try {
+      // Get user interests for taste matching
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      final userInterests = (userDoc.data()?['interests'] as List? ?? []).cast<String>();
+
       Query shopsQuery = FirebaseFirestore.instance
           .collection('shops')
-          .where('isVerified', isEqualTo: true);
-
-      if (lastCheck != null) {
-        shopsQuery = shopsQuery.where('postedAt', isGreaterThan: lastCheck);
-      }
+          .where('isVerified', isEqualTo: true)
+          .where('postedAt', isGreaterThan: lastCheck);
 
       final shopsSnapshot = await shopsQuery.get();
 
@@ -688,6 +890,16 @@ class NotificationService {
         final shopId = shopDoc.id;
         final shopName = shopData['name'] ?? 'New Coffee Shop';
         final imageUrl = shopData['logoUrl'];
+        final shopTags = (shopData['tags'] as List? ?? []).cast<String>();
+
+        // TASTE MATCH CHECK: Trigger sound alert if tags match user interests
+      final isTasteMatch = shopTags.any((tag) => userInterests.contains(tag));
+      
+      if (isTasteMatch) {
+        print('🎯 [DISCOVERY LOGIC] NEW SHOP INTEREST MATCH: $shopName matches interests');
+      } else {
+        print('☕ [DISCOVERY LOGIC] NEW SHOP DISCOVERY: $shopName');
+      }
 
         // Check if notification already exists for this shop
         final existingNotification = await FirebaseFirestore.instance
@@ -699,7 +911,7 @@ class NotificationService {
             .get();
 
         if (existingNotification.docs.isEmpty) {
-          await createShopNotification(shopId, shopName, imageUrl);
+          await createShopNotification(shopId, shopName, imageUrl, isAlert: isTasteMatch);
         }
       }
     } catch (e) {

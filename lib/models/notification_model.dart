@@ -4,11 +4,13 @@ class NotificationModel {
   final String id;
   final String title;
   final String body;
-  final String type; // 'event', 'job', 'shop'
+  final String type; // 'event', 'job', 'shop', 'recommendation', 'review'
   final String? relatedId; // ID of the related document (event, job, or shop)
   final String? imageUrl;
   final DateTime createdAt;
   final bool isRead;
+  final bool isAlert; // TRUE for sound-enabled alerts, FALSE for silent notifications
+  final String priority; // 'high', 'medium', 'low'
 
   NotificationModel({
     required this.id,
@@ -19,6 +21,8 @@ class NotificationModel {
     this.imageUrl,
     required this.createdAt,
     required this.isRead,
+    this.isAlert = false,
+    this.priority = 'low',
   });
 
   // Factory constructor to create a NotificationModel from Firestore document
@@ -33,6 +37,8 @@ class NotificationModel {
       imageUrl: data['imageUrl'],
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isRead: data['isRead'] ?? false,
+      isAlert: data['isAlert'] ?? false,
+      priority: data['priority'] ?? 'low',
     );
   }
 
@@ -46,6 +52,8 @@ class NotificationModel {
       'imageUrl': imageUrl,
       'createdAt': Timestamp.fromDate(createdAt),
       'isRead': isRead,
+      'isAlert': isAlert,
+      'priority': priority,
     };
   }
 
@@ -59,6 +67,8 @@ class NotificationModel {
     String? imageUrl,
     DateTime? createdAt,
     bool? isRead,
+    bool? isAlert,
+    String? priority,
   }) {
     return NotificationModel(
       id: id ?? this.id,
@@ -69,6 +79,8 @@ class NotificationModel {
       imageUrl: imageUrl ?? this.imageUrl,
       createdAt: createdAt ?? this.createdAt,
       isRead: isRead ?? this.isRead,
+      isAlert: isAlert ?? this.isAlert,
+      priority: priority ?? this.priority,
     );
   }
 }

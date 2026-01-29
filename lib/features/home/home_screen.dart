@@ -58,9 +58,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Initialize notification service and get unread count
     _notificationService.init().then((_) {
-      setState(() {
-        _unreadCount = _notificationService.getUnreadCount();
-      });
+      if (mounted) {
+        setState(() {
+          _unreadCount = _notificationService.getUnreadCount();
+        });
+        
+        // AUTOMATED DISCOVERY: Check for new recommendations on startup
+        // This ensures "Taste matches" pop up in the top right after logging in
+        _notificationService.checkForNewData();
+      }
     });
   }
 

@@ -12,6 +12,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:cofi/widgets/premium_background.dart';
+import 'package:cofi/utils/formatters.dart';
 
 class ExploreTab extends StatefulWidget {
   final VoidCallback? onOpenCommunity;
@@ -83,15 +84,30 @@ class _ExploreTabState extends State<ExploreTab> {
     // Amenity tags represent the features/characteristics of a café.
     // These weights reflect the importance of each amenity for similarity.
     final Map<String, double> defaultAmenityTagWeights = {
+      // Drink Types
+      'Espresso': 0.9,
+      'Flat White': 0.8,
+      'Spanish Latte': 0.9,
+      'Vietnamese Coffee': 0.8,
+      'Cold Brew': 0.8,
+      'Pour Over': 1.0,
       'Specialty Coffee': 1.0, // 83% of respondents
       'Matcha Drinks': 0.8,
+
+      // Food
       'Pastries': 0.6,
+
+      // Use Case
       'Work-Friendly (Wi-Fi + outlets)': 0.9, // 53% of respondents
-      'Pet-Friendly': 0.5, // 19% of respondents
-      'Parking Available': 0.5,
-      'Family Friendly': 0.6,
       'Study Sessions': 0.9, // 53% of respondents
       'Night Café (Open Late)': 0.7,
+      'Family Friendly': 0.6,
+
+      // Convenience
+      'Pet-Friendly': 0.5, // 19% of respondents
+      'Parking Available': 0.5,
+
+      // Vibe
       'Minimalist / Modern': 0.5,
       'Rustic / Cozy': 0.5,
       'Outdoor / Garden': 0.6,
@@ -264,25 +280,46 @@ class _ExploreTabState extends State<ExploreTab> {
   static const String _recCacheKey = 'shop_recommendations';
   static const String _recTimeKey = 'shop_rec_timestamp';
 
-  // Tag filters
-  final Set<String> _selectedTags = {};
-  final List<String> _availableTags = [
-    'Specialty Coffee',
-    'Matcha Drinks',
-    'Pastries',
-    'Work-Friendly (Wi-Fi + outlets)',
-    'Pet-Friendly',
-    'Parking Available',
-    'Family Friendly',
-    'Study Sessions',
-    'Night Café (Open Late)',
-    'Minimalist / Modern',
-    'Rustic / Cozy',
-    'Outdoor / Garden',
-    'Seaside / Scenic',
-    'Artsy / Aesthetic',
-    'Instagrammable',
-  ];
+  // Consolidated Grouped Filters
+  final Set<String> _selectedFilters = {};
+  final Map<String, List<String>> _groupedFilters = {
+    '☕ Drink Types': [
+      'Espresso',
+      'Flat White',
+      'Spanish Latte',
+      'Vietnamese Coffee',
+      'Cold Brew',
+      'Pour Over',
+      'Specialty Coffee',
+    ],
+    '🍵 Non-Coffee Drinks': [
+      'Matcha Drinks',
+    ],
+    '🥐 Food Options': [
+      'Pastries',
+    ],
+    '🧑‍💻 Use Case / Activities': [
+      'Work-Friendly (Wi-Fi + outlets)',
+      'Study Sessions',
+      'Night Café (Open Late)',
+      'Family Friendly',
+    ],
+    '🐾 Accessibility & Convenience': [
+      'Pet-Friendly',
+      'Parking Available',
+    ],
+    '🎨 Vibe / Ambience': [
+      'Minimalist / Modern',
+      'Rustic / Cozy',
+      'Outdoor / Garden',
+      'Seaside / Scenic',
+      'Artsy / Aesthetic',
+      'Instagrammable',
+    ],
+  };
+
+  // Source filters
+  String _sourceFilter = 'All'; // 'All', 'Business', 'Community'
 
   @override
   void initState() {
@@ -299,7 +336,15 @@ class _ExploreTabState extends State<ExploreTab> {
     }
     _searchCtrl.addListener(() {
       final q = _searchCtrl.text.trim();
-      if (q != _query) setState(() => _query = q);
+      if (q != _query) {
+        setState(() {
+          _query = q;
+          // If searching, deactivate/switch away from "For You" (index 0)
+          if (q.isNotEmpty && _selectedChip == 0) {
+            _selectedChip = 1; // Default to "Popular"
+          }
+        });
+      }
     });
 
     // Fetch user interests
@@ -489,6 +534,9 @@ class _ExploreTabState extends State<ExploreTab> {
             itemCount: filterChips.length,
             separatorBuilder: (context, index) => const SizedBox(width: 8),
             itemBuilder: (context, i) {
+              // Automatically remove "For You" chip when searching as requested
+              if (_query.isNotEmpty && i == 0) return const SizedBox.shrink();
+              
               return FilterChip(
                 label: TextWidget(
                   text: filterChips[i],
@@ -524,7 +572,7 @@ class _ExploreTabState extends State<ExploreTab> {
         // Tag filters
         // _buildTagFilters(),
         const SizedBox(height: 18),
-        if (_query.isEmpty && _selectedTags.isEmpty) ...[
+        if (_query.isEmpty && _selectedFilters.isEmpty) ...[
           _sectionTitle('Monthly Featured Cafe Shops'),
           const SizedBox(height: 10),
           if (_userStream != null)
@@ -723,7 +771,7 @@ class _ExploreTabState extends State<ExploreTab> {
                               filtered[i].id,
                               _bookmarks.contains(filtered[i].id),
                             ),
-                            rank: (_selectedChip == 0 && _selectedTags.isEmpty) ? (i + 1) : null,
+                            rank: (_selectedChip == 0 && _selectedFilters.isEmpty && _query.isEmpty) ? (i + 1) : null,
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -780,7 +828,7 @@ class _ExploreTabState extends State<ExploreTab> {
     return FirebaseFirestore.instance
         .collection('shops')
         .where('isFeatured', isEqualTo: true)
-        .limit(50)
+        .limit(5)
         .snapshots();
   }
 
@@ -788,12 +836,13 @@ class _ExploreTabState extends State<ExploreTab> {
     // Default behavior based on selected chip
     switch (_selectedChip) {
       case 0: // For You (Recommendations)
-        // Soft Filter: Fetch all verified, rank later by algorithm
+        // Soft Filter: Fetch all approved/verified, rank later by algorithm
+        // Increased limit to 300 to ensure older shops that were recently approved are visible
         return FirebaseFirestore.instance
             .collection('shops')
             .where('isVerified', isEqualTo: true)
             .orderBy('postedAt', descending: true)
-            .limit(100)
+            .limit(300)
             .snapshots();
             
       case 2: // Newest
@@ -801,7 +850,7 @@ class _ExploreTabState extends State<ExploreTab> {
             .collection('shops')
             .where('isVerified', isEqualTo: true)
             .orderBy('postedAt', descending: true)
-            .limit(100)
+            .limit(300)
             .snapshots();
             
       case 3: // Open now
@@ -809,7 +858,7 @@ class _ExploreTabState extends State<ExploreTab> {
             .collection('shops')
             .where('isVerified', isEqualTo: true)
             .orderBy('postedAt', descending: true)
-            .limit(100)
+            .limit(300)
             .snapshots();
             
       case 1: // Popular
@@ -818,7 +867,7 @@ class _ExploreTabState extends State<ExploreTab> {
             .collection('shops')
             .where('isVerified', isEqualTo: true)
             .orderBy('ratings', descending: true)
-            .limit(100)
+            .limit(300)
             .snapshots();
     }
   }
@@ -826,7 +875,8 @@ class _ExploreTabState extends State<ExploreTab> {
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _applyFilters(
       List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
       List<String> interests) {
-    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> out = docs;
+    // Visibility Filter: Hide shops that are explicitly marked as hidden or archived
+    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> out = docs.where((d) => d.data()['isHidden'] != true && d.data()['approvalStatus'] != 'archived');
 
     // Bottom sheet filters
     if (_isFavorites) {
@@ -844,11 +894,28 @@ class _ExploreTabState extends State<ExploreTab> {
           (d.data()['schedule'] ?? {}) as Map<String, dynamic>));
     }
 
-    // Tag filters
-    if (_selectedTags.isNotEmpty) {
+    // Unified Tag/Parameter filters
+    if (_selectedFilters.isNotEmpty) {
       out = out.where((d) {
         final tags = (d.data()['tags'] as List?)?.cast<String>() ?? [];
-        return _selectedTags.any((selectedTag) => tags.contains(selectedTag));
+        return _selectedFilters.any((selectedTag) => tags.contains(selectedTag));
+      });
+    }
+
+    // Source filters (Aliased to match Admin Center labels)
+    if (_sourceFilter != 'All') {
+      out = out.where((d) {
+        final data = d.data();
+        final submissionType = data['submissionType'] as String? ?? 'community';
+        final ownerId = data['ownerId'] as String?;
+        final isBusiness = (submissionType == 'business' || (ownerId != null && ownerId.isNotEmpty));
+
+        if (_sourceFilter == 'Business') {
+          return isBusiness;
+        } else if (_sourceFilter == 'Community') {
+          return !isBusiness;
+        }
+        return true;
       });
     }
 
@@ -860,12 +927,25 @@ class _ExploreTabState extends State<ExploreTab> {
       list.retainWhere((d) {
         final name = ((d.data()['name'] ?? '') as String).toLowerCase();
         final addr = ((d.data()['address'] ?? '') as String).toLowerCase();
-        return name.contains(q) || addr.contains(q);
+        // Priority: Starts with name, then contains name, then contains address
+        return name.startsWith(q) || name.contains(q) || addr.contains(q);
+      });
+
+      // Sort results to put "startsWith" matches at the top during search
+      list.sort((a, b) {
+        final nameA = ((a.data()['name'] ?? '') as String).toLowerCase();
+        final nameB = ((b.data()['name'] ?? '') as String).toLowerCase();
+        final startsA = nameA.startsWith(q);
+        final startsB = nameB.startsWith(q);
+
+        if (startsA && !startsB) return -1;
+        if (!startsA && startsB) return 1;
+        return 0; // Maintain existing sort order for equal priority
       });
     }
 
     // Sort based on selected chip or recommendation score
-    if (_selectedChip == 0 && _selectedTags.isEmpty) {
+    if (_selectedChip == 0 && _selectedFilters.isEmpty) {
       // 0: For You - Sort by (Collaborative Score + Interest Match Bonus)
       list.sort((a, b) {
         // 1) Get Collaborative Score (if available)
@@ -914,7 +994,8 @@ class _ExploreTabState extends State<ExploreTab> {
         print('   #${i+1} ${d.data()['name']} | Final Score: ${(collab + bonus).toStringAsFixed(2)} '
               '(Collab: ${collab.toStringAsFixed(2)} + Interests: ${bonus.toStringAsFixed(2)} [${matches.join(', ')}])');
       }
-    } else if (_selectedChip == 1 || (_selectedChip == 0 && _selectedTags.isNotEmpty)) {
+    }
+ else if (_selectedChip == 1 || (_selectedChip == 0 && _selectedFilters.isNotEmpty)) {
       // 1: Popular OR (For You with tag filters) - Sort by ratings, then by review count
        list.sort((a, b) {
         num ra = a.data().containsKey('ratings') && a.data()['ratings'] is num
@@ -1018,7 +1099,7 @@ class _ExploreTabState extends State<ExploreTab> {
                 SizedBox(
                   width: 280,
                   child: Text(
-                    _truncateCity(city),
+                    formatAddress(city),
                     style: TextStyle(
                       fontSize: city.length > 30 ? 10.5 : 12,
                       color: Colors.white70,
@@ -1482,14 +1563,6 @@ class _ExploreTabState extends State<ExploreTab> {
     return '';
   }
 
-  /// Helper function to truncate city/address to only show barangay and city
-  String _truncateCity(String city) {
-    final parts = city.split(',');
-    if (parts.length > 1) {
-      return '${parts[0].trim()}, ${parts[1].trim()}';
-    }
-    return city;
-  }
 
   /// Helper function to safely extract gallery URLs as List<String>
   List<String> _getGalleryList(dynamic galleryData) {
@@ -1738,7 +1811,7 @@ class _ExploreTabState extends State<ExploreTab> {
                         SizedBox(
                           width: 280,
                           child: Text(
-                            _truncateCity(city),
+                            formatAddress(city),
                             style: TextStyle(
                               fontSize: city.length > 30 ? 10.5 : 12,
                               color: Colors.white70,
@@ -1904,7 +1977,7 @@ class _ExploreTabState extends State<ExploreTab> {
                   SizedBox(
                     width: 280,
                     child: Text(
-                      _truncateCity(city),
+                      formatAddress(city),
                       style: TextStyle(
                         fontSize: city.length > 30 ? 10.5 : 12,
                         color: Colors.white70,
@@ -2607,11 +2680,12 @@ class _ExploreTabState extends State<ExploreTab> {
       height: 38,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: _availableTags.length,
+        itemCount: _groupedFilters.values.expand((e) => e).length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, i) {
-          final tag = _availableTags[i];
-          final isSelected = _selectedTags.contains(tag);
+          final allTags = _groupedFilters.values.expand((e) => e).toList();
+          final tag = allTags[i];
+          final isSelected = _selectedFilters.contains(tag);
           return FilterChip(
             label: TextWidget(
               text: tag,
@@ -2626,9 +2700,9 @@ class _ExploreTabState extends State<ExploreTab> {
             onSelected: (_) {
               setState(() {
                 if (isSelected) {
-                  _selectedTags.remove(tag);
+                  _selectedFilters.remove(tag);
                 } else {
-                  _selectedTags.add(tag);
+                  _selectedFilters.add(tag);
                 }
               });
             },
@@ -2679,8 +2753,9 @@ class _ExploreTabState extends State<ExploreTab> {
                     controller: scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     children: [
+                      // Source filters
                       TextWidget(
-                        text: 'Amenities & Features',
+                        text: 'Search Source',
                         fontSize: 14,
                         color: Colors.white70,
                         isBold: true,
@@ -2689,11 +2764,15 @@ class _ExploreTabState extends State<ExploreTab> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: _availableTags.map((tag) {
-                          final isSelected = _selectedTags.contains(tag);
-                          return FilterChip(
+                        children: ['All', 'Business', 'Community'].map((source) {
+                          final isSelected = _sourceFilter == source;
+                          return ChoiceChip(
                             label: TextWidget(
-                              text: tag,
+                              text: source == 'Community' 
+                                  ? 'Community Added' 
+                                  : source == 'Business' 
+                                      ? 'Business Verified' 
+                                      : source,
                               fontSize: 13,
                               color: Colors.white,
                               isBold: false,
@@ -2702,16 +2781,13 @@ class _ExploreTabState extends State<ExploreTab> {
                                 isSelected ? primary : const Color(0xFF333333),
                             selected: isSelected,
                             selectedColor: primary,
-                            checkmarkColor: white,
-                            onSelected: (_) {
-                              setBottomSheetState(() {
-                                if (isSelected) {
-                                  _selectedTags.remove(tag);
-                                } else {
-                                  _selectedTags.add(tag);
-                                }
-                              });
-                              setState(() {});
+                            onSelected: (selected) {
+                              if (selected) {
+                                setBottomSheetState(() {
+                                  _sourceFilter = source;
+                                });
+                                setState(() {});
+                              }
                             },
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(20),
@@ -2721,21 +2797,81 @@ class _ExploreTabState extends State<ExploreTab> {
                         }).toList(),
                       ),
                       const SizedBox(height: 24),
+
+                      // Grouped Filters
+                      ..._groupedFilters.entries.map((entry) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextWidget(
+                              text: entry.key,
+                              fontSize: 14,
+                              color: Colors.white70,
+                              isBold: true,
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: entry.value.map((tag) {
+                                final isSelected = _selectedFilters.contains(tag);
+                                return FilterChip(
+                                  label: TextWidget(
+                                    text: tag,
+                                    fontSize: 13,
+                                    color: Colors.white,
+                                    isBold: false,
+                                  ),
+                                  backgroundColor: isSelected
+                                      ? primary
+                                      : const Color(0xFF333333),
+                                  selected: isSelected,
+                                  selectedColor: primary,
+                                  checkmarkColor: white,
+                                  onSelected: (_) {
+                                    setBottomSheetState(() {
+                                      if (isSelected) {
+                                        _selectedFilters.remove(tag);
+                                      } else {
+                                        _selectedFilters.add(tag);
+                                      }
+                                    });
+                                    setState(() {});
+                                  },
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  side: BorderSide.none,
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+                        );
+                      }),
+
                       GestureDetector(
-                        onTap: _selectedTags.isEmpty
+                        onTap: (_selectedFilters.isEmpty &&
+                                _sourceFilter == 'All')
                             ? null
                             : () {
                                 setBottomSheetState(() {
-                                  _selectedTags.clear();
+                                  _selectedFilters.clear();
+                                  _sourceFilter = 'All';
                                 });
                                 setState(() {});
                               },
-                        child: TextWidget(
-                          text: 'Clear all',
-                          fontSize: 14,
-                          color:
-                              _selectedTags.isEmpty ? Colors.white30 : primary,
-                          isBold: true,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 32),
+                          child: TextWidget(
+                            text: 'Clear all',
+                            fontSize: 14,
+                            color: (_selectedFilters.isEmpty &&
+                                    _sourceFilter == 'All')
+                                ? Colors.white30
+                                : primary,
+                            isBold: true,
+                          ),
                         ),
                       ),
                     ],

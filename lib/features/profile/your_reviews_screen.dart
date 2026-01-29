@@ -1,3 +1,4 @@
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -92,15 +93,15 @@ class YourReviewsScreen extends StatelessWidget {
                                 final ts = data?['createdAt'];
                                 DateTime? createdAt;
                                 if (ts is Timestamp) createdAt = ts.toDate();
-                                final timeAgo = createdAt == null
+                                 final dateStr = createdAt == null
                                     ? ''
-                                    : _formatTimeAgo(createdAt);
+                                    : DateFormat('MMM dd, yyyy').format(createdAt);
 
                                 if (shopId == null) {
                                   return _buildReviewCard(
                                     shopName: 'Cafe',
                                     rating: rating,
-                                    timeAgo: timeAgo,
+                                    timeAgo: dateStr,
                                     reviewText: text,
                                     tags: tags,
                                     imagePath:
@@ -121,7 +122,7 @@ class YourReviewsScreen extends StatelessWidget {
                                     return _buildReviewCard(
                                       shopName: shopName,
                                       rating: rating,
-                                      timeAgo: timeAgo,
+                                      timeAgo: dateStr,
                                       reviewText: text,
                                       tags: tags,
                                       imagePath:
@@ -143,20 +144,7 @@ class YourReviewsScreen extends StatelessWidget {
     );
   }
 
-  String _formatTimeAgo(DateTime date) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    if (diff.inSeconds < 60) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
-    if (diff.inHours < 24) return '${diff.inHours} h ago';
-    if (diff.inDays < 7) return '${diff.inDays} d ago';
-    final weeks = (diff.inDays / 7).floor();
-    if (weeks < 5) return '$weeks w ago';
-    final months = (diff.inDays / 30).floor();
-    if (months < 12) return '$months mo ago';
-    final years = (diff.inDays / 365).floor();
-    return '$years y ago';
-  }
+
 
   Widget _buildReviewCard({
     required String shopName,

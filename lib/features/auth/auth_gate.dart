@@ -9,6 +9,7 @@ import 'package:cofi/features/auth/account_type_selection_screen.dart';
 import 'package:cofi/features/auth/interest_selection_screen.dart';
 import 'package:cofi/features/auth/community_commitment_screen.dart';
 import 'package:cofi/features/home/home_screen.dart';
+import 'package:cofi/features/admin/admin_dashboard_screen.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -96,6 +97,12 @@ class AuthGate extends StatelessWidget {
                   return const SplashScreen();
                 }
 
+                final bool isAdmin = userData['isAdmin'] == true;
+
+                // 1. Priority: Admin
+                if (isAdmin) {
+                  return const AdminDashboardScreen();
+                }
 
                 // Check if user has accountType
                 final hasAccountType = userData.containsKey('accountType') &&

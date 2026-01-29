@@ -10,6 +10,9 @@ import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/features/map/custom_location_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:cofi/features/business/shop_verification_sheet.dart';
 
 class SubmitShopScreen extends StatefulWidget {
   const SubmitShopScreen({super.key});
@@ -42,22 +45,72 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
   List<String> _existingMenuPriceUrls = [];
 
   // Selected tags state
+  // Selected tags state (Expanded to match Explore Tab filters)
   Map<String, bool> selectedTags = {
+    // Drink Types
+    'Espresso': false,
+    'Flat White': false,
+    'Spanish Latte': false,
+    'Vietnamese Coffee': false,
+    'Cold Brew': false,
+    'Pour Over': false,
     'Specialty Coffee': true,
+    // Non-Coffee
     'Matcha Drinks': false,
+    // Food
     'Pastries': false,
+    // Use Case
     'Work-Friendly (Wi-Fi + outlets)': false,
-    'Pet-Friendly': false,
-    'Parking Available': false,
-    'Family Friendly': false,
     'Study Sessions': false,
     'Night Café (Open Late)': false,
+    'Family Friendly': false,
+    // Accessibility
+    'Pet-Friendly': false,
+    'Parking Available': false,
+    // Vibe
     'Minimalist / Modern': false,
     'Rustic / Cozy': false,
     'Outdoor / Garden': false,
     'Seaside / Scenic': false,
     'Artsy / Aesthetic': false,
     'Instagrammable': false,
+  };
+
+  // Tag categories for grouping (Consistent with Explore Tab)
+  final Map<String, List<String>> _tagCategories = {
+    '☕ Drink Types': [
+      'Espresso',
+      'Flat White',
+      'Spanish Latte',
+      'Vietnamese Coffee',
+      'Cold Brew',
+      'Pour Over',
+      'Specialty Coffee',
+    ],
+    '🍵 Non-Coffee Drinks': [
+      'Matcha Drinks',
+    ],
+    '🥐 Food Options': [
+      'Pastries',
+    ],
+    '🧑‍💻 Use Case / Activities': [
+      'Work-Friendly (Wi-Fi + outlets)',
+      'Study Sessions',
+      'Night Café (Open Late)',
+      'Family Friendly',
+    ],
+    '🐾 Accessibility & Convenience': [
+      'Pet-Friendly',
+      'Parking Available',
+    ],
+    '🎨 Vibe / Ambience': [
+      'Minimalist / Modern',
+      'Rustic / Cozy',
+      'Outdoor / Garden',
+      'Seaside / Scenic',
+      'Artsy / Aesthetic',
+      'Instagrammable',
+    ],
   };
 
   bool _isSaving = false;
@@ -279,10 +332,7 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
   Future<Position?> _getCurrentPosition() async {
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        // Optionally inform the user that location services are disabled
-        return null;
-      }
+      if (!serviceEnabled) return null;
 
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
@@ -290,22 +340,88 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        // Permissions are denied, next time we could show a dialog directing to settings
         return null;
       }
 
+      // Optimization: Try to get last known position first (instant)
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown != null) {
+        // If last known is fresh (within 5 mins), use it to speed up
+        final age = DateTime.now().difference(lastKnown.timestamp);
+        if (age.inMinutes < 5) return lastKnown;
+      }
+
+      // Use a timeout to prevent hanging if GPS signal is weak
       return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        desiredAccuracy: LocationAccuracy.medium, // Lower accuracy is faster
+        timeLimit: const Duration(seconds: 5),
       );
     } catch (_) {
       return null;
     }
   }
 
+  Future<void> _getAddressFromCoordinates(double latitude, double longitude) async {
+    try {
+      const googleMapsApiKey = 'AIzaSyDzqOhK3i_zOQ-6fN8PqfGqM0HkLqVDrMc';
+      
+      // Try Google Geocoding API first
+      final String googleUrl =
+          'https://maps.googleapis.com/maps/api/geocode/json?latlng=$latitude,$longitude&key=$googleMapsApiKey';
+      final googleResponse = await http.get(Uri.parse(googleUrl));
+
+      if (googleResponse.statusCode == 200) {
+        final json = jsonDecode(googleResponse.body);
+        final results = json['results'] as List? ?? [];
+
+        if (results.isNotEmpty) {
+          final address = results[0]['formatted_address'] as String? ?? '';
+          if (address.isNotEmpty) {
+            setState(() {
+              addressController.text = address;
+            });
+            return;
+          }
+        }
+      }
+
+      // Fallback to Nominatim
+      final String nominatimUrl =
+          'https://nominatim.openstreetmap.org/reverse?format=json&lat=$latitude&lon=$longitude';
+      final nominatimResponse = await http.get(
+        Uri.parse(nominatimUrl),
+        headers: {'User-Agent': 'CoFi-App'},
+      );
+
+      if (nominatimResponse.statusCode == 200) {
+        final json = jsonDecode(nominatimResponse.body);
+        final address = json['display_name'] as String? ?? '';
+        if (address.isNotEmpty) {
+          setState(() {
+            addressController.text = address;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching address: $e');
+    }
+  }
+
   Future<void> _submitShop() async {
     final name = shopNameController.text.trim();
-    final address = addressController.text.trim();
+    String address = addressController.text.trim();
     final about = aboutController.text.trim();
+
+    // If address is empty but location type is 'my_location', try to fetch it one last time
+    if (address.isEmpty && _locationType == 'my_location') {
+      try {
+        final position = await _getCurrentPosition();
+        if (position != null) {
+          await _getAddressFromCoordinates(position.latitude, position.longitude);
+          address = addressController.text.trim(); // Re-read after potential update
+        }
+      } catch (_) {}
+    }
 
     if (name.isEmpty || address.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -398,14 +514,9 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Shop updated successfully.')),
           );
-          Navigator.pushReplacementNamed(
-            context,
-            '/businessProfile',
-            arguments: {
-              'id': _editShopId,
-              'name': name,
-            },
-          );
+          // If editing an existing shop, we can go to details or back. 
+          // For business owners, /businessProfile is appropriate.
+          Navigator.pop(context);
         }
       } else {
         // ======================================================================
@@ -480,60 +591,161 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
           // ================================================================
           'isVerified': false,
           'submissionType': submissionType, // 'community' or 'business'
-          'approvalStatus': 'pending_approval', // Requires admin approval
+          'approvalStatus': submissionType == 'business' ? 'awaiting_verification' : 'pending_approval', 
           if (ownerId != null) 'ownerId': ownerId, // Link for business accounts
         };
 
         final ref =
             await FirebaseFirestore.instance.collection('shops').add(data);
 
-        // Upload logo image if selected
-        if (_selectedImage != null) {
-          final imageUrl = await _uploadImageToFirebase(ref.id);
-          if (imageUrl != null) {
-            await ref.update({'logoUrl': imageUrl});
-          }
-        }
+        // Create updates map to batch changes
+        final Map<String, dynamic> imageUpdates = {};
+        
+        // Execute uploads in parallel
+        await Future.wait([
+          // Logo Upload
+          () async {
+            if (_selectedImage != null) {
+              final imageUrl = await _uploadImageToFirebase(ref.id);
+              if (imageUrl != null) imageUpdates['logoUrl'] = imageUrl;
+            }
+          }(),
+          
+          // Gallery Uploads
+          () async {
+            if (_galleryImages.isNotEmpty) {
+              final galleryUrls = await _uploadGalleryImagesToFirebase(ref.id);
+              if (galleryUrls.isNotEmpty) imageUpdates['gallery'] = galleryUrls;
+            }
+          }(),
+          
+          // Menu/Price Uploads
+          () async {
+            if (_menuPriceImages.isNotEmpty) {
+              final menuPriceUrls = await _uploadMenuPriceImagesToFirebase(ref.id);
+              if (menuPriceUrls.isNotEmpty) imageUpdates['menuPricePhotos'] = menuPriceUrls;
+            }
+          }(),
+        ]);
 
-        // Upload gallery images if selected
-        if (_galleryImages.isNotEmpty) {
-          final galleryUrls = await _uploadGalleryImagesToFirebase(ref.id);
-          if (galleryUrls.isNotEmpty) {
-            await ref.update({'gallery': galleryUrls});
-          }
-        }
-
-        // Upload menu/price images if selected
-        if (_menuPriceImages.isNotEmpty) {
-          final menuPriceUrls = await _uploadMenuPriceImagesToFirebase(ref.id);
-          if (menuPriceUrls.isNotEmpty) {
-            await ref.update({'menuPricePhotos': menuPriceUrls});
-          }
+        // Single batch update if there are changes
+        if (imageUpdates.isNotEmpty) {
+          await ref.update(imageUpdates);
         }
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text(
-                    'Shop submitted successfully. Your shop is currently under verification.')),
-          );
-          Navigator.pushReplacementNamed(
-            context,
-            '/businessProfile',
-            arguments: {
-              'id': ref.id,
-              'name': name,
-            },
-          );
+          _showSuccessOverlay(name, submissionType == 'business', ref.id);
         }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to submit: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to submit: $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  void _showSuccessOverlay(String shopName, bool isBusiness, String shopId) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.9),
+      transitionDuration: const Duration(milliseconds: 400),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: animation,
+            child: Scaffold(
+              backgroundColor: Colors.transparent,
+              body: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.green, width: 2),
+                        ),
+                        child: const Icon(Icons.check_circle_outline_rounded,
+                            color: Colors.green, size: 60),
+                      ),
+                      const SizedBox(height: 32),
+                      TextWidget(
+                        text: 'Submission Received',
+                        fontSize: 24,
+                        color: Colors.white,
+                        isBold: true,
+                        align: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      TextWidget(
+                        text: isBusiness
+                            ? 'Your shop $shopName has been submitted! Next, please upload your business requirements for verification.'
+                            : '☕ Your contribution counts! $shopName has been added to our community queue.',
+                        fontSize: 16,
+                        color: Colors.white70,
+                        align: TextAlign.center,
+                      ),
+                      const SizedBox(height: 32),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop(); // Close success dialog
+                            if (isBusiness) {
+                              // Show the verification sheet immediately
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.transparent,
+                                enableDrag: true,
+                                builder: (context) => ShopVerificationSheet(
+                                  shopId: shopId,
+                                  shopName: shopName,
+                                  isVerificationFlow: true,
+                                ),
+                              ).then((_) {
+                                // After sheet is closed (submitted or cancelled), 
+                                // navigate to profile/business dashboard
+                                Navigator.pop(context); 
+                              });
+                            } else {
+                              Navigator.of(context).pop(); // Go back to Home/Profile
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primary,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                          ),
+                          child: TextWidget(
+                            text: isBusiness ? 'Upload Requirements' : 'Back to Profile',
+                            fontSize: 16,
+                            color: Colors.white,
+                            isBold: true,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -731,10 +943,16 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
                                 ),
                                 value: 'my_location',
                                 groupValue: _locationType,
-                                onChanged: (value) {
+                                onChanged: (value) async {
                                   setState(() {
                                     _locationType = value!;
                                   });
+                                  if (value == 'my_location') {
+                                    final pos = await _getCurrentPosition();
+                                    if (pos != null) {
+                                      _getAddressFromCoordinates(pos.latitude, pos.longitude);
+                                    }
+                                  }
                                 },
                                 activeColor: primary,
                                 contentPadding:
@@ -1350,14 +1568,32 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Tags Grid
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          children: selectedTags.keys.map((tag) {
-                            return _buildTag(tag, selectedTags[tag]!);
-                          }).toList(),
-                        ),
+                        // Tags Sections (Categorized)
+                        ..._tagCategories.entries.map((entry) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 16, bottom: 12),
+                                child: TextWidget(
+                                  text: entry.key,
+                                  fontSize: 14,
+                                  color: Colors.white70,
+                                  isBold: true,
+                                ),
+                              ),
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 12,
+                                children: entry.value.map((tag) {
+                                  // Ensure tag exists in state, default to false if not
+                                  final isSelected = selectedTags[tag] ?? false;
+                                  return _buildTag(tag, isSelected);
+                                }).toList(),
+                              ),
+                            ],
+                          );
+                        }).toList(),
                         const SizedBox(height: 24),
 
                         // Daily Schedule Section
@@ -1458,72 +1694,58 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
   }
 
   Future<List<String>> _uploadGalleryImagesToFirebase(String shopId) async {
-    List<String> downloadUrls = [];
-
-    if (_galleryImages.isEmpty) return downloadUrls;
+    if (_galleryImages.isEmpty) return [];
 
     try {
-      setState(() {
-        _isUploading = true;
+      setState(() => _isUploading = true);
+
+      // Parallelize uploads for performance
+      final uploadTasks = _galleryImages.asMap().entries.map((entry) async {
+        final i = entry.key;
+        final file = entry.value;
+        final fileName = 'gallery_${shopId}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
+        final storageRef = FirebaseStorage.instance.ref().child('shop_images').child(fileName);
+        
+        final snapshot = await storageRef.putFile(file);
+        return await snapshot.ref.getDownloadURL();
       });
 
-      for (int i = 0; i < _galleryImages.length; i++) {
-        final fileName =
-            'gallery_${shopId}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
-        final storageRef =
-            FirebaseStorage.instance.ref().child('shop_images').child(fileName);
-
-        final uploadTask = storageRef.putFile(_galleryImages[i]);
-        final snapshot = await uploadTask;
-        final downloadUrl = await snapshot.ref.getDownloadURL();
-        downloadUrls.add(downloadUrl);
-      }
-
-      return downloadUrls;
+      return await Future.wait(uploadTasks);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to upload gallery images: $e')),
       );
       return [];
     } finally {
-      setState(() {
-        _isUploading = false;
-      });
+      setState(() => _isUploading = false);
     }
   }
 
   Future<List<String>> _uploadMenuPriceImagesToFirebase(String shopId) async {
-    List<String> downloadUrls = [];
-
-    if (_menuPriceImages.isEmpty) return downloadUrls;
+    if (_menuPriceImages.isEmpty) return [];
 
     try {
-      setState(() {
-        _isUploading = true;
+      setState(() => _isUploading = true);
+
+      // Parallelize uploads for performance
+      final uploadTasks = _menuPriceImages.asMap().entries.map((entry) async {
+        final i = entry.key;
+        final file = entry.value;
+        final fileName = 'menu_price_${shopId}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
+        final storageRef = FirebaseStorage.instance.ref().child('shop_images').child(fileName);
+
+        final snapshot = await storageRef.putFile(file);
+        return await snapshot.ref.getDownloadURL();
       });
 
-      for (int i = 0; i < _menuPriceImages.length; i++) {
-        final fileName =
-            'menu_price_${shopId}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
-        final storageRef =
-            FirebaseStorage.instance.ref().child('shop_images').child(fileName);
-
-        final uploadTask = storageRef.putFile(_menuPriceImages[i]);
-        final snapshot = await uploadTask;
-        final downloadUrl = await snapshot.ref.getDownloadURL();
-        downloadUrls.add(downloadUrl);
-      }
-
-      return downloadUrls;
+      return await Future.wait(uploadTasks);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to upload menu/price images: $e')),
       );
       return [];
     } finally {
-      setState(() {
-        _isUploading = false;
-      });
+      setState(() => _isUploading = false);
     }
   }
 

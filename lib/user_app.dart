@@ -2,12 +2,14 @@ import 'package:cofi/features/auth/auth_gate.dart';
 import 'package:cofi/features/business/business_dashboard_screen.dart';
 import 'package:cofi/features/business/business_profile_screen.dart';
 import 'package:cofi/features/business/business_screen.dart';
+import 'package:cofi/features/business/claim_shop_screen.dart';
 import 'package:cofi/features/cafe/cafe_details_screen.dart';
 import 'package:cofi/features/cafe/submit_shop_screen.dart';
 import 'package:cofi/features/map/map_view_screen.dart';
 import 'package:cofi/features/networking/shared_collection_screen.dart';
 import 'package:cofi/features/profile/visited_cafes_screen.dart';
 import 'package:cofi/features/profile/your_reviews_screen.dart';
+import 'package:cofi/features/profile/my_contributions_screen.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:flutter/material.dart';
 
@@ -56,6 +58,7 @@ class UserApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: primary),
         useMaterial3: true,
       ),
+      debugShowCheckedModeBanner: false,
       home: const AuthGate(),
       builder: (context, child) => GestureDetector(
         onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
@@ -99,9 +102,18 @@ class UserApp extends StatelessWidget {
             return MaterialPageRoute(
               builder: (context) => const MapViewScreen(),
             );
+          case '/myContributions':
+            return MaterialPageRoute(
+              builder: (context) => const MyContributionsScreen(),
+            );
           case '/sharedCollection':
             return MaterialPageRoute(
               builder: (context) => const SharedCollectionScreen(),
+              settings: settings,
+            );
+          case '/claimShop':
+            return MaterialPageRoute(
+              builder: (context) => const ClaimShopScreen(),
               settings: settings,
             );
           default:

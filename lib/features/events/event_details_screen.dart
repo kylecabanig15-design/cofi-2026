@@ -1,12 +1,14 @@
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cofi/utils/formatters.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/widgets/post_event_bottom_sheet.dart';
 import 'package:cofi/utils/colors.dart';
-import 'event_comments_screen.dart';
+import 'package:cofi/features/events/event_comments_screen.dart';
 
 class EventDetailsScreen extends StatefulWidget {
   final Map<String, dynamic>? event;
@@ -366,10 +368,10 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                         ),
                         const SizedBox(height: 8),
                         TextWidget(
-                          text: (e['address'] ?? 'Address not specified')
-                              .toString(),
+                          text: formatAddress((e['address'] ?? 'Address not specified').toString()),
                           fontSize: 14,
                           color: Colors.white70,
+                          maxLines: 2,
                         ),
                         const SizedBox(height: 12),
                         // Google Map
@@ -471,13 +473,13 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                             Expanded(
                               child: ElevatedButton.icon(
                                 onPressed: () => isPaused
-                                    ? _enableEvent(
+                                    ? _publishEvent(
                                         context, e['shopId'], e['id'])
-                                    : _pauseEvent(
+                                    : _unpublishEvent(
                                         context, e['shopId'], e['id']),
                                 icon: Icon(
-                                    isPaused ? Icons.play_arrow : Icons.pause),
-                                label: Text(isPaused ? 'Enable' : 'Pause'),
+                                    isPaused ? Icons.cloud_upload : Icons.cloud_off),
+                                label: Text(isPaused ? 'Publish' : 'Unpublish'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor:
                                       isPaused ? Colors.green : Colors.orange,
@@ -557,7 +559,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
     );
   }
 
-  Future<void> _pauseEvent(
+  Future<void> _unpublishEvent(
       BuildContext context, String? shopId, String? eventId) async {
     if (shopId == null || eventId == null) return;
 
@@ -571,20 +573,20 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Event paused')),
+          const SnackBar(content: Text('Event unpublished')),
         );
         Navigator.pop(context);
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to pause event: $e')),
+          SnackBar(content: Text('Failed to unpublish event: $e')),
         );
       }
     }
   }
 
-  Future<void> _enableEvent(
+  Future<void> _publishEvent(
       BuildContext context, String? shopId, String? eventId) async {
     if (shopId == null || eventId == null) return;
 
@@ -598,14 +600,14 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Event enabled')),
+          const SnackBar(content: Text('Event published')),
         );
         Navigator.pop(context);
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to enable event: $e')),
+          SnackBar(content: Text('Failed to publish event: $e')),
         );
       }
     }
@@ -676,10 +678,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
       if (sd is String && sd.isNotEmpty) dt = DateTime.tryParse(sd);
     }
     if (dt == null) return 'Date not set';
-    final day = dt.day.toString().padLeft(2, '0');
-    final mon = dt.month.toString().padLeft(2, '0');
-    final yr = dt.year.toString();
-    return '$yr-$mon-$day';
+    return DateFormat('MMM dd, yyyy').format(dt);
   }
 
   String _formatEventDate1(Map<String, dynamic> e) {
@@ -696,10 +695,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
       if (sd is String && sd.isNotEmpty) dt = DateTime.tryParse(sd);
     }
     if (dt == null) return 'Date not set';
-    final day = dt.day.toString().padLeft(2, '0');
-    final mon = dt.month.toString().padLeft(2, '0');
-    final yr = dt.year.toString();
-    return '$yr-$mon-$day';
+    return DateFormat('MMM dd, yyyy').format(dt);
   }
 
   String _formatEventTime(dynamic dateTime) {

@@ -2,6 +2,7 @@ import 'package:cofi/firebase_options.dart';
 import 'package:cofi/root_auth_gate.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:cofi/services/notification_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get_storage/get_storage.dart';
 
@@ -23,6 +24,9 @@ void main() async {
 
     await GetStorage.init();
     print('GetStorage initialized');
+    
+    await NotificationService().init();
+    print('NotificationService initialized');
   } catch (e, stack) {
     print('Error during initialization: $e');
     print('Stack: $stack');

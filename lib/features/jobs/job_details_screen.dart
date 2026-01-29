@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/widgets/button_widget.dart';
 import 'package:cofi/widgets/post_job_bottom_sheet.dart';
+import 'package:cofi/features/jobs/job_archives_screen.dart';
+import 'package:cofi/features/jobs/job_application_screen.dart';
 import 'package:cofi/utils/colors.dart';
-import 'job_application_screen.dart';
-import 'job_archives_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class JobDetailsScreen extends StatefulWidget {
   final Map<String, dynamic>? job;
@@ -107,17 +109,17 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
     }
   }
 
-  Future<void> _closeJobApplication() async {
+  Future<void> _unpublishJobApplication() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
         title: const Text(
-          'Close Job Application',
+          'Unpublish Job Application',
           style: TextStyle(color: Colors.white),
         ),
         content: const Text(
-          'Are you sure you want to close this job application? This will prevent new users from applying.',
+          'Are you sure you want to unpublish this job application? This will prevent new users from applying.',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -131,8 +133,8 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             child: const Text(
-              'Close',
-              style: TextStyle(color: Colors.red),
+              'Unpublish',
+              style: TextStyle(color: Colors.orange),
             ),
           ),
         ],
@@ -170,7 +172,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Job application closed successfully'),
+              content: Text('Job application unpublished successfully'),
               backgroundColor: Colors.green,
             ),
           );
@@ -183,12 +185,12 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error closing job: $e'),
+              content: Text('Error unpublishing job: $e'),
               backgroundColor: Colors.red,
             ),
           );
         }
-        print('Error closing job: $e');
+        print('Error unpublishing job: $e');
       }
     }
   }
@@ -560,24 +562,24 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          // Close / Open Applications Button
+          // Publish / Unpublish Applications Button
           Expanded(
             child: ElevatedButton.icon(
               onPressed: isPending
                   ? null
                   : () {
                       if (isClosedStatus) {
-                        _openJobApplication();
+                        _publishJobApplication();
                       } else {
-                        _closeJobApplication();
+                        _unpublishJobApplication();
                       }
                     },
-              icon: Icon(isClosedStatus ? Icons.lock_open : Icons.lock_outline),
-              label: Text(isClosedStatus ? 'Open' : 'Close'),
+              icon: Icon(isClosedStatus ? Icons.cloud_upload : Icons.cloud_off),
+              label: Text(isClosedStatus ? 'Publish' : 'Unpublish'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: isPending
                     ? Colors.grey
-                    : (isClosedStatus ? Colors.green : Colors.red),
+                    : (isClosedStatus ? Colors.green : Colors.orange),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 disabledBackgroundColor: Colors.grey,
@@ -716,23 +718,20 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
   }
 
   String _fmt(DateTime dt) {
-    final day = dt.day.toString().padLeft(2, '0');
-    final mon = dt.month.toString().padLeft(2, '0');
-    final yr = dt.year.toString();
-    return '$yr-$mon-$day';
+    return DateFormat('MMM dd, yyyy').format(dt);
   }
 
-  Future<void> _openJobApplication() async {
+  Future<void> _publishJobApplication() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
         title: const Text(
-          'Reopen Job Application',
+          'Publish Job Application',
           style: TextStyle(color: Colors.white),
         ),
         content: const Text(
-          'Are you sure you want to reopen this job application? New users will be able to apply again.',
+          'Are you sure you want to publish this job application? New users will be able to apply again.',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -746,7 +745,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             child: const Text(
-              'Reopen',
+              'Publish',
               style: TextStyle(color: Colors.green),
             ),
           ),
@@ -785,7 +784,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Job application reopened successfully'),
+              content: Text('Job application published successfully'),
               backgroundColor: Colors.green,
             ),
           );
@@ -798,7 +797,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error reopening job: $e'),
+              content: Text('Error publishing job: $e'),
               backgroundColor: Colors.red,
             ),
           );

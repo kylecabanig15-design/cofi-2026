@@ -52,58 +52,15 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
           final shop = snapshot.data!.docs.first;
           final shopId = shop.id;
           final shopData = shop.data();
+          final isVerified = shopData['isVerified'] == true;
 
-          return Scaffold(
-            backgroundColor: Colors.black,
-            appBar: AppBar(
-              backgroundColor: Colors.black,
-              elevation: 0,
-              leading: IconButton(
-                icon:
-                    const Icon(Icons.arrow_back, color: Colors.white, size: 28),
-                onPressed: () => Navigator.pop(context),
-              ),
-              centerTitle: true,
-              title: TextWidget(
-                text: 'Business Dashboard',
-                fontSize: 18,
-                color: Colors.white,
-                isBold: true,
-              ),
-            ),
-            body: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: ListView(
-                  children: [
-                    const SizedBox(height: 32),
-                    TextWidget(
-                      text: shopData['name'] ?? 'Your Shop',
-                      fontSize: 24,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                    const SizedBox(height: 8),
-                    TextWidget(
-                      text: 'Shop ID: $shopId',
-                      fontSize: 12,
-                      color: Colors.white54,
-                    ),
-                    const SizedBox(height: 32),
-                    TextWidget(
-                      text: 'Management',
-                      fontSize: 18,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                    const SizedBox(height: 16),
-                    // Add management options here
-                    const SizedBox(height: 32),
-                  ],
-                ),
-              ),
-            ),
-          );
+          // Only show dashboard if shop is verified.
+          // Otherwise, treat as if no shop (to allow claiming/submitting new one).
+          if (isVerified) {
+            return _buildDashboardContent(context, shopData, shopId);
+          } else if (shopData['approvalStatus'] == 'awaiting_verification') {
+            return _buildPendingReviewScreen(context, shopData);
+          }
         }
 
         // If loading, show loading state
@@ -133,9 +90,116 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
           );
         }
 
-        // If no shops, show Get Started screen
+        // If no shops (or no verified shops), show Get Started screen
         return _buildGetStartedScreen(context);
       },
+    );
+  }
+
+  Widget _buildDashboardContent(BuildContext context, Map<String, dynamic> shopData, String shopId) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+          onPressed: () => Navigator.pop(context),
+        ),
+        centerTitle: true,
+        title: TextWidget(
+          text: 'Business Dashboard',
+          fontSize: 18,
+          color: Colors.white,
+          isBold: true,
+        ),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: ListView(
+            children: [
+              const SizedBox(height: 32),
+              TextWidget(
+                text: shopData['name'] ?? 'Your Shop',
+                fontSize: 24,
+                color: Colors.white,
+                isBold: true,
+              ),
+              const SizedBox(height: 8),
+              TextWidget(
+                text: 'Shop ID: $shopId',
+                fontSize: 12,
+                color: Colors.white54,
+              ),
+              const SizedBox(height: 32),
+              TextWidget(
+                text: 'Management',
+                fontSize: 18,
+                color: Colors.white,
+                isBold: true,
+              ),
+              const SizedBox(height: 16),
+              // Add management options here
+              const SizedBox(height: 32),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPendingReviewScreen(BuildContext context, Map<String, dynamic> shopData) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+          onPressed: () => Navigator.pop(context),
+        ),
+        centerTitle: true,
+        title: TextWidget(
+          text: 'Business Dashboard',
+          fontSize: 18,
+          color: Colors.white,
+          isBold: true,
+        ),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.hourglass_top_rounded, color: Colors.blueAccent, size: 64),
+              ),
+              const SizedBox(height: 32),
+              TextWidget(
+                text: 'Verification in Progress',
+                fontSize: 24,
+                color: Colors.white,
+                isBold: true,
+                align: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              TextWidget(
+                text: 'Your shop "${shopData['name']}" has been submitted for verification. Features will unlock once an admin approves your request.',
+                fontSize: 14,
+                color: Colors.white70,
+                align: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

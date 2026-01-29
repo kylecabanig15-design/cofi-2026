@@ -1,8 +1,10 @@
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cofi/utils/formatters.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/utils/colors.dart';
@@ -298,7 +300,7 @@ class CafeDetailsScreen extends StatelessWidget {
                   SizedBox(
                     height: 10,
                   ),
-                  _buildSection('Address', address.isNotEmpty ? address : '—'),
+                  _buildSection('Address', address.isNotEmpty ? formatAddress(address) : '—'),
                   SizedBox(
                     height: 10,
                   ),
@@ -1034,27 +1036,9 @@ class CafeDetailsScreen extends StatelessWidget {
     required BuildContext context,
   }) {
     // Calculate time difference
-    String timeAgo = '1 week ago'; // Default fallback
+    String postedAt = '1 week ago'; // Default fallback
     if (createdAt != null) {
-      final now = DateTime.now();
-      final reviewDate = createdAt.toDate();
-      final difference = now.difference(reviewDate);
-
-      if (difference.inDays > 7) {
-        timeAgo =
-            '${difference.inDays ~/ 7} week${(difference.inDays ~/ 7) > 1 ? 's' : ''} ago';
-      } else if (difference.inDays > 0) {
-        timeAgo =
-            '${difference.inDays} day${difference.inDays > 1 ? 's' : ''} ago';
-      } else if (difference.inHours > 0) {
-        timeAgo =
-            '${difference.inHours} hour${difference.inHours > 1 ? 's' : ''} ago';
-      } else if (difference.inMinutes > 0) {
-        timeAgo =
-            '${difference.inMinutes} minute${difference.inMinutes > 1 ? 's' : ''} ago';
-      } else {
-        timeAgo = 'Just now';
-      }
+      postedAt = DateFormat('MMM dd, yyyy').format(createdAt.toDate());
     }
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -1109,7 +1093,7 @@ class CafeDetailsScreen extends StatelessWidget {
                           width: 10,
                         ),
                         TextWidget(
-                          text: timeAgo,
+                          text: postedAt,
                           fontSize: 12,
                           color: Colors.white70,
                         ),

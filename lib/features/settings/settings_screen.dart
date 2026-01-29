@@ -7,9 +7,11 @@ import 'package:cofi/widgets/edit_profile_dialog.dart';
 import 'package:cofi/features/auth/login_screen.dart';
 import 'package:cofi/services/google_sign_in_service.dart';
 import 'package:cofi/utils/auth_error_handler.dart';
-import 'privacy_policy_screen.dart';
-import 'terms_of_service_screen.dart';
-import 'help_support_screen.dart';
+import 'package:cofi/services/notification_service.dart';
+import 'package:cofi/features/settings/privacy_policy_screen.dart';
+import 'package:cofi/features/settings/terms_of_service_screen.dart';
+import 'package:cofi/features/settings/help_support_screen.dart';
+import 'package:cofi/utils/formatters.dart';
 import 'package:cofi/features/auth/interest_selection_screen.dart';
 import 'package:cofi/features/admin/admin_dashboard_screen.dart';
 
@@ -22,6 +24,8 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
+  bool _isAdmin = false;
+  bool _isLoadingAdmin = true;
 
 
   @override
@@ -41,12 +45,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (data != null && mounted) {
         setState(() {
           _notificationsEnabled = data['notificationsEnabled'] ?? true;
+          _isAdmin = data['isAdmin'] == true;
+          _isLoadingAdmin = false;
         });
       }
+    } else {
+      setState(() {
+        _isLoadingAdmin = false;
+      });
     }
   }
 
   Future<void> _toggleNotifications(bool value) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: Text(
+          value ? 'Enable Notifications' : 'Disable Notifications',
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          value
+              ? 'Stay updated with the best café matches and community events!'
+              : 'You will stop receiving alerts for new cafés and community updates. Are you sure?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(
+              foregroundColor: value ? primary : Colors.redAccent,
+            ),
+            child: Text(value ? 'Enable' : 'Disable'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       await FirebaseFirestore.instance
@@ -656,158 +698,212 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+      body: _isLoadingAdmin
+          ? const Center(child: CircularProgressIndicator(color: primary))
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                // Account Settings Section
+                _buildSectionCard(
+                  title: 'Account',
+                  children: [
+                    _buildListTile(
+                      icon: Icons.person_outline,
+                      title: 'Edit Profile',
+                      onTap: _showEditProfileDialog,
+                    ),
+                    const Divider(color: Colors.white12, height: 1),
+                    StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                      stream: user != null
+                          ? FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(user.uid)
+                              .snapshots()
+                          : null,
+                      builder: (context, snapshot) {
+                        final data = snapshot.data?.data();
+                        final accountType =
+                            data?['accountType'] as String? ?? 'user';
+                        final isAdmin = data?['isAdmin'] == true;
 
+                        return _buildListTile(
+                          icon: Icons.badge_outlined,
+                          title: 'Account Type',
+                          subtitle: isAdmin
+                              ? 'Admin Account'
+                              : (accountType == 'business'
+                                  ? 'Business Account'
+                                  : 'User Account'),
+                          showChevron: false,
+                        );
+                      },
+                    ),
+                    const Divider(color: Colors.white12, height: 1),
+                    _buildListTile(
+                      icon: Icons.logout,
+                      title: 'Log Out',
+                      onTap: _showLogoutDialog,
+                    ),
+                  ],
+                ),
+                
+                // Hide all other containers if Admin
+                if (!_isAdmin) ...[
+                  const SizedBox(height: 16),
 
-          // Account Settings Section
-          _buildSectionCard(
-            title: 'Account',
-            children: [
-              _buildListTile(
-                icon: Icons.person_outline,
-                title: 'Edit Profile',
-                onTap: _showEditProfileDialog,
-              ),
-              const Divider(color: Colors.white12, height: 1),
-              StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                stream: user != null
-                    ? FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(user.uid)
-                        .snapshots()
-                    : null,
-                builder: (context, snapshot) {
-                  final data = snapshot.data?.data();
-                  final accountType =
-                      data?['accountType'] as String? ?? 'user';
-                  final isAdmin = data?['isAdmin'] == true;
-                  
-                  return _buildListTile(
-                    icon: Icons.badge_outlined,
-                    title: 'Account Type',
-                    subtitle: isAdmin
-                        ? 'Admin Account'
-                        : (accountType == 'business'
-                            ? 'Business Account'
-                            : 'User Account'),
-                    showChevron: false,
-                  );
-                },
-              ),
-              const Divider(color: Colors.white12, height: 1),
-              _buildListTile(
-                icon: Icons.logout,
-                title: 'Log Out',
-                onTap: _showLogoutDialog,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Preferences Section
-          _buildSectionCard(
-            title: 'Privacy & Preferences',
-            children: [
-
-              _buildListTile(
-                icon: Icons.interests,
-                title: 'My Interests',
-                subtitle: 'Update your cafe preferences',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const InterestSelectionScreen(
-                        isEditing: true,
+                  // Preferences Section
+                  _buildSectionCard(
+                    title: 'Privacy & Preferences',
+                    children: [
+                      _buildListTile(
+                        icon: Icons.interests,
+                        title: 'My Interests',
+                        subtitle: 'Update your cafe preferences',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const InterestSelectionScreen(
+                                isEditing: true,
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                    ),
-                  );
-                },
-              ),
-              const Divider(color: Colors.white12, height: 1),
-              _buildSwitchTile(
-                icon: Icons.notifications_active_outlined, // Changed icon slightly to differentiate
-                title: 'Push Notifications',
-                subtitle: 'Receive alerts about new cafes',
-                value: _notificationsEnabled,
-                onChanged: _toggleNotifications,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+                      const Divider(color: Colors.white12, height: 1),
+                      _buildSwitchTile(
+                        icon: Icons
+                            .notifications_active_outlined, // Changed icon slightly to differentiate
+                        title: 'Push Notifications',
+                        subtitle: 'Receive alerts about new cafes',
+                        value: _notificationsEnabled,
+                        onChanged: _toggleNotifications,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
 
-          
+                  // App Information Section
+                  _buildSectionCard(
+                    title: 'App Information',
+                    children: [
+                      _buildListTile(
+                        icon: Icons.info_outline,
+                        title: 'About',
+                        subtitle: 'Version 1.0.0',
+                        onTap: () => _showAboutDialog(),
+                      ),
+                      const Divider(color: Colors.white12, height: 1),
+                      _buildListTile(
+                        icon: Icons.privacy_tip_outlined,
+                        title: 'Privacy Policy',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const PrivacyPolicyScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(color: Colors.white12, height: 1),
+                      _buildListTile(
+                        icon: Icons.description_outlined,
+                        title: 'Terms of Service',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const TermsOfServiceScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(color: Colors.white12, height: 1),
+                      _buildListTile(
+                        icon: Icons.help_outline,
+                        title: 'Help & Support',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const HelpSupportScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
 
-          // App Information Section
-          _buildSectionCard(
-            title: 'App Information',
-            children: [
-              _buildListTile(
-                icon: Icons.info_outline,
-                title: 'About',
-                subtitle: 'Version 1.0.0',
-                onTap: () => _showAboutDialog(),
-              ),
-              const Divider(color: Colors.white12, height: 1),
-              _buildListTile(
-                icon: Icons.privacy_tip_outlined,
-                title: 'Privacy Policy',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const PrivacyPolicyScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Divider(color: Colors.white12, height: 1),
-              _buildListTile(
-                icon: Icons.description_outlined,
-                title: 'Terms of Service',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const TermsOfServiceScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Divider(color: Colors.white12, height: 1),
-              _buildListTile(
-                icon: Icons.help_outline,
-                title: 'Help & Support',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const HelpSupportScreen(),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+                  // Danger Zone Section
+                  _buildSectionCard(
+                    title: 'Danger Zone',
+                    titleColor: Colors.redAccent,
+                    borderColor: Colors.redAccent.withValues(alpha: 0.3),
+                    children: [
+                      _buildListTile(
+                        icon: Icons.delete_forever,
+                        title: 'Delete Account',
+                        onTap: _showDeleteAccountDialog,
+                        titleColor: Colors.redAccent,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
 
-          // Danger Zone Section
-          _buildSectionCard(
-            title: 'Danger Zone',
-            titleColor: Colors.redAccent,
-            borderColor: Colors.redAccent.withValues(alpha: 0.3),
-            children: [
-              _buildListTile(
-                icon: Icons.delete_forever,
-                iconColor: Colors.redAccent,
-                title: 'Delete Account',
-                titleColor: Colors.redAccent,
-                onTap: _showDeleteAccountDialog,
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
-        ],
-      ),
+                  // ==========================================================
+                  // 🧪 DEFENSE DEBUG SECTION (Live Testing)
+                  // ==========================================================
+                  _buildSectionCard(
+                    title: 'Defense Verification',
+                    titleColor: Colors.amber,
+                    borderColor: Colors.amber.withOpacity(0.3),
+                    children: [
+                      _buildListTile(
+                        icon: Icons.notifications_none,
+                        title: 'Test Rec (Score: 0.6)',
+                        subtitle: 'Expected: Silent Notification',
+                        onTap: () async {
+                          await NotificationService().createRecommendationNotification(
+                            'test_shop_1',
+                            'Modern Brew (Test)',
+                            0.6,
+                            null,
+                          );
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Sent 0.6 Recommendation (No Sound)')),
+                            );
+                          }
+                        },
+                      ),
+                      const Divider(color: Colors.white12, height: 1),
+                      _buildListTile(
+                        icon: Icons.notifications_active,
+                        title: 'Test Alert (Score: 0.8)',
+                        subtitle: 'Expected: Auditory Perfect Match',
+                        titleColor: Colors.amber,
+                        onTap: () async {
+                          await NotificationService().createRecommendationNotification(
+                            'test_shop_2',
+                            'Elite Coffee (Test)',
+                            0.8,
+                            null,
+                          );
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Sent 0.8 Perfect Match (Sound Triggered)'),
+                                backgroundColor: Colors.amber,
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ],
+            ),
     );
   }
 

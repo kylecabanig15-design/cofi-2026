@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/features/jobs/job_details_screen.dart';
 import 'package:cofi/widgets/premium_background.dart';
+import 'package:intl/intl.dart';
+import 'package:cofi/utils/formatters.dart';
 
 class CommunityTab extends StatelessWidget {
   const CommunityTab({super.key});
@@ -386,7 +388,7 @@ class CommunityTab extends StatelessWidget {
                   }
                   final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(snapshot.data?.docs ?? []);
                   
-                  // Filter out private collections
+                  // Filter out private collections (legacy docs might miss the isPrivate field)
                   final publicDocs = docs.where((d) {
                     final data = d.data();
                     return data['isPrivate'] != true;
@@ -660,11 +662,7 @@ class CommunityTab extends StatelessWidget {
           }
         }
 
-        // Truncate city to only show first two parts (barangay, city)
-        final cityParts = city.split(',');
-        final displayCity = cityParts.length > 1
-            ? '${cityParts[0].trim()}, ${cityParts[1].trim()}'
-            : city;
+        final displayCity = formatAddress(city);
 
         return Padding(
           padding: const EdgeInsets.only(left: 0, right: 0, bottom: 16),
@@ -1080,21 +1078,6 @@ class CommunityTab extends StatelessWidget {
   }
 
   String _formatEventDate(DateTime dateTime) {
-    final months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
-    ];
-    final month = months[dateTime.month - 1];
-    return '${dateTime.day} $month, ${dateTime.year}';
+    return DateFormat('MMM dd, yyyy').format(dateTime);
   }
 }

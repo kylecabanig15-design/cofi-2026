@@ -1,3 +1,4 @@
+import 'package:intl/intl.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -164,27 +165,9 @@ class ReviewsScreen extends StatelessWidget {
     String? reviewId,
   }) {
     // Calculate time difference
-    String timeAgo = '1 week ago'; // Default fallback
+    String postedAt = '1 week ago'; // Default fallback
     if (createdAt != null) {
-      final now = DateTime.now();
-      final reviewDate = createdAt.toDate();
-      final difference = now.difference(reviewDate);
-
-      if (difference.inDays > 7) {
-        timeAgo =
-            '${difference.inDays ~/ 7} week${(difference.inDays ~/ 7) > 1 ? 's' : ''} ago';
-      } else if (difference.inDays > 0) {
-        timeAgo =
-            '${difference.inDays} day${difference.inDays > 1 ? 's' : ''} ago';
-      } else if (difference.inHours > 0) {
-        timeAgo =
-            '${difference.inHours} hour${difference.inHours > 1 ? 's' : ''} ago';
-      } else if (difference.inMinutes > 0) {
-        timeAgo =
-            '${difference.inMinutes} minute${difference.inMinutes > 1 ? 's' : ''} ago';
-      } else {
-        timeAgo = 'Just now';
-      }
+      postedAt = DateFormat('MMM dd, yyyy').format(createdAt.toDate());
     }
 
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -242,7 +225,7 @@ class ReviewsScreen extends StatelessWidget {
                           ),
                           const SizedBox(width: 10),
                           TextWidget(
-                            text: timeAgo,
+                            text: postedAt,
                             fontSize: 12,
                             color: Colors.white70,
                           ),
@@ -327,16 +310,9 @@ class ReviewsScreen extends StatelessWidget {
                 final responseCreatedAt =
                     (response['createdAt'] as Timestamp?)?.toDate();
 
-                String responseTimeAgo = 'Just now';
+                String responseDate = 'Just now';
                 if (responseCreatedAt != null) {
-                  final diff = DateTime.now().difference(responseCreatedAt);
-                  if (diff.inDays > 7) {
-                    responseTimeAgo = '${diff.inDays ~/ 7}w ago';
-                  } else if (diff.inDays > 0) {
-                    responseTimeAgo = '${diff.inDays}d ago';
-                  } else if (diff.inHours > 0) {
-                    responseTimeAgo = '${diff.inHours}h ago';
-                  }
+                  responseDate = DateFormat('MMM dd, yyyy').format(responseCreatedAt);
                 }
 
                 return FutureBuilder<DocumentSnapshot>(
@@ -407,7 +383,7 @@ class ReviewsScreen extends StatelessWidget {
                                       isBold: true,
                                     ),
                                     TextWidget(
-                                      text: responseTimeAgo,
+                                      text: responseDate,
                                       fontSize: 11,
                                       color: Colors.white60,
                                     ),

@@ -1,3 +1,4 @@
+import 'package:intl/intl.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -518,7 +519,7 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
               children: [
                 TextWidget(
                   text: _startDate != null
-                      ? '${_startDate!.year}-${_startDate!.month.toString().padLeft(2, '0')}-${_startDate!.day.toString().padLeft(2, '0')}'
+                      ? DateFormat('MMM dd, yyyy').format(_startDate!)
                       : 'Select date',
                   fontSize: 14,
                   color: _startDate != null ? Colors.white : Colors.grey,
@@ -572,7 +573,7 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
               children: [
                 TextWidget(
                   text: _endDate != null
-                      ? '${_endDate!.year}-${_endDate!.month.toString().padLeft(2, '0')}-${_endDate!.day.toString().padLeft(2, '0')}'
+                      ? DateFormat('MMM dd, yyyy').format(_endDate!)
                       : 'Select date',
                   fontSize: 14,
                   color: _endDate != null ? Colors.white : Colors.grey,

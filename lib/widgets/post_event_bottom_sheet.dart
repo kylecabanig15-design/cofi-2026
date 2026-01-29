@@ -1,3 +1,4 @@
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
@@ -901,22 +902,7 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
   }
 
   String _formatDate(DateTime date) {
-    final months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
-    ];
-
-    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+    return DateFormat('MMM dd, yyyy').format(date);
   }
 
   Widget _buildTimeField(String label, TimeOfDay? selectedTime,

@@ -2,6 +2,7 @@ import 'package:cofi/utils/colors.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:cofi/widgets/text_widget.dart';
+import 'package:cofi/utils/formatters.dart';
 import 'review_shop_screen.dart';
 
 class WriteReviewScreen extends StatelessWidget {
@@ -57,21 +58,25 @@ class WriteReviewScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextWidget(
-                      text: shopName,
-                      fontSize: 16,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                    TextWidget(
-                      text: shopAddress,
-                      fontSize: 14,
-                      color: Colors.white70,
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextWidget(
+                        text: shopName,
+                        fontSize: 16,
+                        color: Colors.white,
+                        isBold: true,
+                        maxLines: 1,
+                      ),
+                      TextWidget(
+                        text: formatAddress(shopAddress),
+                        fontSize: 14,
+                        color: Colors.white70,
+                        maxLines: 1,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

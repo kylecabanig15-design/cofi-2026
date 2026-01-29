@@ -114,23 +114,59 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
   Future<void> _pickResume() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-        // allowedExtensions: ['pdf', 'doc', 'docx'],
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'doc', 'docx'],
       );
 
       if (result != null) {
+        final file = result.files.single;
+        
+        // Validate file size (5MB limit)
+        const maxSizeBytes = 5 * 1024 * 1024; // 5MB in bytes
+        if (file.size > maxSizeBytes) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('File must be under 5MB. Please compress your resume.'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+          return;
+        }
+        
+        // Validate file extension
+        final allowedExtensions = ['pdf', 'doc', 'docx'];
+        final extension = file.extension?.toLowerCase();
+        if (extension == null || !allowedExtensions.contains(extension)) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Only PDF, DOC, and DOCX files are allowed.'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+          return;
+        }
+        
+        // File is valid, proceed
         setState(() {
-          _resumePath = result.files.single.path;
-          _resumeFileName = result.files.single.name;
+          _resumePath = file.path;
+          _resumeFileName = file.name;
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error picking file: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error picking file: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

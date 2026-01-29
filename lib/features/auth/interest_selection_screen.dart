@@ -47,15 +47,30 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
   }
 
   Map<String, bool> interests = {
+    // Drink Types
+    'Espresso': false,
+    'Flat White': false,
+    'Spanish Latte': false,
+    'Vietnamese Coffee': false,
+    'Cold Brew': false,
+    'Pour Over': false,
     'Specialty Coffee': false,
     'Matcha Drinks': false,
+
+    // Food
     'Pastries': false,
+
+    // Activities
     'Work-Friendly (Wi-Fi + outlets)': false,
-    'Pet-Friendly': false,
-    'Parking Available': false,
-    'Family Friendly': false,
     'Study Sessions': false,
     'Night Café (Open Late)': false,
+    'Family Friendly': false,
+
+    // Convenience
+    'Pet-Friendly': false,
+    'Parking Available': false,
+
+    // Vibe
     'Minimalist / Modern': false,
     'Rustic / Cozy': false,
     'Outdoor / Garden': false,
@@ -64,12 +79,59 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
     'Instagrammable': false,
   };
 
+  // Grouped Interests Mapping
+  final Map<String, List<String>> _interestGroups = {
+    '☕ Drink Types': [
+      'Espresso',
+      'Flat White',
+      'Spanish Latte',
+      'Vietnamese Coffee',
+      'Cold Brew',
+      'Pour Over',
+      'Specialty Coffee',
+      'Matcha Drinks',
+    ],
+    '🥐 Food Options': [
+      'Pastries',
+    ],
+    '🧑‍💻 Use Case / Activities': [
+      'Work-Friendly (Wi-Fi + outlets)',
+      'Study Sessions',
+      'Night Café (Open Late)',
+      'Family Friendly',
+    ],
+    '🐾 Accessibility & Convenience': [
+      'Pet-Friendly',
+      'Parking Available',
+    ],
+    '🎨 Vibe / Ambience': [
+      'Minimalist / Modern',
+      'Rustic / Cozy',
+      'Outdoor / Garden',
+      'Seaside / Scenic',
+      'Artsy / Aesthetic',
+      'Instagrammable',
+    ],
+  };
+
   // Map each interest to a high-quality professional image
   Map<String, String> interestImages = {
     'Specialty Coffee':
-        'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=800',
+        'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800',
     'Matcha Drinks':
         'https://images.unsplash.com/photo-1515823064-d6e0c04616a7?w=800',
+    'Espresso':
+        'https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?w=800',
+    'Spanish Latte':
+        'https://images.unsplash.com/photo-1516195700843-20a1d5e93d2d?w=800',
+    'Vietnamese Coffee':
+        'https://images.unsplash.com/photo-1671014594641-262cc4b9a16d?w=800',
+    'Cold Brew':
+        'https://images.unsplash.com/photo-1549652127-2e5e59e86a7a?w=800',
+    'Pour Over':
+        'https://plus.unsplash.com/premium_photo-1667621220863-3fa666433b5d?w=800',
+    'Flat White':
+        'https://images.unsplash.com/photo-1727080409436-356bdc609899?w=800',
     'Pastries':
         'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=800',
     'Work-Friendly (Wi-Fi + outlets)':
@@ -89,14 +151,16 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
     'Rustic / Cozy': 
         'https://images.unsplash.com/photo-1521017432531-fbd92d768814?w=800',
     'Outdoor / Garden':
-        'https://images.unsplash.com/photo-1544145945-f904253db0ad?w=800',
+        'https://images.unsplash.com/photo-1763301331567-21c465b66e02?w=800',
     'Seaside / Scenic': 
         'https://images.unsplash.com/photo-1519046904884-53103b34b206?w=800',
     'Artsy / Aesthetic':
         'https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=800',
     'Instagrammable':
-        'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=800',
+        'https://images.unsplash.com/photo-1559925393-8be0ec4767c8?w=800',
   };
+
+  final String _fallbackImageUrl = 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=800';
 
   bool _isLoading = false;
 
@@ -516,7 +580,7 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -541,149 +605,163 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Categories',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
               Expanded(
-                child: GridView.builder(
+                child: CustomScrollView(
                   physics: const BouncingScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 0.8,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                  ),
-                  itemCount: interests.length,
-                  itemBuilder: (context, index) {
-                    String interest = interests.keys.elementAt(index);
-                    bool isSelected = interests[interest]!;
-
-                    return InkWell(
-                      onTap: () {
-                        setState(() {
-                          interests[interest] = !interests[interest]!;
-                        });
-                      },
-                      splashColor: Colors.transparent,
-                      highlightColor: Colors.transparent,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
-                        transform: Matrix4.identity()
-                          ..scale(isSelected ? 0.98 : 1.0),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: isSelected ? primary : Colors.white10,
-                            width: isSelected ? 2 : 1,
+                  slivers: _interestGroups.entries.expand((entry) {
+                    return [
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 24, bottom: 16),
+                          child: Text(
+                            entry.key,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                          boxShadow: isSelected
-                              ? [
-                                  BoxShadow(
-                                    color: primary.withOpacity(0.3),
-                                    blurRadius: 12,
-                                    spreadRadius: 2,
-                                  )
-                                ]
-                              : [],
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: Stack(
-                          children: [
-                            // Image
-                            Positioned.fill(
-                              child: CachedNetworkImage(
-                                imageUrl: interestImages[interest]!,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => Container(
-                                  color: Colors.white.withValues(alpha: 0.05),
-                                  child: const Center(
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor:
-                                          AlwaysStoppedAnimation(Colors.white10),
-                                    ),
-                                  ),
-                                ),
-                                errorWidget: (context, url, error) =>
-                                    const Icon(Icons.error),
-                              ),
-                            ),
-                            // Overlay Gradient
-                            Positioned.fill(
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 300),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      Colors.transparent,
-                                      isSelected
-                                          ? primary.withOpacity(0.8)
-                                          : Colors.black.withOpacity(0.8),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Content
-                            Positioned(
-                              bottom: 12,
-                              left: 12,
-                              right: 12,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (isSelected)
-                                    AnimatedContainer(
-                                      duration: const Duration(milliseconds: 300),
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(0.2),
-                                            blurRadius: 4,
-                                          )
-                                        ],
-                                      ),
-                                      child: Icon(
-                                        Icons.check_rounded,
-                                        color: primary,
-                                        size: 14,
-                                      ),
-                                    ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    interest,
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: isSelected
-                                          ? FontWeight.bold
-                                          : FontWeight.w600,
-                                      letterSpacing: 0.5,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
                         ),
                       ),
-                    );
-                  },
+                      SliverGrid(
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.85,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            String interest = entry.value[index];
+                            bool isSelected = interests[interest]!;
+
+                            return InkWell(
+                              onTap: () {
+                                setState(() {
+                                  interests[interest] = !interests[interest]!;
+                                });
+                              },
+                              splashColor: Colors.transparent,
+                              highlightColor: Colors.transparent,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                                transform: Matrix4.identity()
+                                  ..scale(isSelected ? 0.98 : 1.0),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isSelected ? primary : Colors.white10,
+                                    width: isSelected ? 2 : 1,
+                                  ),
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: primary.withOpacity(0.3),
+                                            blurRadius: 12,
+                                            spreadRadius: 2,
+                                          )
+                                        ]
+                                      : [],
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: Stack(
+                                  children: [
+                                    // Image
+                                    Positioned.fill(
+                                      child: CachedNetworkImage(
+                                        imageUrl: interestImages[interest] ?? _fallbackImageUrl,
+                                        fit: BoxFit.cover,
+                                        placeholder: (context, url) => Container(
+                                          color: Colors.white.withValues(alpha: 0.1),
+                                          child: const Center(
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation(Colors.white24),
+                                            ),
+                                          ),
+                                        ),
+                                        errorWidget: (context, url, error) => Image.network(
+                                          _fallbackImageUrl,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                    ),
+                                    // Overlay Gradient
+                                    Positioned.fill(
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 300),
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topCenter,
+                                            end: Alignment.bottomCenter,
+                                            colors: [
+                                              Colors.transparent,
+                                              isSelected
+                                                  ? primary.withOpacity(0.8)
+                                                  : Colors.black.withOpacity(0.8),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    // Content
+                                    Positioned(
+                                      bottom: 12,
+                                      left: 12,
+                                      right: 12,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (isSelected)
+                                            AnimatedContainer(
+                                              duration: const Duration(milliseconds: 300),
+                                              padding: const EdgeInsets.all(4),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                shape: BoxShape.circle,
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.black.withOpacity(0.2),
+                                                    blurRadius: 4,
+                                                  )
+                                                ],
+                                              ),
+                                              child: Icon(
+                                                Icons.check_rounded,
+                                                color: primary,
+                                                size: 14,
+                                              ),
+                                            ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            interest,
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 13,
+                                              fontWeight: isSelected
+                                                  ? FontWeight.bold
+                                                  : FontWeight.w600,
+                                              letterSpacing: 0.5,
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                          childCount: entry.value.length,
+                        ),
+                      ),
+                    ];
+                  }).toList(),
                 ),
               ),
               const SizedBox(height: 12),
