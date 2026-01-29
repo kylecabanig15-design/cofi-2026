@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -21,6 +22,11 @@ class EventDetailsScreen extends StatefulWidget {
 class _EventDetailsScreenState extends State<EventDetailsScreen> {
   final PageController _pageController = PageController();
   int _currentImageIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   void dispose() {
@@ -512,47 +518,541 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                 ),
               )
             else
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => EventCommentsScreen(
-                            eventId: e['id'] ?? '',
-                            shopId: e['shopId'] ?? '',
-                          ),
+              // Non-owner view: Check account type and show appropriate UI
+              StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: currentUserId != null
+                    ? FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(currentUserId)
+                        .snapshots()
+                    : null,
+                builder: (context, userSnapshot) {
+                  final userData = userSnapshot.data?.data();
+                  final accountType = userData?['accountType'] as String? ?? 'user';
+                  final isBusinessAccount = accountType == 'business';
+
+                  // Check if user is already a participant
+                  return StreamBuilder<DocumentSnapshot>(
+                    stream: currentUserId != null
+                        ? FirebaseFirestore.instance
+                            .collection('shops')
+                            .doc(e['shopId'])
+                            .collection('events')
+                            .doc(e['id'])
+                            .collection('participants')
+                            .doc(currentUserId)
+                            .snapshots()
+                        : null,
+                    builder: (context, participantSnapshot) {
+                      final isParticipating = participantSnapshot.data?.exists ?? false;
+
+                      // Get participant count
+                      return StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('shops')
+                            .doc(e['shopId'])
+                            .collection('events')
+                            .doc(e['id'])
+                            .collection('participants')
+                            .snapshots(),
+                        builder: (context, countSnapshot) {
+                          final participantCount = countSnapshot.data?.docs.length ?? 0;
+
+                          return Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              children: [
+                                // Business account restriction message
+                                if (isBusinessAccount)
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 16, horizontal: 20),
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.orange.withOpacity(0.4),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.business_center,
+                                          color: Colors.orange,
+                                          size: 24,
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: TextWidget(
+                                            text: 'Business accounts cannot join events',
+                                            fontSize: 14,
+                                            color: Colors.white,
+                                            isBold: true,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                // Participant count display
+                                if (participantCount > 0)
+                                  GestureDetector(
+                                    onTap: () async {
+                                      // Show confirmation dialog
+                                      final viewParticipants = await showDialog<bool>(
+                                        context: context,
+                                        builder: (context) => AlertDialog(
+                                          backgroundColor: Colors.grey[900],
+                                          title: const Text(
+                                            'View Participants',
+                                            style: TextStyle(color: Colors.white),
+                                          ),
+                                          content: const Text(
+                                            'Do you want to view all participants?',
+                                            style: TextStyle(color: Colors.white70),
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context, false),
+                                              child: const Text('Cancel'),
+                                            ),
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context, true),
+                                              child: const Text('View'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+
+                                      if (viewParticipants == true && context.mounted) {
+                                        _showParticipantsList(context, e);
+                                      }
+                                    },
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 16, horizontal: 20),
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[850],
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.people,
+                                            color: primary,
+                                            size: 24,
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: TextWidget(
+                                              text: '$participantCount ${participantCount == 1 ? 'Participant' : 'Participants'}',
+                                              fontSize: 16,
+                                              color: Colors.white,
+                                              isBold: true,
+                                            ),
+                                          ),
+                                          const Icon(
+                                            Icons.arrow_forward_ios,
+                                            color: Colors.white54,
+                                            size: 16,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+
+                                // Action buttons row
+                                Row(
+                                  children: [
+                                    // Join/Participating button (only for normal users)
+                                    if (!isBusinessAccount)
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          onPressed: () {
+                                            if (isParticipating) {
+                                              _leaveEvent(context, e);
+                                            } else {
+                                              _joinEvent(context, e);
+                                            }
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: isParticipating
+                                                ? Colors.green
+                                                : primary,
+                                            padding: const EdgeInsets.symmetric(
+                                                vertical: 16),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(30),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                isParticipating
+                                                    ? Icons.check_circle
+                                                    : Icons.event_available,
+                                                color: Colors.white,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              TextWidget(
+                                                text: isParticipating
+                                                    ? 'Participating ✓'
+                                                    : 'Join Event',
+                                                fontSize: 16,
+                                                color: Colors.white,
+                                                isBold: true,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+
+                                    // Spacing between buttons
+                                    if (!isBusinessAccount) const SizedBox(width: 12),
+
+                                    // Comments button
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => EventCommentsScreen(
+                                                eventId: e['id'] ?? '',
+                                                shopId: e['shopId'] ?? '',
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.grey[800],
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 16),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(30),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            const Icon(
+                                              Icons.comment,
+                                              color: Colors.white,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            TextWidget(
+                                              text: 'Comments',
+                                              fontSize: 16,
+                                              color: Colors.white,
+                                              isBold: true,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _joinEvent(BuildContext context, Map<String, dynamic> e) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to join events')),
+      );
+      return;
+    }
+
+    // Show confirmation dialog
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text('Join Event', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Do you want to join this event?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Join'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final shopId = e['shopId'] as String?;
+      final eventId = e['id'] as String?;
+
+      if (shopId == null || eventId == null) {
+        throw Exception('Invalid event data');
+      }
+
+      // Get user data
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+      final userData = userDoc.data();
+
+      // Run transaction to ensure data consistency
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final participantRef = FirebaseFirestore.instance
+            .collection('shops')
+            .doc(shopId)
+            .collection('events')
+            .doc(eventId)
+            .collection('participants')
+            .doc(currentUser.uid);
+
+        final eventRef = FirebaseFirestore.instance
+            .collection('shops')
+            .doc(shopId)
+            .collection('events')
+            .doc(eventId);
+
+        // Check if already participating
+        final participantSnap = await transaction.get(participantRef);
+        if (participantSnap.exists) {
+          throw Exception('Already participating');
+        }
+
+        // Add participant
+        transaction.set(participantRef, {
+          'userId': currentUser.uid,
+          'userName': userData?['name'] ?? currentUser.displayName ?? 'User',
+          'userPhotoUrl': userData?['photoUrl'] ?? currentUser.photoURL ?? '',
+          'joinedAt': FieldValue.serverTimestamp(),
+        });
+
+        // Increment participant count
+        transaction.update(eventRef, {
+          'participantsCount': FieldValue.increment(1),
+        });
+      });
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("You're in! 🎉"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to join event: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _leaveEvent(BuildContext context, Map<String, dynamic> e) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    // Show confirmation dialog
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text('Leave Event', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Are you sure you want to leave this event?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Leave', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final shopId = e['shopId'] as String?;
+      final eventId = e['id'] as String?;
+
+      if (shopId == null || eventId == null) {
+        throw Exception('Invalid event data');
+      }
+
+      // Run transaction to ensure data consistency
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final participantRef = FirebaseFirestore.instance
+            .collection('shops')
+            .doc(shopId)
+            .collection('events')
+            .doc(eventId)
+            .collection('participants')
+            .doc(currentUser.uid);
+
+        final eventRef = FirebaseFirestore.instance
+            .collection('shops')
+            .doc(shopId)
+            .collection('events')
+            .doc(eventId);
+
+        // Remove participant
+        transaction.delete(participantRef);
+
+        // Decrement participant count
+        transaction.update(eventRef, {
+          'participantsCount': FieldValue.increment(-1),
+        });
+      });
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You have left the event')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to leave event: $e')),
+        );
+      }
+    }
+  }
+
+  void _showParticipantsList(BuildContext context, Map<String, dynamic> e) {
+    final shopId = e['shopId'] as String?;
+    final eventId = e['id'] as String?;
+
+    if (shopId == null || eventId == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(25),
+            topRight: Radius.circular(25),
+          ),
+        ),
+        child: Column(
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: const Icon(Icons.close, color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  TextWidget(
+                    text: 'Participants',
+                    fontSize: 18,
+                    color: Colors.white,
+                    isBold: true,
+                  ),
+                ],
+              ),
+            ),
+            // Participants List
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('shops')
+                    .doc(shopId)
+                    .collection('events')
+                    .doc(eventId)
+                    .collection('participants')
+                    .orderBy('joinedAt', descending: true)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return Center(
+                      child: TextWidget(
+                        text: 'No participants yet',
+                        fontSize: 16,
+                        color: Colors.white70,
+                      ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    itemCount: snapshot.data!.docs.length,
+                    separatorBuilder: (_, __) => const Divider(color: Colors.white24),
+                    itemBuilder: (context, index) {
+                      final participantData =
+                          snapshot.data!.docs[index].data() as Map<String, dynamic>;
+                      final name = participantData['userName'] as String? ?? 'User';
+                      final photoUrl = participantData['userPhotoUrl'] as String? ?? '';
+
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: primary,
+                          backgroundImage: photoUrl.isNotEmpty
+                              ? CachedNetworkImageProvider(photoUrl)
+                              : null,
+                          child: photoUrl.isEmpty
+                              ? Text(
+                                  name.isNotEmpty ? name[0].toUpperCase() : 'U',
+                                  style: const TextStyle(color: Colors.white),
+                                )
+                              : null,
+                        ),
+                        title: TextWidget(
+                          text: name,
+                          fontSize: 16,
+                          color: Colors.white,
                         ),
                       );
                     },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primary,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.touch_app, color: Colors.white),
-                        const SizedBox(width: 8),
-                        TextWidget(
-                          text: 'Tap to participate',
-                          fontSize: 16,
-                          color: Colors.white,
-                          isBold: true,
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(Icons.arrow_forward, color: Colors.white),
-                      ],
-                    ),
-                  ),
-                ),
+                  );
+                },
               ),
+            ),
           ],
         ),
       ),
