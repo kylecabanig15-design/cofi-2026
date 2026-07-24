@@ -1178,7 +1178,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
       if (sd is String && sd.isNotEmpty) dt = DateTime.tryParse(sd);
     }
     if (dt == null) return 'Date not set';
-    return DateFormat('MMM dd, yyyy').format(dt);
+    return DateFormat('MMMM dd, yyyy').format(dt);
   }
 
   String _formatEventDate1(Map<String, dynamic> e) {
@@ -1195,7 +1195,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
       if (sd is String && sd.isNotEmpty) dt = DateTime.tryParse(sd);
     }
     if (dt == null) return 'Date not set';
-    return DateFormat('MMM dd, yyyy').format(dt);
+    return DateFormat('MMMM dd, yyyy').format(dt);
   }
 
   String _formatEventTime(dynamic dateTime) {

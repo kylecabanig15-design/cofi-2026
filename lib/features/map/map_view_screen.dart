@@ -377,11 +377,11 @@ class _MapViewScreenState extends State<MapViewScreen> {
   }
 
   // ========================================================================
-  // HARD 1KM DISTANCE THRESHOLD (Panel Requirement)
+  // HARD 2KM DISTANCE THRESHOLD (Panel Requirement)
   // ========================================================================
   // The "Nearby" feature must only show cafés within 1km radius.
   // This is a hard filter, NOT user-configurable.
-  static const double _nearbyThresholdMeters = 1000.0;
+  static const double _nearbyThresholdMeters = 2000.0;
 
   /// Calculate distance from user to a shop in meters
   double _calculateDistanceToShop(Map<String, dynamic> data) {
@@ -400,7 +400,7 @@ class _MapViewScreenState extends State<MapViewScreen> {
     if (docs.isEmpty) return const SizedBox.shrink();
 
     // ----------------------------------------------------------------------
-    // STEP 1: FILTER - Only include shops within 1km radius
+    // STEP 1: FILTER - Only include shops within 2km radius
     // ----------------------------------------------------------------------
     List<QueryDocumentSnapshot<Map<String, dynamic>>> filteredDocs = [];
     
@@ -463,7 +463,7 @@ class _MapViewScreenState extends State<MapViewScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Text(
                   _userLocation != null 
-                      ? 'Nearby Cafes (${filteredDocs.length} within 1km)'
+                      ? 'Nearby Cafes (${filteredDocs.length} within 2km)'
                       : 'Nearby Cafes (${filteredDocs.length})',
                   style: const TextStyle(
                     fontSize: 16,
@@ -484,7 +484,7 @@ class _MapViewScreenState extends State<MapViewScreen> {
                             Icon(Icons.location_off, size: 48, color: Colors.grey[600]),
                             const SizedBox(height: 12),
                             Text(
-                              'No cafes within 1km',
+                              'No cafes within 2km',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,

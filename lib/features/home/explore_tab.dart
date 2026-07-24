@@ -72,48 +72,58 @@ class _ExploreTabState extends State<ExploreTab> {
     // STEP 1: Define default weights for visit tags and amenity tags
     // ========================================================================
     // Visit tags represent the purpose/context of a user's visit to a café.
-    
-    // Higher weights indicate more significant matching factors.
+    //
+    // Professor's weighting system — Visit Data = 30% total.
+    // Four tags share that 30% equally: 30 × 25/100 = 7.5 each.
+    // Stored as percentage points; divided by 100.0 at point of use.
+    //
+    // Visit Data subtotal: 7.5 + 7.5 + 7.5 + 7.5 = 30.0 pp
     final Map<String, double> defaultVisitTagWeights = {
-      'Business Meeting': 0.8, // 39% of respondents
-      'Chill / Hangout': 0.7, // 39% of respondents
-      'Study Session': 0.9, // 50% of respondents
-      'Group Gathering': 0.6, // 31% of respondents
+      'Study Session':    7.5 / 100.0, // Visit Data: 30% × 25% = 7.5 pp
+      'Business Meeting': 7.5 / 100.0, // Visit Data: 30% × 25% = 7.5 pp
+      'Chill / Hangout':  7.5 / 100.0, // Visit Data: 30% × 25% = 7.5 pp
+      'Group Gathering':  7.5 / 100.0, // Visit Data: 30% × 25% = 7.5 pp
     };
 
     // Amenity tags represent the features/characteristics of a café.
-    // These weights reflect the importance of each amenity for similarity.
+    //
+    // Professor's weighting system — amenity subtotals:
+    //   Type of Drinks  = 20 pp
+    //   Pastries        = 10 pp
+    //   Convenience     = 20 pp
+    //   Vibe            = 20 pp
+    //   Grand total     = 70 pp
+    //
+    // NOTE: 'Study Sessions' is an alias for the visit tag 'Study Session'
+    // and is intentionally NOT weighted here to avoid double-counting.
     final Map<String, double> defaultAmenityTagWeights = {
-      // Drink Types
-      'Espresso': 0.9,
-      'Flat White': 0.8,
-      'Spanish Latte': 0.9,
-      'Vietnamese Coffee': 0.8,
-      'Cold Brew': 0.8,
-      'Pour Over': 1.0,
-      'Specialty Coffee': 1.0, // 83% of respondents
-      'Matcha Drinks': 0.8,
+      // --- Type of Drinks (total 20 pp) ---
+      'Specialty Coffee':   6.0 / 100.0, // Drinks: dominant type
+      'Espresso':           2.0 / 100.0,
+      'Flat White':         2.0 / 100.0,
+      'Spanish Latte':      2.0 / 100.0,
+      'Vietnamese Coffee':  2.0 / 100.0,
+      'Cold Brew':          2.0 / 100.0,
+      'Pour Over':          2.0 / 100.0,
+      'Matcha Drinks':      2.0 / 100.0,
 
-      // Food
-      'Pastries': 0.6,
+      // --- Pastries (total 10 pp) ---
+      'Pastries':           10.0 / 100.0,
 
-      // Use Case
-      'Work-Friendly (Wi-Fi + outlets)': 0.9, // 53% of respondents
-      'Study Sessions': 0.9, // 53% of respondents
-      'Night Café (Open Late)': 0.7,
-      'Family Friendly': 0.6,
+      // --- Convenience (total 20 pp) ---
+      'Work-Friendly (Wi-Fi + outlets)': 4.0 / 100.0,
+      'Pet-Friendly':                    4.0 / 100.0,
+      'Parking Available':               4.0 / 100.0,
+      'Artsy / Aesthetic':               2.0 / 100.0,
+      'Instagrammable':                  2.0 / 100.0,
+      'Night Café (Open Late)':          2.0 / 100.0,
+      'Family Friendly':                 2.0 / 100.0,
 
-      // Convenience
-      'Pet-Friendly': 0.5, // 19% of respondents
-      'Parking Available': 0.5,
-
-      // Vibe
-      'Minimalist / Modern': 0.5,
-      'Rustic / Cozy': 0.5,
-      'Outdoor / Garden': 0.6,
-      'Seaside / Scenic': 0.6,
-      'Artsy / Aesthetic': 0.7, // 58% of respondents
-      'Instagrammable': 0.6, // Linked to Aesthetic
+      // --- Vibe (total 20 pp) ---
+      'Minimalist / Modern': 5.0 / 100.0,
+      'Rustic / Cozy':       5.0 / 100.0,
+      'Outdoor / Garden':    5.0 / 100.0,
+      'Seaside / Scenic':    5.0 / 100.0,
     };
 
     // Use provided weights or fall back to defaults
@@ -513,8 +523,8 @@ class _ExploreTabState extends State<ExploreTab> {
           backgroundColor: Colors.black,
           onRefresh: () async {
             // TRIGGER FOR ALGORITHM DEMONSTRATION
-            // Clears cache and forces a full re-run of Cosine Similarity
-            await _loadRecommendationScores(forceRefresh: true);
+            // Clears cache and forces a full re-run of Cosine Similarity in the background (no await)
+            _loadRecommendationScores(forceRefresh: true);
             
             // Also refresh other streams if needed (optional)
             if (mounted) setState(() {});
@@ -1110,7 +1120,7 @@ class _ExploreTabState extends State<ExploreTab> {
                 ),
               ],
             ),
-            if (shopData['logoUrl'] != null && (shopData['logoUrl'] as String).isNotEmpty)
+            if (shopData['logoUrl'] != null && (shopData['logoUrl'] as String).startsWith('http'))
               CircleAvatar(
                 radius: 20,
                 backgroundImage: CachedNetworkImageProvider(shopData['logoUrl']),
@@ -1822,9 +1832,15 @@ class _ExploreTabState extends State<ExploreTab> {
                         ),
                       ],
                     ),
-                    CircleAvatar(
-                      backgroundImage: CachedNetworkImageProvider(logo),
-                    ),
+                    if (logo.startsWith('http'))
+                      CircleAvatar(
+                        backgroundImage: CachedNetworkImageProvider(logo),
+                      )
+                    else
+                      CircleAvatar(
+                        backgroundColor: Colors.grey[800],
+                        child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
+                      ),
                   ],
                 ),
               ],
@@ -1989,7 +2005,7 @@ class _ExploreTabState extends State<ExploreTab> {
                 ],
               ),
               // Logo in bottom right
-              if (logo.isNotEmpty)
+              if (logo.startsWith('http'))
                 CircleAvatar(
                   radius: 20,
                   backgroundImage: CachedNetworkImageProvider(logo),
@@ -2352,12 +2368,14 @@ class _ExploreTabState extends State<ExploreTab> {
                       decoration: BoxDecoration(
                         color: Colors.black,
                         borderRadius: BorderRadius.circular(18),
-                        image: DecorationImage(
-                            opacity: event['isPaused'] == true ? 0.85 : 0.65,
-                            image: CachedNetworkImageProvider(
-                              event['imageUrl'] ?? '',
-                            ),
-                            fit: BoxFit.cover),
+                        image: (event['imageUrl']?.toString().startsWith('http') == true)
+                            ? DecorationImage(
+                                opacity: event['isPaused'] == true ? 0.85 : 0.65,
+                                image: CachedNetworkImageProvider(
+                                  event['imageUrl'],
+                                ),
+                                fit: BoxFit.cover)
+                            : null,
                       ),
                       child: Stack(
                         fit: StackFit.expand,
@@ -2636,7 +2654,6 @@ class _ExploreTabState extends State<ExploreTab> {
           user2Reviews: otherUserCombined,
           shopAmenities: shopAmenities,
         );
-
         // Only include users with meaningful similarity (> 0.1)
         if (similarity > 0.1) {
           // Get user info

@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/features/events/event_details_screen.dart';
+import 'package:cofi/utils/colors.dart';
 
 class MyEventsBottomSheet extends StatelessWidget {
   const MyEventsBottomSheet({super.key, required this.shopId});
@@ -178,9 +179,7 @@ class MyEventsBottomSheet extends StatelessWidget {
                               ? ''
                               : status[0].toUpperCase() + status.substring(1),
                           statusColor: statusColor,
-                          participants: participants > 0
-                              ? '$participants Participants'
-                              : null,
+                          participants: participants,
                           eventData: data,
                           eventId: upcomingDocs[index].id,
                           shopId: shopId,
@@ -204,7 +203,7 @@ class MyEventsBottomSheet extends StatelessWidget {
     required String status,
     required String image,
     required Color statusColor,
-    String? participants,
+    required int participants,
     required Map<String, dynamic> eventData,
     required String eventId,
     required String shopId,
@@ -310,15 +309,175 @@ class MyEventsBottomSheet extends StatelessWidget {
                     fontSize: 12,
                     color: Colors.white,
                   ),
-                  if (participants != null) ...[
-                    const SizedBox(height: 4),
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 12),
+
+            // Participant Badge on the right
+            GestureDetector(
+              onTap: () async {
+                // Show confirmation dialog
+                final viewParticipants = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    backgroundColor: Colors.grey[900],
+                    title: const Text(
+                      'View Participants',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    content: const Text(
+                      'Do you want to view all participants?',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('View'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (viewParticipants == true && context.mounted) {
+                  _showParticipantsList(context, eventData, eventId, shopId);
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: primary.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: primary, width: 1.5),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.people,
+                      color: primary,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 6),
                     TextWidget(
-                      text: participants,
+                      text: participants.toString(),
                       fontSize: 14,
-                      color: Colors.grey[400]!,
+                      color: Colors.white,
+                      isBold: true,
                     ),
                   ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static void _showParticipantsList(
+    BuildContext context,
+    Map<String, dynamic> eventData,
+    String eventId,
+    String shopId,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(25),
+            topRight: Radius.circular(25),
+          ),
+        ),
+        child: Column(
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: const Icon(Icons.close, color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  TextWidget(
+                    text: 'Participants',
+                    fontSize: 18,
+                    color: Colors.white,
+                    isBold: true,
+                  ),
                 ],
+              ),
+            ),
+            // Participants List
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('shops')
+                    .doc(shopId)
+                    .collection('events')
+                    .doc(eventId)
+                    .collection('participants')
+                    .orderBy('joinedAt', descending: true)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return Center(
+                      child: TextWidget(
+                        text: 'No participants yet',
+                        fontSize: 16,
+                        color: Colors.white70,
+                      ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    itemCount: snapshot.data!.docs.length,
+                    separatorBuilder: (_, __) => const Divider(color: Colors.white24),
+                    itemBuilder: (context, index) {
+                      final participantData =
+                          snapshot.data!.docs[index].data() as Map<String, dynamic>;
+                      final name = participantData['userName'] as String? ?? 'User';
+                      final photoUrl = participantData['userPhotoUrl'] as String? ?? '';
+
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: const Color(0xFFE53E3E),
+                          backgroundImage: photoUrl.isNotEmpty
+                              ? CachedNetworkImageProvider(photoUrl)
+                              : null,
+                          child: photoUrl.isEmpty
+                              ? Text(
+                                  name.isNotEmpty ? name[0].toUpperCase() : 'U',
+                                  style: const TextStyle(color: Colors.white),
+                                )
+                              : null,
+                        ),
+                        title: TextWidget(
+                          text: name,
+                          fontSize: 16,
+                          color: Colors.white,
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
             ),
           ],
