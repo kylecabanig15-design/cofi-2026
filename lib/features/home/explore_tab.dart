@@ -521,6 +521,7 @@ class _ExploreTabState extends State<ExploreTab> {
       body: RefreshIndicator(
           color: primary,
           backgroundColor: Colors.black,
+          notificationPredicate: (ScrollNotification notification) => notification.depth == 0,
           onRefresh: () async {
             // TRIGGER FOR ALGORITHM DEMONSTRATION
             // Clears cache and forces a full re-run of Cosine Similarity in the background (no await)
@@ -530,6 +531,7 @@ class _ExploreTabState extends State<ExploreTab> {
             if (mounted) setState(() {});
           },
           child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
         padding: const EdgeInsets.symmetric(horizontal: 12),
         children: [
         const SizedBox(height: 16),
@@ -539,6 +541,7 @@ class _ExploreTabState extends State<ExploreTab> {
           height: 44,
           width: double.infinity,
           child: ListView.separated(
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 4),
             scrollDirection: Axis.horizontal,
             itemCount: filterChips.length,
@@ -633,6 +636,7 @@ class _ExploreTabState extends State<ExploreTab> {
                         return SizedBox(
                           height: 275,
                           child: ListView.separated(
+                            physics: const BouncingScrollPhysics(),
                             scrollDirection: Axis.horizontal,
                             itemCount: sorted.length,
                             separatorBuilder: (_, __) =>
@@ -896,12 +900,18 @@ class _ExploreTabState extends State<ExploreTab> {
       out = out.where((d) => _visited.contains(d.id));
     }
     if (_isOpenToday) {
-      out = out.where((d) => _isOpenTodayFromSchedule(
-          (d.data()['schedule'] ?? {}) as Map<String, dynamic>));
+      out = out.where((d) {
+        final sched = d.data()['schedule'];
+        final map = (sched is Map) ? Map<String, dynamic>.from(sched) : <String, dynamic>{};
+        return _isOpenTodayFromSchedule(map);
+      });
     }
     if (_isOpenNow) {
-      out = out.where((d) => _isOpenNowFromSchedule(
-          (d.data()['schedule'] ?? {}) as Map<String, dynamic>));
+      out = out.where((d) {
+        final sched = d.data()['schedule'];
+        final map = (sched is Map) ? Map<String, dynamic>.from(sched) : <String, dynamic>{};
+        return _isOpenNowFromSchedule(map);
+      });
     }
 
     // Unified Tag/Parameter filters
@@ -1121,9 +1131,22 @@ class _ExploreTabState extends State<ExploreTab> {
               ],
             ),
             if (shopData['logoUrl'] != null && (shopData['logoUrl'] as String).startsWith('http'))
-              CircleAvatar(
-                radius: 20,
-                backgroundImage: CachedNetworkImageProvider(shopData['logoUrl']),
+              CachedNetworkImage(
+                imageUrl: shopData['logoUrl'],
+                imageBuilder: (context, imageProvider) => CircleAvatar(
+                  radius: 20,
+                  backgroundImage: imageProvider,
+                ),
+                placeholder: (context, url) => CircleAvatar(
+                  radius: 20,
+                  backgroundColor: Colors.grey[800],
+                  child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
+                ),
+                errorWidget: (context, url, error) => CircleAvatar(
+                  radius: 20,
+                  backgroundColor: Colors.grey[800],
+                  child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
+                ),
               )
             else
               CircleAvatar(
@@ -1479,13 +1502,15 @@ class _ExploreTabState extends State<ExploreTab> {
 
   bool _isOpenTodayFromSchedule(Map<String, dynamic> schedule) {
     final key = _weekdayKey(DateTime.now().weekday);
-    final day = (schedule[key] ?? {}) as Map<String, dynamic>;
+    final dayObj = schedule[key];
+    final day = (dayObj is Map) ? Map<String, dynamic>.from(dayObj) : <String, dynamic>{};
     return (day['isOpen'] ?? false) == true;
   }
 
   bool _isOpenNowFromSchedule(Map<String, dynamic> schedule) {
     final key = _weekdayKey(DateTime.now().weekday);
-    final day = (schedule[key] ?? {}) as Map<String, dynamic>;
+    final dayObj = schedule[key];
+    final day = (dayObj is Map) ? Map<String, dynamic>.from(dayObj) : <String, dynamic>{};
     if ((day['isOpen'] ?? false) != true) return false;
     final open = (day['open'] ?? '') as String;
     final close = (day['close'] ?? '') as String;
@@ -1833,8 +1858,19 @@ class _ExploreTabState extends State<ExploreTab> {
                       ],
                     ),
                     if (logo.startsWith('http'))
-                      CircleAvatar(
-                        backgroundImage: CachedNetworkImageProvider(logo),
+                      CachedNetworkImage(
+                        imageUrl: logo,
+                        imageBuilder: (context, imageProvider) => CircleAvatar(
+                          backgroundImage: imageProvider,
+                        ),
+                        placeholder: (context, url) => CircleAvatar(
+                          backgroundColor: Colors.grey[800],
+                          child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
+                        ),
+                        errorWidget: (context, url, error) => CircleAvatar(
+                          backgroundColor: Colors.grey[800],
+                          child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
+                        ),
                       )
                     else
                       CircleAvatar(
@@ -2006,9 +2042,22 @@ class _ExploreTabState extends State<ExploreTab> {
               ),
               // Logo in bottom right
               if (logo.startsWith('http'))
-                CircleAvatar(
-                  radius: 20,
-                  backgroundImage: CachedNetworkImageProvider(logo),
+                CachedNetworkImage(
+                  imageUrl: logo,
+                  imageBuilder: (context, imageProvider) => CircleAvatar(
+                    radius: 20,
+                    backgroundImage: imageProvider,
+                  ),
+                  placeholder: (context, url) => CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Colors.grey[800],
+                    child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
+                  ),
+                  errorWidget: (context, url, error) => CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Colors.grey[800],
+                    child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
+                  ),
                 )
               else
                 CircleAvatar(
@@ -2329,10 +2378,26 @@ class _ExploreTabState extends State<ExploreTab> {
         }).toList();
 
         if (upcomingEvents.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(12),
-            child: Text('No upcoming events',
-                style: TextStyle(color: Colors.white70)),
+          return Container(
+            width: double.infinity,
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E1E1E),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.event_busy_rounded, size: 32, color: Colors.white38),
+                SizedBox(height: 8),
+                Text(
+                  'No upcoming events',
+                  style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
           );
         }
 
@@ -2368,18 +2433,20 @@ class _ExploreTabState extends State<ExploreTab> {
                       decoration: BoxDecoration(
                         color: Colors.black,
                         borderRadius: BorderRadius.circular(18),
-                        image: (event['imageUrl']?.toString().startsWith('http') == true)
-                            ? DecorationImage(
-                                opacity: event['isPaused'] == true ? 0.85 : 0.65,
-                                image: CachedNetworkImageProvider(
-                                  event['imageUrl'],
-                                ),
-                                fit: BoxFit.cover)
-                            : null,
                       ),
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
+                          if (event['imageUrl']?.toString().startsWith('http') == true)
+                            CachedNetworkImage(
+                              imageUrl: event['imageUrl'],
+                              fit: BoxFit.cover,
+                              placeholder: (context, url) => Container(color: Colors.grey[900]),
+                              errorWidget: (context, url, error) => Container(
+                                color: Colors.grey[900],
+                                child: const Icon(Icons.event, color: Colors.white24, size: 48),
+                              ),
+                            ),
                           // Paused overlay
                           if (event['isPaused'] == true)
                             Container(

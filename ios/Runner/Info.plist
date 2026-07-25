@@ -64,5 +64,11 @@
 	</array>
 	<key>GIDClientID</key>
 	<string>1033537657456-tf1ek6nm04p6os6tlb6cqtm2k013h37m.apps.googleusercontent.com</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Allow Flutter debugging tools to connect to your app.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_dartobservatory._tcp</string>
+	</array>
 </dict>
 </plist>

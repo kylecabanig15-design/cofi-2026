@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/utils/colors.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class SelectedShopCard extends StatelessWidget {
   final Map<String, dynamic> data;
@@ -45,22 +46,28 @@ class SelectedShopCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Image
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(15),
-                  bottomLeft: Radius.circular(15),
-                ),
-                image: DecorationImage(
-                  image: imageUrl.isNotEmpty
-                      ? NetworkImage(imageUrl)
-                      : const AssetImage('assets/images/placeholder.jpg')
-                          as ImageProvider,
-                  fit: BoxFit.cover,
-                ),
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(15),
+                bottomLeft: Radius.circular(15),
+              ),
+              child: SizedBox(
+                width: 120,
+                height: 120,
+                child: imageUrl.isNotEmpty && imageUrl.startsWith('http')
+                    ? CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(color: Colors.grey[900]),
+                        errorWidget: (context, url, error) => Container(
+                          color: Colors.grey[900],
+                          child: const Icon(Icons.storefront, color: Colors.white24, size: 36),
+                        ),
+                      )
+                    : Container(
+                        color: Colors.grey[900],
+                        child: const Icon(Icons.storefront, color: Colors.white24, size: 36),
+                      ),
               ),
             ),
             Expanded(

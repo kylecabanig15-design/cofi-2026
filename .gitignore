@@ -22,6 +22,7 @@ Podfile.lock
 DerivedData/
 *.moved-aside
 *.xcuserstate
+backups/
 
 # IDEs
 .idea/

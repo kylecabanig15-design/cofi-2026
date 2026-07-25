@@ -144,10 +144,39 @@ class CommunityTab extends StatelessWidget {
                 final allEvents = [...ongoingEvents, ...upcomingEvents];
 
                 if (allEvents.isEmpty) {
-                  return TextWidget(
-                    text: 'No upcoming events',
-                    fontSize: 14,
-                    color: Colors.white60,
+                  return Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.symmetric(horizontal: 24),
+                    padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E1E),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withOpacity(0.08)),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.event_busy_rounded,
+                          size: 36,
+                          color: Colors.white38,
+                        ),
+                        const SizedBox(height: 10),
+                        TextWidget(
+                          text: 'No Upcoming Events',
+                          fontSize: 15,
+                          isBold: true,
+                          color: Colors.white70,
+                        ),
+                        const SizedBox(height: 4),
+                        TextWidget(
+                          text: 'Check back later for community updates!',
+                          fontSize: 12,
+                          color: Colors.white38,
+                        ),
+                      ],
+                    ),
                   );
                 }
 
@@ -171,19 +200,20 @@ class CommunityTab extends StatelessWidget {
                       borderRadius: BorderRadius.circular(18),
                       child: Stack(
                         children: [
-                          Container(
+                          SizedBox(
                             height: 220,
                             width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: Colors.black,
-                              borderRadius: BorderRadius.circular(18),
-                              image: DecorationImage(
-                                  opacity: 0.65,
-                                  image: CachedNetworkImageProvider(
-                                    eventData['imageUrl'] ?? '',
-                                  ),
-                                  fit: BoxFit.cover),
-                            ),
+                            child: (eventData['imageUrl']?.toString().startsWith('http') == true)
+                                ? CachedNetworkImage(
+                                    imageUrl: eventData['imageUrl'],
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => Container(color: Colors.grey[900]),
+                                    errorWidget: (context, url, error) => Container(
+                                      color: Colors.grey[900],
+                                      child: const Icon(Icons.event, color: Colors.white24, size: 48),
+                                    ),
+                                  )
+                                : Container(color: Colors.grey[900]),
                           ),
                           Positioned(
                             left: 12,

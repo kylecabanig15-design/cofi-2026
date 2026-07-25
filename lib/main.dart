@@ -17,10 +17,14 @@ void main() async {
     );
     print('Firebase initialized');
 
-    FirebaseFirestore.instance.settings = const Settings(
-      persistenceEnabled: true,
-      cacheSizeBytes: 100 * 1024 * 1024,
-    );
+    try {
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+        cacheSizeBytes: 100 * 1024 * 1024,
+      );
+    } catch (e) {
+      print('Firestore settings already initialized or recovered: $e');
+    }
 
     await GetStorage.init();
     print('GetStorage initialized');

@@ -149,14 +149,16 @@ class CafeDetailsScreen extends StatelessWidget {
     final String address = (s['address'] ?? '') as String;
     final String about = (s['about'] ?? '') as String;
     final List<String> tags = (s['tags'] as List?)?.cast<String>() ?? const [];
-    final Map<String, dynamic> schedule =
-        (s['schedule'] ?? {}) as Map<String, dynamic>;
+    final Map<String, dynamic> schedule = (s['schedule'] is Map)
+        ? Map<String, dynamic>.from(s['schedule'] as Map)
+        : <String, dynamic>{};
     final num ratings = (s['ratings'] is num) ? s['ratings'] as num : 0;
     final List reviews = (s['reviews'] as List?) ?? const [];
     final String ratingText = '${ratings.toStringAsFixed(1)} (${reviews.length})';
     final String scheduleText = _scheduleToText(schedule);
-    final Map<String, dynamic> contacts =
-        (s['contacts'] ?? {}) as Map<String, dynamic>;
+    final Map<String, dynamic> contacts = (s['contacts'] is Map)
+        ? Map<String, dynamic>.from(s['contacts'] as Map)
+        : <String, dynamic>{};
     final bool isVerified = (s['isVerified'] as bool?) ?? false;
     final String submissionType = (s['submissionType'] as String?) ?? 'community';
 
@@ -474,7 +476,9 @@ class CafeDetailsScreen extends StatelessWidget {
         s.isEmpty ? s : s[0].toUpperCase() + s.substring(1).toLowerCase();
     final lines = <String>[];
     for (final d in days) {
-      final day = (schedule[d] ?? {}) as Map<String, dynamic>;
+      final day = (schedule[d] is Map)
+          ? Map<String, dynamic>.from(schedule[d] as Map)
+          : <String, dynamic>{};
       final isOpen = (day['isOpen'] ?? false) == true;
       final open = (day['open'] ?? '') as String;
       final close = (day['close'] ?? '') as String;

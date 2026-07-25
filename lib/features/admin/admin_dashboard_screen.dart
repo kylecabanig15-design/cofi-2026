@@ -45,6 +45,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   String _approvedSourceFilter = 'All'; // 'All', 'Community', 'Business'
   String _searchQuery = '';
 
+  // Sub-tab Segmented Switcher State
+  int _claimsSubTab = 0;
+  int _rejectedSubTab = 0;
+  int _archiveSubTab = 0;
+
 
   @override
   void initState() {
@@ -259,12 +264,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               TabBar(
                 controller: _tabController,
                 isScrollable: true,
+                tabAlignment: TabAlignment.start,
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.grey,
                 indicatorWeight: 0,
                 indicatorSize: TabBarIndicatorSize.tab,
                 dividerColor: Colors.transparent,
-                padding: const EdgeInsets.only(left: 10, right: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 indicator: BoxDecoration(
                   borderRadius: BorderRadius.circular(25),
                   color: primary,
@@ -320,13 +326,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   Tab _buildTab(String text, IconData icon) {
     return Tab(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 18),
-            const SizedBox(width: 8),
-            Text(text, style: const TextStyle(fontWeight: FontWeight.bold)),
+            Icon(icon, size: 16),
+            const SizedBox(width: 6),
+            Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           ],
         ),
       ),
@@ -689,64 +695,102 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       ? Row(
                           children: [
                             _buildStatusIndicator(approvalStatus, isVerified),
-                            const Spacer(),
-                            // Publish/Unpublish Toggle
-                            TextButton.icon(
-                              onPressed: () => _togglePublishShop(shopId, isHidden),
-                              icon: Icon(
-                                isHidden ? Icons.visibility_rounded : Icons.visibility_off_rounded,
-                                size: 14,
-                                color: Colors.blueAccent,
-                              ),
-                              label: Text(
-                                isHidden ? 'PUBLISH' : 'UNPUBLISH',
-                                style: const TextStyle(fontSize: 11, color: Colors.blueAccent, fontWeight: FontWeight.bold),
-                              ),
-                            ),
                             const SizedBox(width: 8),
-                            // Archive Button
-                            TextButton.icon(
-                              onPressed: () => _archiveShop(shopId),
-                              icon: const Icon(Icons.archive_rounded, size: 14, color: Colors.orange),
-                              label: const Text(
-                                'ARCHIVE',
-                                style: TextStyle(fontSize: 11, color: Colors.orange, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ],
-                        )
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            _buildStatusIndicator(approvalStatus, isVerified),
-                            Row(
-                              children: [
-                                if (approvalStatus == 'archived')
+                            Expanded(
+                              child: Wrap(
+                                alignment: WrapAlignment.end,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 4,
+                                runSpacing: 4,
+                                children: [
+                                  // Publish/Unpublish Toggle
                                   TextButton.icon(
-                                    onPressed: () => _deleteShopPermanently(shopId, name),
-                                    icon: const Icon(Icons.delete_forever_rounded, size: 14, color: Colors.redAccent),
-                                    label: const Text(
-                                      'DELETE',
-                                      style: TextStyle(fontSize: 11, color: Colors.redAccent, fontWeight: FontWeight.bold),
+                                    onPressed: () => _togglePublishShop(shopId, isHidden),
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    icon: Icon(
+                                      isHidden ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                                      size: 13,
+                                      color: Colors.blueAccent,
+                                    ),
+                                    label: Text(
+                                      isHidden ? 'PUBLISH' : 'UNPUBLISH',
+                                      style: const TextStyle(fontSize: 11, color: Colors.blueAccent, fontWeight: FontWeight.bold),
                                     ),
                                   ),
-
-                                const SizedBox(width: 8),
-                                TextButton(
-                                  onPressed: () => _revertToPending(shopId),
-                                  child: const Text('Revert to Pending',
-                                      style: TextStyle(fontSize: 12, color: Colors.blue)),
-                                ),
-                                                                if (approvalStatus == 'rejected')
+                                  // Archive Button
                                   TextButton.icon(
                                     onPressed: () => _archiveShop(shopId),
-                                    icon: const Icon(Icons.archive_rounded, size: 14, color: Colors.orange),
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    icon: const Icon(Icons.archive_rounded, size: 13, color: Colors.orange),
                                     label: const Text(
                                       'ARCHIVE',
                                       style: TextStyle(fontSize: 11, color: Colors.orange, fontWeight: FontWeight.bold),
                                     ),
                                   ),
-                              ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            _buildStatusIndicator(approvalStatus, isVerified),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Wrap(
+                                alignment: WrapAlignment.end,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 4,
+                                runSpacing: 4,
+                                children: [
+                                  if (approvalStatus == 'archived')
+                                    TextButton.icon(
+                                      onPressed: () => _deleteShopPermanently(shopId, name),
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      icon: const Icon(Icons.delete_forever_rounded, size: 13, color: Colors.redAccent),
+                                      label: const Text(
+                                        'DELETE',
+                                        style: TextStyle(fontSize: 11, color: Colors.redAccent, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  TextButton(
+                                    onPressed: () => _revertToPending(shopId),
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: const Text('Revert to Pending',
+                                        style: TextStyle(fontSize: 11, color: Colors.blue)),
+                                  ),
+                                  if (approvalStatus == 'rejected')
+                                    TextButton.icon(
+                                      onPressed: () => _archiveShop(shopId),
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      icon: const Icon(Icons.archive_rounded, size: 13, color: Colors.orange),
+                                      label: const Text(
+                                        'ARCHIVE',
+                                        style: TextStyle(fontSize: 11, color: Colors.orange, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -1187,44 +1231,105 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     }
   }
 
+  Widget _buildSegmentedFilter({
+    required String label1,
+    required String label2,
+    required int selectedIndex,
+    required ValueChanged<int> onSelected,
+  }) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => onSelected(0),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: selectedIndex == 0 ? primary : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  label1,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: selectedIndex == 0 ? Colors.white : Colors.grey[400],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => onSelected(1),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: selectedIndex == 1 ? primary : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  label2,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: selectedIndex == 1 ? Colors.white : Colors.grey[400],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRejectedCombinedTab() {
     return Column(
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 24, 16, 12),
-          child: Text('DENIED SHOPS', style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+        _buildSegmentedFilter(
+          label1: 'Denied Shops',
+          label2: 'Rejected Claims',
+          selectedIndex: _rejectedSubTab,
+          onSelected: (idx) => setState(() => _rejectedSubTab = idx),
         ),
         Expanded(
-          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('shops')
-                .where('approvalStatus', isEqualTo: 'rejected')
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return const Center(child: Padding(
-                  padding: EdgeInsets.all(20.0),
-                  child: Text('No denied shops', style: TextStyle(color: Colors.white10, fontSize: 13)),
-                ));
-              }
-              return ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: snapshot.data!.docs.length,
-                itemBuilder: (context, index) {
-                  final doc = snapshot.data!.docs[index];
-                  return _buildShopCard(doc.id, doc.data(), 'rejected');
-                },
-              );
-            },
-          ),
-        ),
-        const Divider(color: Colors.white12, height: 1),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 24, 16, 12),
-          child: Text('REJECTED CLAIMS', style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-        ),
-        Expanded(
-          child: _buildClaimsList(status: 'rejected', isEmbedded: true),
+          child: _rejectedSubTab == 0
+              ? StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('shops')
+                      .where('approvalStatus', isEqualTo: 'rejected')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                      return const Center(child: Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: Text('No denied shops', style: TextStyle(color: Colors.white24, fontSize: 13)),
+                      ));
+                    }
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: snapshot.data!.docs.length,
+                      itemBuilder: (context, index) {
+                        final doc = snapshot.data!.docs[index];
+                        return _buildShopCard(doc.id, doc.data(), 'rejected');
+                      },
+                    );
+                  },
+                )
+              : _buildClaimsList(status: 'rejected', isEmbedded: false),
         ),
       ],
     );
@@ -1233,121 +1338,95 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   Widget _buildArchiveCombinedTab() {
     return Column(
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 24, 16, 12),
-          child: Text('ARCHIVED SHOPS', style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+        _buildSegmentedFilter(
+          label1: 'Archived Shops',
+          label2: 'Claim History',
+          selectedIndex: _archiveSubTab,
+          onSelected: (idx) => setState(() => _archiveSubTab = idx),
         ),
         Expanded(
-          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('shops')
-                .where('approvalStatus', isEqualTo: 'archived')
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return const Center(child: Padding(
-                  padding: EdgeInsets.all(20.0),
-                  child: Text('No archived shops', style: TextStyle(color: Colors.white10, fontSize: 13)),
-                ));
-              }
-              return ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: snapshot.data!.docs.length,
-                itemBuilder: (context, index) {
-                  final doc = snapshot.data!.docs[index];
-                  return _buildShopCard(doc.id, doc.data(), 'archived');
-                },
-              );
-            },
-          ),
-        ),
-        const Divider(color: Colors.white12, height: 1),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 24, 16, 12),
-          child: Text('CLAIM HISTORY', style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-        ),
-        Expanded(
-          child: _buildClaimsList(status: 'approved', isEmbedded: true),
+          child: _archiveSubTab == 0
+              ? StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('shops')
+                      .where('approvalStatus', isEqualTo: 'archived')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                      return const Center(child: Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: Text('No archived shops', style: TextStyle(color: Colors.white24, fontSize: 13)),
+                      ));
+                    }
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: snapshot.data!.docs.length,
+                      itemBuilder: (context, index) {
+                        final doc = snapshot.data!.docs[index];
+                        return _buildShopCard(doc.id, doc.data(), 'archived');
+                      },
+                    );
+                  },
+                )
+              : _buildClaimsList(status: 'approved', isEmbedded: false),
         ),
       ],
     );
   }
 
   Widget _buildCombinedClaimsTab() {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          // 1. Direct Business Submissions (Shops in 'awaiting_verification')
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 24, 16, 12),
-            child: Row(
-              children: [
-                Icon(Icons.business_center, color: Colors.blueAccent, size: 14),
-                SizedBox(width: 8),
-                Text('NEW BUSINESS SHOP VERIFICATIONS', style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-              ],
-            ),
-          ),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('shops')
-                .where('approvalStatus', isEqualTo: 'awaiting_verification')
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20),
-                  child: Center(child: Text('No direct business submissions', style: TextStyle(color: Colors.white10, fontSize: 13))),
-                );
-              }
-              return ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: snapshot.data!.docs.length,
-                itemBuilder: (context, index) {
-                  final doc = snapshot.data!.docs[index];
-                  final data = doc.data();
-                  // Map Shop data to Claim card format
-                  final mappedData = {
-                    'shopId': doc.id,
-                    'shopName': data['name'],
-                    'claimantEmail': (data['postedBy'] as Map?)?['email'] ?? 'User Submittal',
-                    'claimantId': data['posterId'] ?? data['ownerId'],
-                    'status': 'awaiting_verification', 
-                    'createdAt': data['postedAt'],
-                    'isDirectSubmission': true,
-                    'permitImageUrl': data['permitImageUrl'],
-                    'idImageUrl': data['idImageUrl'],
-                    'businessLegalName': data['businessLegalName'],
-                    'applicantRole': data['applicantRole'],
-                    'verificationDocReference': data['verificationDocReference'],
-                    'legalAttestation': data['legalAttestation'],
-                    'legalTermsAccepted': data['legalTermsAccepted'],
-                    'dataProcessingConsent': data['dataProcessingConsent'],
-                  };
-                  return _buildClaimCard(doc.id, mappedData);
-                },
-              );
-            },
-          ),
-          
-          const Divider(color: Colors.white12, height: 1),
-          
-          // 2. Manual Shop Claims (shop_claims collection)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 24, 16, 12),
-            child: Row(
-              children: [
-                Icon(Icons.assignment_ind, color: Colors.purpleAccent, size: 14),
-                SizedBox(width: 8),
-                Text('EXISTING SHOP OWNERSHIP CLAIMS', style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-              ],
-            ),
-          ),
-          _buildClaimsList(status: 'pending', isEmbedded: true),
-        ],
-      ),
+    return Column(
+      children: [
+        _buildSegmentedFilter(
+          label1: 'Business Verifications',
+          label2: 'Ownership Claims',
+          selectedIndex: _claimsSubTab,
+          onSelected: (idx) => setState(() => _claimsSubTab = idx),
+        ),
+        Expanded(
+          child: _claimsSubTab == 0
+              ? StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('shops')
+                      .where('approvalStatus', isEqualTo: 'awaiting_verification')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                      return const Center(
+                        child: Text('No direct business submissions', style: TextStyle(color: Colors.white24, fontSize: 13)),
+                      );
+                    }
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: snapshot.data!.docs.length,
+                      itemBuilder: (context, index) {
+                        final doc = snapshot.data!.docs[index];
+                        final data = doc.data();
+                        final mappedData = {
+                          'shopId': doc.id,
+                          'shopName': data['name'],
+                          'claimantEmail': (data['postedBy'] as Map?)?['email'] ?? 'User Submittal',
+                          'claimantId': data['posterId'] ?? data['ownerId'],
+                          'status': 'awaiting_verification', 
+                          'createdAt': data['postedAt'],
+                          'isDirectSubmission': true,
+                          'permitImageUrl': data['permitImageUrl'],
+                          'idImageUrl': data['idImageUrl'],
+                          'businessLegalName': data['businessLegalName'],
+                          'applicantRole': data['applicantRole'],
+                          'verificationDocReference': data['verificationDocReference'],
+                          'legalAttestation': data['legalAttestation'],
+                          'legalTermsAccepted': data['legalTermsAccepted'],
+                          'dataProcessingConsent': data['dataProcessingConsent'],
+                        };
+                        return _buildClaimCard(doc.id, mappedData);
+                      },
+                    );
+                  },
+                )
+              : _buildClaimsList(status: 'pending', isEmbedded: false),
+        ),
+      ],
     );
   }
 
