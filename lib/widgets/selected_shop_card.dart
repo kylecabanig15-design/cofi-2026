@@ -34,12 +34,12 @@ class SelectedShopCard extends StatelessWidget {
       child: Container(
         height: 120,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: const Color(0xFF1C1C1E), // Bug 2b fix: match dark theme of nearby cafes sheet
           borderRadius: BorderRadius.circular(15),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 10,
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 12,
               offset: const Offset(0, 4),
             ),
           ],
@@ -87,6 +87,7 @@ class SelectedShopCard extends StatelessWidget {
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                               fontFamily: 'Bold',
+                              color: Colors.white,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -97,11 +98,11 @@ class SelectedShopCard extends StatelessWidget {
                           child: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
-                              color: Colors.grey[200],
+                              color: Colors.white12,
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(Icons.close,
-                                size: 16, color: Colors.grey),
+                                size: 16, color: Colors.white54),
                           ),
                         ),
                       ],
@@ -111,7 +112,7 @@ class SelectedShopCard extends StatelessWidget {
                       address,
                       style: const TextStyle(
                         fontSize: 12,
-                        color: Colors.grey,
+                        color: Colors.white54,
                         fontFamily: 'Regular',
                       ),
                       maxLines: 2,
@@ -152,6 +153,7 @@ class SelectedShopCard extends StatelessWidget {
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
                                     fontFamily: 'Bold',
+                                    color: Colors.white,
                                   ),
                                 ),
                               ],

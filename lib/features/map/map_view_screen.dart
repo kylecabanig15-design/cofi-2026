@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:cofi/widgets/coffee_shop_details_bottom_sheet.dart';
+import 'package:cofi/features/cafe/cafe_details_screen.dart';
 import 'package:cofi/widgets/selected_shop_card.dart';
 
 class MapViewScreen extends StatefulWidget {
@@ -22,10 +22,38 @@ class _MapViewScreenState extends State<MapViewScreen> {
   Map<String, dynamic>? _selectedShopData;
   String? _selectedShopId;
   bool _locationPermissionGranted = false;
+  // Indicates if we have finished checking permissions, so the map can render.
+  bool _isPermissionResolved = false;
+  // Tracks whether the user has manually moved the map.
+  // When true, we skip the auto-center after GPS resolves so we don't
+  // hijack the camera away from where the user is looking.
+  bool _userHasInteracted = false;
+  
+  // Tracks the live camera position. If the native map is forced to rebuild 
+  // (e.g., when myLocationEnabled changes), we restore exactly to this spot.
+  CameraPosition? _currentCameraPosition;
+
+  // Cached streams to prevent map rebuilds on setState
+  Stream<DocumentSnapshot<Map<String, dynamic>>>? _userStream;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _shopsStream;
 
   @override
   void initState() {
     super.initState();
+    
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      _userStream = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .snapshots();
+    }
+    
+    _shopsStream = FirebaseFirestore.instance
+        .collection('shops')
+        .where('isVerified', isEqualTo: true)
+        .snapshots();
+        
     // ----------------------------------------------------------------------
     // STEP A: Coordinate Acquisition (Permission & GPS)
     // ----------------------------------------------------------------------
@@ -43,7 +71,10 @@ class _MapViewScreenState extends State<MapViewScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Please enable Location Services')));
         }
-        setState(() => _isLoadingLocation = false);
+        setState(() {
+          _isPermissionResolved = true;
+          _isLoadingLocation = false;
+        });
         return;
       }
 
@@ -62,7 +93,10 @@ class _MapViewScreenState extends State<MapViewScreen> {
             ),
           );
         }
-        setState(() => _isLoadingLocation = false);
+        setState(() {
+          _isPermissionResolved = true;
+          _isLoadingLocation = false;
+        });
         return;
       }
 
@@ -74,27 +108,33 @@ class _MapViewScreenState extends State<MapViewScreen> {
           setState(() {
             _isLoadingLocation = false;
             _locationPermissionGranted = false;
+            _isPermissionResolved = true;
           });
           return;
         }
       }
 
+      // PERMISSION RESOLVED.
+      // Build the GoogleMap NOW with myLocationEnabled: true from the very start.
+      // This prevents the native map from ever flashing or tearing down!
       setState(() {
         _locationPermissionGranted = true;
+        _isPermissionResolved = true;
       });
 
-      // Get current position
+      // Now wait for the slow GPS fetch (1-2 seconds)
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
 
+      // Apply the location without touching map permission properties
       setState(() {
         _userLocation = LatLng(position.latitude, position.longitude);
         _isLoadingLocation = false;
       });
 
-      // Center map on user's location ONLY if no shop is selected
-      if (_userLocation != null && _mapController != null && _selectedShopId == null) {
+      // Only auto-center if the user hasn't moved the map themselves yet
+      if (_userLocation != null && _mapController != null && _selectedShopId == null && !_userHasInteracted) {
         _mapController!.animateCamera(
           CameraUpdate.newLatLngZoom(_userLocation!, 14),
         );
@@ -103,6 +143,7 @@ class _MapViewScreenState extends State<MapViewScreen> {
       print('Error getting user location: $e');
       if (mounted) {
         setState(() {
+          _isPermissionResolved = true;
           _isLoadingLocation = false;
         });
       }
@@ -111,12 +152,12 @@ class _MapViewScreenState extends State<MapViewScreen> {
 
   void _recenterToUserLocation() {
     if (_userLocation != null && _mapController != null) {
+      // Reset the interaction flag so the map can auto-center again if needed
+      _userHasInteracted = false;
       _mapController!.animateCamera(
         CameraUpdate.newLatLngZoom(_userLocation!, 14),
       );
-      setState(() {
-        _showRecenterButton = false;
-      });
+      setState(() => _showRecenterButton = false);
     } else {
       _getUserLocation();
     }
@@ -124,42 +165,53 @@ class _MapViewScreenState extends State<MapViewScreen> {
 
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
-    // Prioritize selected shop location if one is selected
     if (_selectedShopId != null && _selectedShopData != null) {
       final lat = (_selectedShopData!['latitude'] as num?)?.toDouble();
       final lng = (_selectedShopData!['longitude'] as num?)?.toDouble();
       if (lat != null && lng != null) {
         _mapController!.animateCamera(
-          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 18),
+          CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(lat, lng), zoom: 17.5)),
         );
       }
-    } else if (_userLocation != null) {
-      // Otherwise fallback to user location
+    } else if (_userLocation != null && !_userHasInteracted) {
+      // Only fly to user location on map creation if they haven't moved it yet
       _mapController!.animateCamera(
         CameraUpdate.newLatLngZoom(_userLocation!, 14),
       );
     }
   }
 
+  // Fires continuously as camera moves — NO setState here to avoid rebuild loops
   void _onCameraMove(CameraPosition position) {
-    if (_showRecenterButton || _userLocation == null) return;
-
-    final distance = Geolocator.distanceBetween(
-      _userLocation!.latitude,
-      _userLocation!.longitude,
-      position.target.latitude,
-      position.target.longitude,
-    );
-
-    if (distance > 500 && !_showRecenterButton) {
-      setState(() {
-        _showRecenterButton = true;
-      });
-    } else if (distance <= 500 && _showRecenterButton) {
-      setState(() {
-        _showRecenterButton = false;
-      });
+    _currentCameraPosition = position;
+    
+    // Just record that the user has interacted; no rebuild triggered
+    if (!_userHasInteracted) {
+      _userHasInteracted = true;
     }
+  }
+
+  // Fires once when the camera fully stops moving (gesture or programmatic)
+  void _onCameraIdle() {
+    if (_userLocation == null) return;
+
+    // Get current camera position without a setState
+    _mapController?.getVisibleRegion().then((bounds) {
+      final center = LatLng(
+        (bounds.northeast.latitude + bounds.southwest.latitude) / 2,
+        (bounds.northeast.longitude + bounds.southwest.longitude) / 2,
+      );
+      final distance = Geolocator.distanceBetween(
+        _userLocation!.latitude,
+        _userLocation!.longitude,
+        center.latitude,
+        center.longitude,
+      );
+      final shouldShow = distance > 300;
+      if (shouldShow != _showRecenterButton) {
+        setState(() => _showRecenterButton = shouldShow);
+      }
+    });
   }
 
   @override
@@ -168,12 +220,7 @@ class _MapViewScreenState extends State<MapViewScreen> {
 
     return Scaffold(
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: user != null
-            ? FirebaseFirestore.instance
-                .collection('users')
-                .doc(user.uid)
-                .snapshots()
-            : null,
+        stream: _userStream,
         builder: (context, userSnap) {
           Set<String> bookmarks = {};
           if (userSnap.hasData && userSnap.data?.data() != null) {
@@ -182,13 +229,13 @@ class _MapViewScreenState extends State<MapViewScreen> {
           }
 
           return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('shops')
-                .where('isVerified', isEqualTo: true)
-                .snapshots(),
+            stream: _shopsStream,
             builder: (context, shopSnap) {
-              if (shopSnap.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
+              if (shopSnap.connectionState == ConnectionState.waiting || !_isPermissionResolved) {
+                return const Scaffold(
+                  backgroundColor: Colors.black,
+                  body: Center(child: CircularProgressIndicator(color: Colors.white)),
+                );
               }
 
               final docs = shopSnap.data?.docs ?? [];
@@ -246,21 +293,36 @@ class _MapViewScreenState extends State<MapViewScreen> {
                             // Optionally recenter map nicely or do nothing
                           });
                         },
-                        onToggleBookmark: () => _toggleBookmark(user, _selectedShopId!, bookmarks.contains(_selectedShopId)),
-                        onTap: () => _showShopDetails(_selectedShopId!, _selectedShopData!, bookmarks),
+                        onToggleBookmark: () {
+                          if (_selectedShopId != null) {
+                            _toggleBookmark(user, _selectedShopId!, bookmarks.contains(_selectedShopId));
+                          }
+                        },
+                        onTap: () {
+                          if (_selectedShopId != null && _selectedShopData != null) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => CafeDetailsScreen(shopId: _selectedShopId!, shop: _selectedShopData!),
+                              ),
+                            );
+                          }
+                        },
                       ),
                     ),
 
                   // 5. Recenter Button
                   if (_showRecenterButton)
                     Positioned(
-                      bottom: _selectedShopId != null ? 150 : 120, // Move up if card is shown, though list obscures it usually
-                      right: 20,
-                      child: FloatingActionButton(
-                        onPressed: _recenterToUserLocation,
-                        backgroundColor: Colors.white,
-                        mini: true,
-                        child: const Icon(Icons.my_location, color: Colors.black87),
+                      top: 16,
+                      right: 16,
+                      child: SafeArea(
+                        child: FloatingActionButton(
+                          onPressed: _recenterToUserLocation,
+                          backgroundColor: Colors.white,
+                          mini: true,
+                          child: const Icon(Icons.my_location, color: Colors.black87),
+                        ),
                       ),
                     ),
                   
@@ -352,17 +414,21 @@ class _MapViewScreenState extends State<MapViewScreen> {
             ? markers.first.position
             : const LatLng(7.0647, 125.6088));
 
+    // If the map was already moved, preserve that exact position across rebuilds.
+    final initialPos = _currentCameraPosition ?? CameraPosition(
+      target: initialCenter,
+      zoom: 14,
+    );
+
     return GoogleMap(
-      key: const ValueKey('google_map_view'), // PREVENTS MAP RESET ON REBUILD
+      key: const ValueKey('google_map_view'),
       onMapCreated: _onMapCreated,
       onCameraMove: _onCameraMove,
-      initialCameraPosition: CameraPosition(
-        target: initialCenter,
-        zoom: 14,
-      ),
+      onCameraIdle: _onCameraIdle,
+      initialCameraPosition: initialPos,
       markers: markers,
       myLocationEnabled: _locationPermissionGranted,
-      myLocationButtonEnabled: true,
+      myLocationButtonEnabled: false,
       zoomControlsEnabled: false,
       onTap: (_) {
         if (_selectedShopId != null) {
@@ -372,7 +438,7 @@ class _MapViewScreenState extends State<MapViewScreen> {
           });
         }
       },
-      padding: const EdgeInsets.only(bottom: 120), // Constant padding to avoid layout shifts
+      padding: const EdgeInsets.only(bottom: 120),
     );
   }
 
@@ -638,25 +704,30 @@ class _MapViewScreenState extends State<MapViewScreen> {
   }
 
   void _selectShop(String id, Map<String, dynamic> data) {
-    // 1. Update UI state first
+    // Extract coords BEFORE setState so we don't trigger an extra rebuild
+    final latRaw = data['latitude'];
+    final lngRaw = data['longitude'];
+    final double? lat = (latRaw is num) ? latRaw.toDouble() : double.tryParse(latRaw?.toString() ?? '');
+    final double? lng = (lngRaw is num) ? lngRaw.toDouble() : double.tryParse(lngRaw?.toString() ?? '');
+
+    // Update selection state
     setState(() {
       _selectedShopId = id;
       _selectedShopData = data;
       _showRecenterButton = false;
     });
 
-    final latRaw = data['latitude'];
-    final lngRaw = data['longitude'];
-    
-    final double? lat = (latRaw is num) ? latRaw.toDouble() : double.tryParse(latRaw?.toString() ?? '');
-    final double? lng = (lngRaw is num) ? lngRaw.toDouble() : double.tryParse(lngRaw?.toString() ?? '');
-
-    // 2. Animate camera after the frame build ensures the map is ready and layout is stable
+    // Delay camera animation so the widget rebuild fully settles first.
+    // This prevents the black/white tile flash caused by animating during a rebuild.
     if (lat != null && lng != null && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _mapController?.animateCamera(
-          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 18),
-        );
+      Future.delayed(const Duration(milliseconds: 200), () {
+        if (mounted && _mapController != null) {
+          _mapController!.animateCamera(
+            CameraUpdate.newCameraPosition(
+              CameraPosition(target: LatLng(lat, lng), zoom: 17.0),
+            ),
+          );
+        }
       });
     }
   }
@@ -680,30 +751,6 @@ class _MapViewScreenState extends State<MapViewScreen> {
         'bookmarks': [shopId],
       }, SetOptions(merge: true));
     }
-  }
-
-  void _showShopDetails(String shopId, Map<String, dynamic> data, Set<String> bookmarks) {
-    final name = (data['name'] as String?) ?? 'Unknown';
-    final address = (data['address'] as String?) ?? '';
-    final embeddedAvg = ((data['ratings'] as num?)?.toDouble() ?? 0.0);
-    final embeddedCount = ((data['reviews'] as List?)?.length ?? 0);
-    final hours = _formatTodayHours((data['schedule'] as Map<String, dynamic>?) ?? {});
-    final gallery = (data['gallery'] as List?)?.cast<String>() ?? [];
-    final imageUrl = gallery.isNotEmpty ? gallery[0] : '';
-    final logoUrl = (data['logoUrl'] as String?) ?? '';
-
-    CoffeeShopDetailsBottomSheet.show(
-      context,
-      imageUrl: imageUrl,
-      shopId: shopId,
-      name: name,
-      location: address,
-      hours: hours,
-      rating: '${embeddedAvg.toStringAsFixed(1)} ($embeddedCount)',
-      isBookmarked: bookmarks.contains(shopId),
-      onToggleBookmark: () => _toggleBookmark(FirebaseAuth.instance.currentUser, shopId, bookmarks.contains(shopId)),
-      logoUrl: logoUrl,
-    );
   }
 
   String _formatTodayHours(Map<String, dynamic> schedule) {

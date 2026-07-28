@@ -10,21 +10,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/widgets/list_bottom_sheet.dart';
 import 'package:cofi/utils/formatters.dart';
 
+// ─── Part Files ───────────────────────────────────────────────────────────────
+
 /// ============================================================================
-/// ADMIN DASHBOARD SCREEN (Panel Requirement: RBAC)
+/// ADMIN DASHBOARD SCREEN
 /// ============================================================================
-/// 
-/// This screen is only accessible to users with `isAdmin: true` in their
-/// Firestore document. It provides functionality to:
-/// 
-/// 1. View pending shop submissions (both community and business)
-/// 2. Approve or reject shop submissions
-/// 3. Distinguish between "Community Added" and "Business Claimed" shops
-/// 
-/// Access Control:
-/// - Hidden from regular users
-/// - Route guarded in auth_gate.dart
-/// - isAdmin flag can only be set via Firebase Console
+/// Accessible only to users with isAdmin: true in Firestore.
+/// All tab content, actions, and widgets are split across part files.
 /// ============================================================================
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -39,10 +31,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   late TabController _tabController;
   bool _isAdmin = false;
   bool _isLoading = true;
-  
+
   // Search & Filter State
   final TextEditingController _searchController = TextEditingController();
-  String _approvedSourceFilter = 'All'; // 'All', 'Community', 'Business'
+  String _approvedSourceFilter = 'All';
+  String _rejectedSourceFilter = 'All';
+  String _archiveSourceFilter = 'All';
   String _searchQuery = '';
 
   // Sub-tab Segmented Switcher State
@@ -50,11 +44,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   int _rejectedSubTab = 0;
   int _archiveSubTab = 0;
 
+  // Bulk Selection State
+  bool _isSelectionMode = false;
+  Set<String> _selectedShopIds = {};
+  Set<String> _selectedClaimIds = {};
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
+    _tabController.addListener(() {
+      if (_isSelectionMode) {
+        setState(() {
+          _isSelectionMode = false;
+          _selectedShopIds.clear();
+          _selectedClaimIds.clear();
+        });
+      }
+    });
     _checkAdminStatus();
   }
 
@@ -68,68 +75,37 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   Future<void> _checkAdminStatus() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      setState(() {
-        _isLoading = false;
-        _isAdmin = false;
-      });
+      setState(() { _isLoading = false; _isAdmin = false; });
       return;
     }
-
     try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       final isAdminVal = userDoc.data()?['isAdmin'];
       final isAdmin = (isAdminVal == true) || (isAdminVal?.toString().toLowerCase() == 'true');
-
-      setState(() {
-        _isAdmin = isAdmin;
-        _isLoading = false;
-      });
+      setState(() { _isAdmin = isAdmin; _isLoading = false; });
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _isAdmin = false;
-      });
+      setState(() { _isLoading = false; _isAdmin = false; });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator()));
     }
-
     if (!_isAdmin) {
       return Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
           backgroundColor: Colors.black,
-          title: TextWidget(
-            text: 'Access Denied',
-            fontSize: 20,
-            color: Colors.white,
-            isBold: true,
-          ),
+          title: TextWidget(text: 'Access Denied', fontSize: 20, color: Colors.white, isBold: true),
         ),
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.lock, size: 64, color: Colors.red),
-              const SizedBox(height: 16),
-              TextWidget(
-                text: 'Admin access required',
-                fontSize: 18,
-                color: Colors.white70,
-              ),
-            ],
-          ),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Icon(Icons.lock, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            TextWidget(text: 'Admin access required', fontSize: 18, color: Colors.white70),
+          ]),
         ),
       );
     }
@@ -142,184 +118,113 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         toolbarHeight: 90,
         title: Padding(
           padding: const EdgeInsets.only(top: 16),
-          child: Row(
-            children: [
-              // Profile Image
-              StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                stream: FirebaseAuth.instance.currentUser != null
-                    ? FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(FirebaseAuth.instance.currentUser!.uid)
-                        .snapshots()
-                    : null,
-                builder: (context, snapshot) {
-                  final data = snapshot.data?.data();
-                  final photoUrl = (data?['photoUrl'] as String?)?.trim();
-
-                  return Container(
-                    width: 50,
-                    height: 50,
-                    decoration: const BoxDecoration(
-                      color: primary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: ClipOval(
-                      child: (photoUrl != null && photoUrl.isNotEmpty)
-                          ? CachedNetworkImage(
-                              imageUrl: photoUrl,
-                              width: 50,
-                              height: 50,
-                              fit: BoxFit.cover,
-                              errorWidget: (context, url, error) =>
-                                  const Icon(Icons.person, color: Colors.white),
-                            )
-                          : const Icon(Icons.person, color: Colors.white),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                   StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                    stream: FirebaseAuth.instance.currentUser != null
-                        ? FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(FirebaseAuth.instance.currentUser!.uid)
-                            .snapshots()
-                        : null,
-                    builder: (context, snapshot) {
-                      final data = snapshot.data?.data();
-                      final name = (data?['name'] as String?)?.trim();
-                      final displayName = (name?.isNotEmpty == true)
-                          ? name!
-                          : (FirebaseAuth.instance.currentUser?.displayName ?? 'Admin');
-                      
-                      return TextWidget(
-                        text: displayName,
-                        fontSize: 20,
-                        color: Colors.white,
-                        isBold: true,
-                      );
-                    },
-                  ),
-                  TextWidget(
-                    text: 'Admin Center',
-                    fontSize: 13,
-                    color: primary,
-                    isBold: true,
-                  ),
-                ],
-              ),
-            ],
-          ),
+          child: Row(children: [
+            _buildAdminAvatar(),
+            const SizedBox(width: 12),
+            _buildAdminTitle(),
+          ]),
         ),
         actions: [
-          // Settings Button
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SettingsScreen()),
-              );
-            },
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
           ),
-          // Sync Logos Button
-          //Container(
-          //   margin: const EdgeInsets.only(right: 8),
-          //   decoration: BoxDecoration(
-          //     color: Colors.purple.withOpacity(0.1),
-          //     borderRadius: BorderRadius.circular(12),
-          //   ),
-          //   child: IconButton(
-          //     icon: const Icon(Icons.sync_rounded, color: Colors.purple, size: 20),
-          //     tooltip: 'Sync Shared Logos',
-          //     onPressed: _runLogoSync,
-          //   ),
-          // ),
-          // Cleanup Button
-          //Container(
-          //   margin: const EdgeInsets.only(right: 16),
-          //   decoration: BoxDecoration(
-          //     color: Colors.orange.withOpacity(0.1),
-          //     borderRadius: BorderRadius.circular(12),
-          //   ),
-          //   child: IconButton(
-          //     icon: const Icon(Icons.cleaning_services_rounded, color: Colors.orange, size: 20),
-          //     tooltip: 'Cleanup Firestore',
-          //     onPressed: _showCleanupDialog,
-          //   ),
-          // ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(170),
-          child: Column(
-            children: [
-              // Stats at a Glance
-              const SizedBox(height: 8),
-              _buildStatsAtAGlance(),
-              const SizedBox(height: 16),
-              TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                tabAlignment: TabAlignment.start,
-                labelColor: Colors.white,
-                unselectedLabelColor: Colors.grey,
-                indicatorWeight: 0,
-                indicatorSize: TabBarIndicatorSize.tab,
-                dividerColor: Colors.transparent,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                indicator: BoxDecoration(
-                  borderRadius: BorderRadius.circular(25),
-                  color: primary,
-                  boxShadow: [
-                    BoxShadow(
-                      color: primary.withOpacity(0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                tabs: [
-                  _buildTab('Pending', Icons.pending_actions_rounded),
-                  _buildTab('Claims', Icons.assignment_ind_rounded),
-                  _buildTab('Approved', Icons.verified_user_rounded),
-                  _buildTab('Rejected', Icons.block_flipped),
-                  _buildTab('Archive', Icons.history_edu_rounded),
-                ],
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
+          child: Column(children: [
+            const SizedBox(height: 8),
+            _buildStatsAtAGlance(),
+            const SizedBox(height: 16),
+            _buildTabBar(),
+            const SizedBox(height: 16),
+          ]),
         ),
       ),
       body: Container(
         decoration: BoxDecoration(
           color: Colors.grey[900]!.withOpacity(0.5),
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(30),
-            topRight: Radius.circular(30),
-          ),
+          borderRadius: const BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30)),
         ),
         child: ClipRRect(
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(30),
-            topRight: Radius.circular(30),
-          ),
+          borderRadius: const BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30)),
           child: TabBarView(
             controller: _tabController,
             children: [
               _buildShopList('pending_approval'), // Pending Tab
-               _buildCombinedClaimsTab(),          // Claims Tab
+              _buildCombinedClaimsTab(),          // Claims Tab
               _buildShopList('approved'),         // Approved Tab
-              _buildRejectedCombinedTab(),        // Rejected Tab (Merged)
-              _buildArchiveCombinedTab(),         // Archive Tab (Merged)
+              _buildRejectedCombinedTab(),        // Rejected Tab
+              _buildArchiveCombinedTab(),         // Archive Tab
             ],
           ),
         ),
       ),
+    );
+  }
+
+  // ─── AppBar Helpers ────────────────────────────────────────────────────────
+
+  Widget _buildAdminAvatar() {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseAuth.instance.currentUser != null
+          ? FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser!.uid).snapshots()
+          : null,
+      builder: (context, snapshot) {
+        final photoUrl = (snapshot.data?.data()?['photoUrl'] as String?)?.trim();
+        return Container(
+          width: 50, height: 50,
+          decoration: const BoxDecoration(color: primary, shape: BoxShape.circle),
+          child: ClipOval(
+            child: (photoUrl != null && photoUrl.isNotEmpty)
+                ? CachedNetworkImage(imageUrl: photoUrl, width: 50, height: 50, fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => const Icon(Icons.person, color: Colors.white))
+                : const Icon(Icons.person, color: Colors.white),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAdminTitle() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: FirebaseAuth.instance.currentUser != null
+            ? FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser!.uid).snapshots()
+            : null,
+        builder: (context, snapshot) {
+          final name = (snapshot.data?.data()?['name'] as String?)?.trim();
+          final displayName = (name?.isNotEmpty == true) ? name! : (FirebaseAuth.instance.currentUser?.displayName ?? 'Admin');
+          return TextWidget(text: displayName, fontSize: 20, color: Colors.white, isBold: true);
+        },
+      ),
+      TextWidget(text: 'Admin Center', fontSize: 13, color: primary, isBold: true),
+    ]);
+  }
+
+  TabBar _buildTabBar() {
+    return TabBar(
+      controller: _tabController,
+      isScrollable: true,
+      tabAlignment: TabAlignment.start,
+      labelColor: Colors.white,
+      unselectedLabelColor: Colors.grey,
+      indicatorWeight: 0,
+      indicatorSize: TabBarIndicatorSize.tab,
+      dividerColor: Colors.transparent,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      indicator: BoxDecoration(
+        borderRadius: BorderRadius.circular(25),
+        color: primary,
+        boxShadow: [BoxShadow(color: primary.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      tabs: [
+        _buildTab('Pending', Icons.pending_actions_rounded),
+        _buildTab('Claims', Icons.assignment_ind_rounded),
+        _buildTab('Approved', Icons.verified_user_rounded),
+        _buildTab('Rejected', Icons.block_flipped),
+        _buildTab('Archive', Icons.history_edu_rounded),
+      ],
     );
   }
 
@@ -327,41 +232,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     return Tab(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16),
-            const SizedBox(width: 6),
-            Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-          ],
-        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 16),
+          const SizedBox(width: 6),
+          Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+        ]),
       ),
     );
   }
 
+  // ─── Stats At A Glance ─────────────────────────────────────────────────────
+
   Widget _buildStatsAtAGlance() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-      child: Row(
-        children: [
-          _buildStatSummary('Shops', 'pending_approval', Colors.orange, Icons.storefront),
-          const SizedBox(width: 16),
-          _buildStatSummary('Claims', 'pending', Colors.purpleAccent, Icons.assignment_ind),
-        ],
-      ),
+      child: Row(children: [
+        _buildStatSummary('Shops', 'pending_approval', Colors.orange, Icons.storefront),
+        const SizedBox(width: 16),
+        _buildStatSummary('Claims', 'pending', Colors.purpleAccent, Icons.assignment_ind),
+      ]),
     );
   }
 
   Widget _buildStatSummary(String label, dynamic status, Color color, IconData icon) {
     final collection = label == 'Shops' ? 'shops' : 'shop_claims';
     final field = label == 'Shops' ? 'approvalStatus' : 'status';
-
     Query query = FirebaseFirestore.instance.collection(collection);
-    if (status is String) {
-      query = query.where(field, isEqualTo: status);
-    } else if (status is List) {
-      query = query.where(field, whereIn: status as List<Object?>);
-    }
+    if (status is String) query = query.where(field, isEqualTo: status);
+    else if (status is List) query = query.where(field, whereIn: status as List<Object?>);
 
     return Expanded(
       child: StreamBuilder<QuerySnapshot>(
@@ -375,35 +273,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: color.withOpacity(0.2)),
             ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: color, size: 20),
-                ),
-                const SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextWidget(
-                      text: count.toString(),
-                      fontSize: 18,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                    TextWidget(
-                      text: 'Pending $label',
-                      fontSize: 11,
-                      color: Colors.white54,
-                    ),
-                  ],
-                ),
-              ],
-            ),
+            child: Row(children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: color.withOpacity(0.2), shape: BoxShape.circle),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 16),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                TextWidget(text: count.toString(), fontSize: 18, color: Colors.white, isBold: true),
+                TextWidget(text: 'Pending $label', fontSize: 11, color: Colors.white54),
+              ]),
+            ]),
           );
         },
       ),
@@ -444,6 +325,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           return Column(
             children: [
               if (uiStatus == 'approved') _buildSearchAndFilterBar(),
+              if (uiStatus == 'pending_approval') _buildSelectModeToggle(color: Colors.green),
+              if (uiStatus == 'approved') _buildSelectModeToggle(color: Colors.blueAccent),
               Expanded(
                 child: _buildEmptyState(
                   uiStatus == 'pending_approval'
@@ -511,9 +394,67 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           });
         }
 
+        // Compute selection info from the filtered docs
+        final allIds = docs.map((d) => d.id).toSet();
+        final total = docs.length;
+
         return Column(
           children: [
             if (uiStatus == 'approved') _buildSearchAndFilterBar(),
+            // Select Mode Toggle
+            if (uiStatus == 'pending_approval')
+              _buildSelectModeToggle(color: Colors.green),
+            if (uiStatus == 'approved')
+              _buildSelectModeToggle(color: Colors.blueAccent),
+            // Dual-Action Bulk Bar for Pending
+            if (_isSelectionMode && uiStatus == 'pending_approval')
+              _buildDualActionBar(
+                totalCount: total,
+                selectedCount: _selectedShopIds.length,
+                isAllSelected: total > 0 && _selectedShopIds.containsAll(allIds),
+                onSelectAll: () {
+                  setState(() {
+                    if (_selectedShopIds.containsAll(allIds)) {
+                      _selectedShopIds.clear();
+                    } else {
+                      _selectedShopIds = Set.from(allIds);
+                    }
+                  });
+                },
+                action1Label: 'Reject',
+                action1Icon: Icons.cancel_rounded,
+                action1Color: Colors.orange,
+                onAction1: () => _bulkRejectShops(Set.from(_selectedShopIds)),
+                action2Label: 'Approve',
+                action2Icon: Icons.check_circle_rounded,
+                action2Color: Colors.green,
+                onAction2: () => _bulkApproveShops(Set.from(_selectedShopIds)),
+              ),
+            // Dual-Action Bulk Bar for Approved
+            if (_isSelectionMode && uiStatus == 'approved')
+              _buildDualActionBar(
+                totalCount: total,
+                selectedCount: _selectedShopIds.length,
+                isAllSelected: total > 0 && _selectedShopIds.containsAll(allIds),
+                onSelectAll: () {
+                  setState(() {
+                    if (_selectedShopIds.containsAll(allIds)) {
+                      _selectedShopIds.clear();
+                    } else {
+                      _selectedShopIds = Set.from(allIds);
+                    }
+                  });
+                },
+                action1Label: 'Unpublish',
+                action1Icon: Icons.visibility_off_rounded,
+                action1Color: Colors.blueAccent,
+                onAction1: () => _bulkUnpublishShops(Set.from(_selectedShopIds)),
+                action2Label: 'Archive',
+                action2Icon: Icons.archive_rounded,
+                action2Color: Colors.orange,
+                onAction2: () => _bulkArchiveShops(Set.from(_selectedShopIds)),
+              ),
+            if (_isSelectionMode) const SizedBox(height: 8),
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.all(16),
@@ -521,7 +462,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 itemBuilder: (context, index) {
                   final doc = docs[index];
                   final data = doc.data();
-                  return _buildShopCard(doc.id, data, uiStatus);
+                  return _isSelectionMode
+                      ? _buildSelectableShopCard(doc.id, data, uiStatus)
+                      : _buildShopCard(doc.id, data, uiStatus);
                 },
               ),
             ),
@@ -530,6 +473,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       },
     );
   }
+
 
   Widget _buildShopCard(
       String shopId, Map<String, dynamic> data, String approvalStatus) {
@@ -883,7 +827,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 
-  Widget _buildSearchAndFilterBar() {
+  Widget _buildSearchAndFilterBar({String? currentFilter, ValueChanged<String>? onFilterChanged}) {
+    final activeFilter = currentFilter ?? _approvedSourceFilter;
+    final onChanged = onFilterChanged ?? (val) => setState(() => _approvedSourceFilter = val);
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Column(
@@ -922,11 +868,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           // Filter Chips
           Row(
             children: [
-              _buildFilterChip('All'),
+              _buildFilterChip('All', activeFilter, onChanged),
               const SizedBox(width: 8),
-              _buildFilterChip('Community'),
+              _buildFilterChip('Community', activeFilter, onChanged),
               const SizedBox(width: 8),
-              _buildFilterChip('Business'),
+              _buildFilterChip('Business', activeFilter, onChanged),
             ],
           ),
         ],
@@ -934,10 +880,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 
-  Widget _buildFilterChip(String label) {
-    final isSelected = _approvedSourceFilter == label;
+  Widget _buildFilterChip(String label, String activeFilter, ValueChanged<String> onChanged) {
+    final isSelected = activeFilter == label;
     return GestureDetector(
-      onTap: () => setState(() => _approvedSourceFilter = label),
+      onTap: () => onChanged(label),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -963,6 +909,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   String _formatDate(DateTime date) {
     return DateFormat('MMM dd, yyyy').format(date);
   }
+
 
   Future<void> _approveShop(String shopId, String submissionType) async {
     try {
@@ -1231,6 +1178,909 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     }
   }
 
+  // ======================== BULK SELECTION HELPERS ========================
+
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedShopIds.clear();
+      _selectedClaimIds.clear();
+    });
+  }
+
+  Widget _buildBulkActionBar({
+    required int totalCount,
+    required int selectedCount,
+    required bool isAllSelected,
+    required VoidCallback onSelectAll,
+    required VoidCallback onAction,
+    required String actionLabel,
+    required IconData actionIcon,
+    required Color actionColor,
+  }) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: actionColor.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: actionColor.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          // Select All Checkbox
+          GestureDetector(
+            onTap: onSelectAll,
+            child: Row(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: isAllSelected ? actionColor : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: isAllSelected ? actionColor : Colors.white30,
+                      width: 2,
+                    ),
+                  ),
+                  child: isAllSelected
+                      ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
+                      : null,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Select All',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Count Badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: actionColor.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              '$selectedCount selected',
+              style: TextStyle(
+                color: actionColor,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const Spacer(),
+          // Cancel Button
+          TextButton(
+            onPressed: _exitSelectionMode,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(width: 4),
+          // Action Button
+          ElevatedButton.icon(
+            onPressed: selectedCount > 0 ? onAction : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: selectedCount > 0 ? actionColor : Colors.grey[800],
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              minimumSize: Size.zero,
+            ),
+            icon: Icon(actionIcon, size: 14),
+            label: Text(
+              actionLabel,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDualActionBar({
+    required int totalCount,
+    required int selectedCount,
+    required bool isAllSelected,
+    required VoidCallback onSelectAll,
+    required String action1Label,
+    required IconData action1Icon,
+    required Color action1Color,
+    required VoidCallback onAction1,
+    required String action2Label,
+    required IconData action2Icon,
+    required Color action2Color,
+    required VoidCallback onAction2,
+  }) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: Row(
+        children: [
+          // Select All Checkbox
+          GestureDetector(
+            onTap: onSelectAll,
+            child: Row(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: isAllSelected ? Colors.white54 : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: isAllSelected ? Colors.white54 : Colors.white30,
+                      width: 2,
+                    ),
+                  ),
+                  child: isAllSelected
+                      ? const Icon(Icons.check_rounded, size: 14, color: Colors.black)
+                      : null,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$selectedCount / $totalCount',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+          // Cancel Button
+          TextButton(
+            onPressed: _exitSelectionMode,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // Action 1 Button
+          ElevatedButton.icon(
+            onPressed: selectedCount > 0 ? onAction1 : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: selectedCount > 0 ? action1Color : Colors.grey[800],
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              minimumSize: Size.zero,
+            ),
+            icon: Icon(action1Icon, size: 13),
+            label: Text(action1Label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 6),
+          // Action 2 Button
+          ElevatedButton.icon(
+            onPressed: selectedCount > 0 ? onAction2 : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: selectedCount > 0 ? action2Color : Colors.grey[800],
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              minimumSize: Size.zero,
+            ),
+            icon: Icon(action2Icon, size: 13),
+            label: Text(action2Label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectModeToggle({
+    required Color color,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(right: 16, top: 4, bottom: 8),
+      alignment: Alignment.centerRight,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            if (_isSelectionMode) {
+              _exitSelectionMode();
+            } else {
+              _isSelectionMode = true;
+            }
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: _isSelectionMode ? color.withOpacity(0.15) : Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: _isSelectionMode ? color.withOpacity(0.4) : Colors.white.withOpacity(0.1),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _isSelectionMode ? Icons.close_rounded : Icons.checklist_rounded,
+                size: 14,
+                color: _isSelectionMode ? color : Colors.white54,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _isSelectionMode ? 'Cancel' : 'Select',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: _isSelectionMode ? color : Colors.white54,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectableShopCard(String shopId, Map<String, dynamic> data, String status) {
+    final isSelected = _selectedShopIds.contains(shopId);
+    return GestureDetector(
+      onLongPress: () {
+        if (!_isSelectionMode) {
+          setState(() {
+            _isSelectionMode = true;
+            _selectedShopIds.add(shopId);
+          });
+        }
+      },
+      onTap: _isSelectionMode
+          ? () {
+              setState(() {
+                if (isSelected) {
+                  _selectedShopIds.remove(shopId);
+                } else {
+                  _selectedShopIds.add(shopId);
+                }
+              });
+            }
+          : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: _isSelectionMode
+            ? BoxDecoration(
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: isSelected ? primary.withOpacity(0.6) : Colors.transparent,
+                  width: 2,
+                ),
+              )
+            : null,
+        child: Stack(
+          children: [
+            IgnorePointer(
+              ignoring: _isSelectionMode,
+              child: _buildShopCard(shopId, data, status),
+            ),
+            if (_isSelectionMode)
+              Positioned(
+                top: 12,
+                left: 12,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: isSelected ? primary : Colors.black54,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isSelected ? primary : Colors.white30,
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: isSelected
+                      ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+                      : null,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectableClaimCard(String claimId, Map<String, dynamic> data) {
+    final isSelected = _selectedClaimIds.contains(claimId);
+    return GestureDetector(
+      onLongPress: () {
+        if (!_isSelectionMode) {
+          setState(() {
+            _isSelectionMode = true;
+            _selectedClaimIds.add(claimId);
+          });
+        }
+      },
+      onTap: _isSelectionMode
+          ? () {
+              setState(() {
+                if (isSelected) {
+                  _selectedClaimIds.remove(claimId);
+                } else {
+                  _selectedClaimIds.add(claimId);
+                }
+              });
+            }
+          : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: _isSelectionMode
+            ? BoxDecoration(
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: isSelected ? Colors.purpleAccent.withOpacity(0.6) : Colors.transparent,
+                  width: 2,
+                ),
+              )
+            : null,
+        child: Stack(
+          children: [
+            IgnorePointer(
+              ignoring: _isSelectionMode,
+              child: _buildClaimCard(claimId, data),
+            ),
+            if (_isSelectionMode)
+              Positioned(
+                top: 12,
+                left: 12,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: isSelected ? Colors.purpleAccent : Colors.black54,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isSelected ? Colors.purpleAccent : Colors.white30,
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: isSelected
+                      ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+                      : null,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ======================== BULK FIRESTORE OPERATIONS ========================
+
+
+  Future<void> _bulkArchiveShops(Set<String> ids) async {
+    if (ids.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Archive Selected Shops?', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'This will archive ${ids.length} shop(s) and hide them from public view.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: Text('Archive ${ids.length}', style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final id in ids) {
+        batch.update(FirebaseFirestore.instance.collection('shops').doc(id), {
+          'approvalStatus': 'archived',
+          'isHidden': true,
+        });
+      }
+      await batch.commit();
+      _exitSelectionMode();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${ids.length} shop(s) archived'),
+          backgroundColor: Colors.orange,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Future<void> _bulkDeleteShops(Set<String> ids) async {
+    if (ids.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Delete ${ids.length} Shop(s)?', style: const TextStyle(color: Colors.redAccent)),
+        content: Text(
+          'CRITICAL ACTION: This will permanently delete ${ids.length} shop(s) and all their data (reviews, products, etc.) from Firestore. This cannot be undone.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: Text('DELETE ${ids.length}', style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // Exit selection mode immediately for instant UI feedback
+    _exitSelectionMode();
+
+    try {
+      final firestore = FirebaseFirestore.instance;
+
+      // Fire all shop deletions in parallel
+      await Future.wait(ids.map((shopId) async {
+        final shopRef = firestore.collection('shops').doc(shopId);
+
+        // Collect all subcollection docs + claims in parallel
+        final subcollections = ['reviews', 'jobs', 'products', 'gallery'];
+        final subFutures = subcollections.map((sub) => shopRef.collection(sub).get());
+        final claimsFuture = firestore
+            .collection('shop_claims')
+            .where('shopId', isEqualTo: shopId)
+            .get();
+
+        final results = await Future.wait([...subFutures, claimsFuture]);
+
+        // Batch-delete everything in one go
+        final batch = firestore.batch();
+        for (final snapshot in results) {
+          for (final doc in snapshot.docs) {
+            batch.delete(doc.reference);
+          }
+        }
+        batch.delete(shopRef);
+        await batch.commit();
+      }));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${ids.length} shop(s) deleted permanently'),
+          backgroundColor: Colors.redAccent,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Future<void> _bulkDeleteClaims(Set<String> ids, {bool dissociate = false}) async {
+    if (ids.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Delete ${ids.length} Claim(s)?', style: const TextStyle(color: Colors.redAccent)),
+        content: Text(
+          dissociate
+              ? 'This will permanently delete ${ids.length} claim record(s) and dissociate the shops from their owners.'
+              : 'This will permanently delete ${ids.length} claim record(s).',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: Text('DELETE ${ids.length}', style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // Exit selection mode immediately for instant UI feedback
+    _exitSelectionMode();
+
+    try {
+      final firestore = FirebaseFirestore.instance;
+
+      // Fire all claim deletions in parallel
+      await Future.wait(ids.map((claimId) async {
+        if (dissociate) {
+          final claimSnap = await firestore.collection('shop_claims').doc(claimId).get();
+          if (claimSnap.exists) {
+            final data = claimSnap.data()!;
+            final shopId = data['shopId'] as String?;
+            if (shopId != null) {
+              final shopRef = firestore.collection('shops').doc(shopId);
+              final shopSnap = await shopRef.get();
+              if (shopSnap.exists) {
+                await shopRef.update({
+                  'ownerId': null,
+                  'posterId': null,
+                  'postedBy': null,
+                  'isVerified': false,
+                  'submissionType': 'community',
+                  'approvalStatus': 'approved',
+                });
+              }
+            }
+          }
+        }
+        await firestore.collection('shop_claims').doc(claimId).delete();
+      }));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${ids.length} claim(s) deleted'),
+          backgroundColor: Colors.redAccent,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Future<void> _bulkArchiveClaims(Set<String> ids) async {
+    if (ids.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Archive Selected Claims?', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'This will remove ${ids.length} rejected claim record(s).',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: Text('Archive ${ids.length}', style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final batch = firestore.batch();
+      for (final claimId in ids) {
+        batch.delete(firestore.collection('shop_claims').doc(claimId));
+      }
+      await batch.commit();
+      _exitSelectionMode();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${ids.length} claim(s) archived'),
+          backgroundColor: Colors.orange,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Future<void> _bulkRevertToPending(Set<String> ids) async {
+    if (ids.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Revert ${ids.length} Shop(s) to Pending?', style: const TextStyle(color: Colors.blueAccent)),
+        content: Text(
+          'This will move ${ids.length} shop(s) back to the pending review queue.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            child: Text('REVERT ${ids.length}', style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+    _exitSelectionMode();
+
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final id in ids) {
+        batch.update(FirebaseFirestore.instance.collection('shops').doc(id), {
+          'approvalStatus': 'pending_approval',
+          'isVerified': false,
+        });
+      }
+      await batch.commit();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${ids.length} shop(s) reverted to pending'),
+          backgroundColor: Colors.blueAccent,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Future<void> _bulkApproveShops(Set<String> ids) async {
+    if (ids.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Approve ${ids.length} Shop(s)?', style: const TextStyle(color: Colors.green)),
+        content: Text(
+          'This will approve ${ids.length} shop(s) and make them visible. Business submissions will also upgrade the owner accounts.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            child: Text('APPROVE ${ids.length}', style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+    _exitSelectionMode();
+
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final currentUid = FirebaseAuth.instance.currentUser?.uid;
+
+      await Future.wait(ids.map((shopId) async {
+        final shopDoc = await firestore.collection('shops').doc(shopId).get();
+        if (!shopDoc.exists) return;
+
+        final shopData = shopDoc.data()!;
+        final submissionType = shopData['submissionType'] as String? ?? 'community';
+        final posterId = shopData['posterId'] ?? shopData['ownerId'] ?? (shopData['postedBy'] as Map?)?['uid'];
+
+        final batch = firestore.batch();
+        batch.update(firestore.collection('shops').doc(shopId), {
+          'approvalStatus': 'approved',
+          'isVerified': true,
+          'approvedAt': FieldValue.serverTimestamp(),
+          'approvedBy': currentUid,
+        });
+
+        if (submissionType == 'business' && posterId != null) {
+          batch.update(firestore.collection('users').doc(posterId), {
+            'accountType': 'business',
+            'lastVerifiedAt': FieldValue.serverTimestamp(),
+          });
+        }
+        await batch.commit();
+      }));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${ids.length} shop(s) approved'),
+          backgroundColor: Colors.green,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Future<void> _bulkRejectShops(Set<String> ids) async {
+    if (ids.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Reject ${ids.length} Shop(s)?', style: const TextStyle(color: Colors.orange)),
+        content: Text(
+          'This will reject ${ids.length} pending shop submission(s).',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: Text('REJECT ${ids.length}', style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+    _exitSelectionMode();
+
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final currentUid = FirebaseAuth.instance.currentUser?.uid;
+      final batch = firestore.batch();
+      for (final id in ids) {
+        batch.update(firestore.collection('shops').doc(id), {
+          'approvalStatus': 'rejected',
+          'isVerified': false,
+          'rejectedAt': FieldValue.serverTimestamp(),
+          'rejectedBy': currentUid,
+        });
+      }
+      await batch.commit();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${ids.length} shop(s) rejected'),
+          backgroundColor: Colors.orange,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Future<void> _bulkUnpublishShops(Set<String> ids) async {
+    if (ids.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Unpublish ${ids.length} Shop(s)?', style: const TextStyle(color: Colors.blueAccent)),
+        content: Text(
+          'This will hide ${ids.length} shop(s) from the Explore feed and discovery results.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            child: Text('UNPUBLISH ${ids.length}', style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+    _exitSelectionMode();
+
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final id in ids) {
+        batch.update(FirebaseFirestore.instance.collection('shops').doc(id), {
+          'isHidden': true,
+        });
+      }
+      await batch.commit();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${ids.length} shop(s) unpublished'),
+          backgroundColor: Colors.blueAccent,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+
   Widget _buildSegmentedFilter({
     required String label1,
     required String label2,
@@ -1303,8 +2153,80 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           label1: 'Denied Shops',
           label2: 'Rejected Claims',
           selectedIndex: _rejectedSubTab,
-          onSelected: (idx) => setState(() => _rejectedSubTab = idx),
+          onSelected: (idx) {
+            setState(() {
+              _rejectedSubTab = idx;
+              // Clear selection when switching sub-tabs
+              _exitSelectionMode();
+            });
+          },
         ),
+
+        // Select Mode Toggle + Bulk Action Bar
+        _buildSelectModeToggle(color: Colors.orange),
+        if (_isSelectionMode)
+          _rejectedSubTab == 0
+              ? StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('shops')
+                      .where('approvalStatus', isEqualTo: 'rejected')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    final total = snapshot.data?.docs.length ?? 0;
+                    final allIds = snapshot.data?.docs.map((d) => d.id).toSet() ?? {};
+                    return _buildDualActionBar(
+                      totalCount: total,
+                      selectedCount: _selectedShopIds.length,
+                      isAllSelected: total > 0 && _selectedShopIds.containsAll(allIds),
+                      onSelectAll: () {
+                        setState(() {
+                          if (_selectedShopIds.containsAll(allIds)) {
+                            _selectedShopIds.clear();
+                          } else {
+                            _selectedShopIds = Set.from(allIds);
+                          }
+                        });
+                      },
+                      action1Label: 'Revert',
+                      action1Icon: Icons.undo_rounded,
+                      action1Color: Colors.blueAccent,
+                      onAction1: () => _bulkRevertToPending(Set.from(_selectedShopIds)),
+                      action2Label: 'Archive',
+                      action2Icon: Icons.archive_rounded,
+                      action2Color: Colors.orange,
+                      onAction2: () => _bulkArchiveShops(Set.from(_selectedShopIds)),
+                    );
+                  },
+                )
+              : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('shop_claims')
+                      .where('status', isEqualTo: 'rejected')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    final total = snapshot.data?.docs.length ?? 0;
+                    final allIds = snapshot.data?.docs.map((d) => d.id).toSet() ?? {};
+                    return _buildBulkActionBar(
+                      totalCount: total,
+                      selectedCount: _selectedClaimIds.length,
+                      isAllSelected: total > 0 && _selectedClaimIds.containsAll(allIds),
+                      onSelectAll: () {
+                        setState(() {
+                          if (_selectedClaimIds.containsAll(allIds)) {
+                            _selectedClaimIds.clear();
+                          } else {
+                            _selectedClaimIds = Set.from(allIds);
+                          }
+                        });
+                      },
+                      onAction: () => _bulkArchiveClaims(Set.from(_selectedClaimIds)),
+                      actionLabel: 'Archive',
+                      actionIcon: Icons.archive_rounded,
+                      actionColor: Colors.orange,
+                    );
+                  },
+                ),
+        if (_isSelectionMode) const SizedBox(height: 8),
         Expanded(
           child: _rejectedSubTab == 0
               ? StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -1319,12 +2241,61 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         child: Text('No denied shops', style: TextStyle(color: Colors.white24, fontSize: 13)),
                       ));
                     }
+
+                    // Apply search & source filter
+                    var docs = snapshot.data!.docs.where((doc) {
+                      final data = doc.data();
+                      final name = (data['name'] as String? ?? '').toLowerCase();
+                      final address = (data['address'] as String? ?? '').toLowerCase();
+                      final submissionType = data['submissionType'] as String? ?? 'community';
+                      final ownerId = data['ownerId'] as String?;
+                      final isBusiness = (submissionType == 'business' || (ownerId != null && ownerId.isNotEmpty));
+
+                      bool matchesSearch = true;
+                      if (_searchQuery.isNotEmpty) {
+                        final q = _searchQuery.toLowerCase();
+                        matchesSearch = name.startsWith(q) || name.contains(q) || address.contains(q);
+                      }
+
+                      bool matchesSource = true;
+                      if (_rejectedSourceFilter != 'All') {
+                        if (_rejectedSourceFilter == 'Community') {
+                          matchesSource = !isBusiness;
+                        } else if (_rejectedSourceFilter == 'Business') {
+                          matchesSource = isBusiness;
+                        }
+                      }
+
+                      return matchesSearch && matchesSource;
+                    }).toList();
+
+                    // Sort startsWith matches first
+                    if (_searchQuery.isNotEmpty) {
+                      final q = _searchQuery.toLowerCase();
+                      docs.sort((a, b) {
+                        final startsA = (a.data()['name'] as String? ?? '').toLowerCase().startsWith(q);
+                        final startsB = (b.data()['name'] as String? ?? '').toLowerCase().startsWith(q);
+                        if (startsA && !startsB) return -1;
+                        if (!startsA && startsB) return 1;
+                        return 0;
+                      });
+                    }
+
+                    if (docs.isEmpty) {
+                      return const Center(child: Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: Text('No matching shops', style: TextStyle(color: Colors.white24, fontSize: 13)),
+                      ));
+                    }
+
                     return ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: snapshot.data!.docs.length,
+                      itemCount: docs.length,
                       itemBuilder: (context, index) {
-                        final doc = snapshot.data!.docs[index];
-                        return _buildShopCard(doc.id, doc.data(), 'rejected');
+                        final doc = docs[index];
+                        return _isSelectionMode
+                            ? _buildSelectableShopCard(doc.id, doc.data(), 'rejected')
+                            : _buildShopCard(doc.id, doc.data(), 'rejected');
                       },
                     );
                   },
@@ -1342,8 +2313,76 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           label1: 'Archived Shops',
           label2: 'Claim History',
           selectedIndex: _archiveSubTab,
-          onSelected: (idx) => setState(() => _archiveSubTab = idx),
+          onSelected: (idx) {
+            setState(() {
+              _archiveSubTab = idx;
+              // Clear selection when switching sub-tabs
+              _exitSelectionMode();
+            });
+          },
         ),
+    
+        // Select Mode Toggle + Bulk Action Bar
+        _buildSelectModeToggle(color: Colors.redAccent),
+        if (_isSelectionMode)
+          _archiveSubTab == 0
+              ? StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('shops')
+                      .where('approvalStatus', isEqualTo: 'archived')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    final total = snapshot.data?.docs.length ?? 0;
+                    final allIds = snapshot.data?.docs.map((d) => d.id).toSet() ?? {};
+                    return _buildBulkActionBar(
+                      totalCount: total,
+                      selectedCount: _selectedShopIds.length,
+                      isAllSelected: total > 0 && _selectedShopIds.containsAll(allIds),
+                      onSelectAll: () {
+                        setState(() {
+                          if (_selectedShopIds.containsAll(allIds)) {
+                            _selectedShopIds.clear();
+                          } else {
+                            _selectedShopIds = Set.from(allIds);
+                          }
+                        });
+                      },
+                      onAction: () => _bulkDeleteShops(Set.from(_selectedShopIds)),
+                      actionLabel: 'Delete',
+                      actionIcon: Icons.delete_forever_rounded,
+                      actionColor: Colors.redAccent,
+                    );
+                  },
+                )
+              : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('shop_claims')
+                      .where('status', isEqualTo: 'approved')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    final total = snapshot.data?.docs.length ?? 0;
+                    final allIds = snapshot.data?.docs.map((d) => d.id).toSet() ?? {};
+                    return _buildBulkActionBar(
+                      totalCount: total,
+                      selectedCount: _selectedClaimIds.length,
+                      isAllSelected: total > 0 && _selectedClaimIds.containsAll(allIds),
+                      onSelectAll: () {
+                        setState(() {
+                          if (_selectedClaimIds.containsAll(allIds)) {
+                            _selectedClaimIds.clear();
+                          } else {
+                            _selectedClaimIds = Set.from(allIds);
+                          }
+                        });
+                      },
+                      onAction: () => _bulkDeleteClaims(Set.from(_selectedClaimIds), dissociate: true),
+                      actionLabel: 'Delete',
+                      actionIcon: Icons.delete_forever_rounded,
+                      actionColor: Colors.redAccent,
+                    );
+                  },
+                ),
+        if (_isSelectionMode) const SizedBox(height: 8),
         Expanded(
           child: _archiveSubTab == 0
               ? StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -1358,12 +2397,61 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         child: Text('No archived shops', style: TextStyle(color: Colors.white24, fontSize: 13)),
                       ));
                     }
+
+                    // Apply search & source filter
+                    var docs = snapshot.data!.docs.where((doc) {
+                      final data = doc.data();
+                      final name = (data['name'] as String? ?? '').toLowerCase();
+                      final address = (data['address'] as String? ?? '').toLowerCase();
+                      final submissionType = data['submissionType'] as String? ?? 'community';
+                      final ownerId = data['ownerId'] as String?;
+                      final isBusiness = (submissionType == 'business' || (ownerId != null && ownerId.isNotEmpty));
+
+                      bool matchesSearch = true;
+                      if (_searchQuery.isNotEmpty) {
+                        final q = _searchQuery.toLowerCase();
+                        matchesSearch = name.startsWith(q) || name.contains(q) || address.contains(q);
+                      }
+
+                      bool matchesSource = true;
+                      if (_archiveSourceFilter != 'All') {
+                        if (_archiveSourceFilter == 'Community') {
+                          matchesSource = !isBusiness;
+                        } else if (_archiveSourceFilter == 'Business') {
+                          matchesSource = isBusiness;
+                        }
+                      }
+
+                      return matchesSearch && matchesSource;
+                    }).toList();
+
+                    // Sort startsWith matches first
+                    if (_searchQuery.isNotEmpty) {
+                      final q = _searchQuery.toLowerCase();
+                      docs.sort((a, b) {
+                        final startsA = (a.data()['name'] as String? ?? '').toLowerCase().startsWith(q);
+                        final startsB = (b.data()['name'] as String? ?? '').toLowerCase().startsWith(q);
+                        if (startsA && !startsB) return -1;
+                        if (!startsA && startsB) return 1;
+                        return 0;
+                      });
+                    }
+
+                    if (docs.isEmpty) {
+                      return const Center(child: Padding(
+                        padding: EdgeInsets.all(20.0),
+                        child: Text('No matching shops', style: TextStyle(color: Colors.white24, fontSize: 13)),
+                      ));
+                    }
+
                     return ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: snapshot.data!.docs.length,
+                      itemCount: docs.length,
                       itemBuilder: (context, index) {
-                        final doc = snapshot.data!.docs[index];
-                        return _buildShopCard(doc.id, doc.data(), 'archived');
+                        final doc = docs[index];
+                        return _isSelectionMode
+                            ? _buildSelectableShopCard(doc.id, doc.data(), 'archived')
+                            : _buildShopCard(doc.id, doc.data(), 'archived');
                       },
                     );
                   },
@@ -1479,7 +2567,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           itemCount: docs.length,
           itemBuilder: (context, index) {
             final doc = docs[index];
-            return _buildClaimCard(doc.id, doc.data());
+            return _isSelectionMode
+                ? _buildSelectableClaimCard(doc.id, doc.data())
+                : _buildClaimCard(doc.id, doc.data());
           },
         );
       },
@@ -1520,6 +2610,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       ),
     );
   }
+
 
   Widget _buildClaimCard(String claimId, Map<String, dynamic> data) {
     final shopName = data['shopName'] as String? ?? 'Unknown Shop';
@@ -2962,6 +4053,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     }
   }
 }
+
 
 class CleanupCandidate {
   final String id;

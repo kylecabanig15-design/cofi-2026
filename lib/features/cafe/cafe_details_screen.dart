@@ -236,7 +236,7 @@ class CafeDetailsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -308,7 +308,7 @@ class CafeDetailsScreen extends StatelessWidget {
                   ),
                   // Map section
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Container(
                       height: 250,
                       decoration: BoxDecoration(
@@ -421,7 +421,7 @@ class CafeDetailsScreen extends StatelessWidget {
       }
     }
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -527,7 +527,7 @@ class CafeDetailsScreen extends StatelessWidget {
 
   Widget _buildSection(String title, String content, {IconData? icon}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -637,7 +637,7 @@ class CafeDetailsScreen extends StatelessWidget {
   Widget _buildMenuSection(
       BuildContext context, String shopName, List<String> menuPricePhotos) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -929,7 +929,7 @@ class CafeDetailsScreen extends StatelessWidget {
 
   Widget _buildContactsSection(List<_ContactItem> contacts) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -981,7 +981,7 @@ class CafeDetailsScreen extends StatelessWidget {
 
   Widget _buildReviewsSection(List reviews, BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1320,7 +1320,7 @@ class CafeDetailsScreen extends StatelessWidget {
         final count = ratings.length;
         final avg = count == 0 ? 0.0 : ratings.reduce((a, b) => a + b) / count;
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1376,7 +1376,7 @@ class CafeDetailsScreen extends StatelessWidget {
         final docs = snapshot.data?.docs ?? const [];
         final items = docs.map((d) => d.data()).toList();
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
