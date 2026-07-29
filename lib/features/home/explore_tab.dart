@@ -16,7 +16,9 @@ import 'package:cofi/utils/formatters.dart';
 
 class ExploreTab extends StatefulWidget {
   final VoidCallback? onOpenCommunity;
-  const ExploreTab({super.key, this.onOpenCommunity});
+  final GlobalKey? searchKey;
+  final GlobalKey? filterKey;
+  const ExploreTab({super.key, this.onOpenCommunity, this.searchKey, this.filterKey});
 
   @override
   State<ExploreTab> createState() => _ExploreTabState();
@@ -531,11 +533,11 @@ class _ExploreTabState extends State<ExploreTab> {
             if (mounted) setState(() {});
           },
           child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         padding: const EdgeInsets.symmetric(horizontal: 12),
         children: [
-        const SizedBox(height: 16),
-        _buildSearchBar(),
+                const SizedBox(height: 16),
+                _buildSearchBar(),
         const SizedBox(height: 12),
         SizedBox(
           height: 44,
@@ -1401,6 +1403,7 @@ class _ExploreTabState extends State<ExploreTab> {
 
   Widget _buildSearchBar() {
     return Container(
+      key: widget.searchKey,
       decoration: BoxDecoration(
         color: const Color(0xFF222222),
         borderRadius: BorderRadius.circular(24),
@@ -1424,6 +1427,7 @@ class _ExploreTabState extends State<ExploreTab> {
             ),
           ),
           IconButton(
+            key: widget.filterKey,
             icon: const Icon(Icons.tune, color: Colors.white54),
             onPressed: () {
               showModalBottomSheet(

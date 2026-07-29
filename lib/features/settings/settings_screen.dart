@@ -14,6 +14,8 @@ import 'package:cofi/features/settings/help_support_screen.dart';
 import 'package:cofi/utils/formatters.dart';
 import 'package:cofi/features/auth/interest_selection_screen.dart';
 import 'package:cofi/features/admin/admin_dashboard_screen.dart';
+import 'package:cofi/features/home/home_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -768,6 +770,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                             ),
                           );
+                        },
+                      ),
+                      const Divider(color: Colors.white12, height: 1),
+                      _buildListTile(
+                        icon: Icons.tour,
+                        title: 'Replay Guided Tour',
+                        subtitle: 'Restart the home screen tutorial',
+                        onTap: () async {
+                          final prefs = await SharedPreferences.getInstance();
+                          await prefs.setBool('hasSeenExploreTutorial', false);
+                          if (mounted) {
+                            Navigator.pushAndRemoveUntil(
+                              context,
+                              MaterialPageRoute(builder: (_) => const HomeScreen()),
+                              (route) => false,
+                            );
+                          }
                         },
                       ),
                       const Divider(color: Colors.white12, height: 1),
