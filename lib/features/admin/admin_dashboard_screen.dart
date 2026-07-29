@@ -49,6 +49,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   Set<String> _selectedShopIds = {};
   Set<String> _selectedClaimIds = {};
 
+  // Cached Streams to prevent rebuild loops and excessive Firestore reads
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _pendingShopsStream;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _approvedShopsStream;
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _rejectedShopsStream;
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +67,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         });
       }
     });
+
+    _pendingShopsStream = FirebaseFirestore.instance.collection('shops').where(
+        'approvalStatus',
+        whereIn: ['pending_approval', 'pending']).snapshots();
+    _approvedShopsStream = FirebaseFirestore.instance
+        .collection('shops')
+        .where('approvalStatus', isEqualTo: 'approved')
+        .snapshots();
+    _rejectedShopsStream = FirebaseFirestore.instance
+        .collection('shops')
+        .where('approvalStatus', isEqualTo: 'rejected')
+        .snapshots();
+
     _checkAdminStatus();
   }
 
@@ -75,36 +93,58 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   Future<void> _checkAdminStatus() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      setState(() { _isLoading = false; _isAdmin = false; });
+      setState(() {
+        _isLoading = false;
+        _isAdmin = false;
+      });
       return;
     }
     try {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
       final isAdminVal = userDoc.data()?['isAdmin'];
-      final isAdmin = (isAdminVal == true) || (isAdminVal?.toString().toLowerCase() == 'true');
-      setState(() { _isAdmin = isAdmin; _isLoading = false; });
+      final isAdmin = (isAdminVal == true) ||
+          (isAdminVal?.toString().toLowerCase() == 'true');
+      setState(() {
+        _isAdmin = isAdmin;
+        _isLoading = false;
+      });
     } catch (e) {
-      setState(() { _isLoading = false; _isAdmin = false; });
+      setState(() {
+        _isLoading = false;
+        _isAdmin = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+          backgroundColor: Colors.black,
+          body: Center(child: CircularProgressIndicator()));
     }
     if (!_isAdmin) {
       return Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
           backgroundColor: Colors.black,
-          title: TextWidget(text: 'Access Denied', fontSize: 20, color: Colors.white, isBold: true),
+          title: TextWidget(
+              text: 'Access Denied',
+              fontSize: 20,
+              color: Colors.white,
+              isBold: true),
         ),
         body: Center(
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             const Icon(Icons.lock, size: 64, color: Colors.red),
             const SizedBox(height: 16),
-            TextWidget(text: 'Admin access required', fontSize: 18, color: Colors.white70),
+            TextWidget(
+                text: 'Admin access required',
+                fontSize: 18,
+                color: Colors.white70),
           ]),
         ),
       );
@@ -127,7 +167,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen())),
           ),
         ],
         bottom: PreferredSize(
@@ -144,18 +185,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       body: Container(
         decoration: BoxDecoration(
           color: Colors.grey[900]!.withOpacity(0.5),
-          borderRadius: const BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30)),
+          borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(30), topRight: Radius.circular(30)),
         ),
         child: ClipRRect(
-          borderRadius: const BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30)),
+          borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(30), topRight: Radius.circular(30)),
           child: TabBarView(
             controller: _tabController,
             children: [
               _buildShopList('pending_approval'), // Pending Tab
-              _buildCombinedClaimsTab(),          // Claims Tab
-              _buildShopList('approved'),         // Approved Tab
-              _buildRejectedCombinedTab(),        // Rejected Tab
-              _buildArchiveCombinedTab(),         // Archive Tab
+              _buildCombinedClaimsTab(), // Claims Tab
+              _buildShopList('approved'), // Approved Tab
+              _buildRejectedCombinedTab(), // Rejected Tab
+              _buildArchiveCombinedTab(), // Archive Tab
             ],
           ),
         ),
@@ -168,17 +211,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   Widget _buildAdminAvatar() {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: FirebaseAuth.instance.currentUser != null
-          ? FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser!.uid).snapshots()
+          ? FirebaseFirestore.instance
+              .collection('users')
+              .doc(FirebaseAuth.instance.currentUser!.uid)
+              .snapshots()
           : null,
       builder: (context, snapshot) {
-        final photoUrl = (snapshot.data?.data()?['photoUrl'] as String?)?.trim();
+        final photoUrl =
+            (snapshot.data?.data()?['photoUrl'] as String?)?.trim();
         return Container(
-          width: 50, height: 50,
-          decoration: const BoxDecoration(color: primary, shape: BoxShape.circle),
+          width: 50,
+          height: 50,
+          decoration:
+              const BoxDecoration(color: primary, shape: BoxShape.circle),
           child: ClipOval(
             child: (photoUrl != null && photoUrl.isNotEmpty)
-                ? CachedNetworkImage(imageUrl: photoUrl, width: 50, height: 50, fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => const Icon(Icons.person, color: Colors.white))
+                ? CachedNetworkImage(
+                    imageUrl: photoUrl,
+                    width: 50,
+                    height: 50,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) =>
+                        const Icon(Icons.person, color: Colors.white))
                 : const Icon(Icons.person, color: Colors.white),
           ),
         );
@@ -190,15 +244,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: FirebaseAuth.instance.currentUser != null
-            ? FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser!.uid).snapshots()
+            ? FirebaseFirestore.instance
+                .collection('users')
+                .doc(FirebaseAuth.instance.currentUser!.uid)
+                .snapshots()
             : null,
         builder: (context, snapshot) {
           final name = (snapshot.data?.data()?['name'] as String?)?.trim();
-          final displayName = (name?.isNotEmpty == true) ? name! : (FirebaseAuth.instance.currentUser?.displayName ?? 'Admin');
-          return TextWidget(text: displayName, fontSize: 20, color: Colors.white, isBold: true);
+          final displayName = (name?.isNotEmpty == true)
+              ? name!
+              : (FirebaseAuth.instance.currentUser?.displayName ?? 'Admin');
+          return TextWidget(
+              text: displayName,
+              fontSize: 20,
+              color: Colors.white,
+              isBold: true);
         },
       ),
-      TextWidget(text: 'Admin Center', fontSize: 13, color: primary, isBold: true),
+      TextWidget(
+          text: 'Admin Center', fontSize: 13, color: primary, isBold: true),
     ]);
   }
 
@@ -216,7 +280,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       indicator: BoxDecoration(
         borderRadius: BorderRadius.circular(25),
         color: primary,
-        boxShadow: [BoxShadow(color: primary.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+              color: primary.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 2))
+        ],
       ),
       tabs: [
         _buildTab('Pending', Icons.pending_actions_rounded),
@@ -235,7 +304,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, size: 16),
           const SizedBox(width: 6),
-          Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(text,
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
         ]),
       ),
     );
@@ -247,19 +318,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
       child: Row(children: [
-        _buildStatSummary('Shops', 'pending_approval', Colors.orange, Icons.storefront),
+        _buildStatSummary(
+            'Shops', 'pending_approval', Colors.orange, Icons.storefront),
         const SizedBox(width: 16),
-        _buildStatSummary('Claims', 'pending', Colors.purpleAccent, Icons.assignment_ind),
+        _buildStatSummary(
+            'Claims', 'pending', Colors.purpleAccent, Icons.assignment_ind),
       ]),
     );
   }
 
-  Widget _buildStatSummary(String label, dynamic status, Color color, IconData icon) {
+  Widget _buildStatSummary(
+      String label, dynamic status, Color color, IconData icon) {
     final collection = label == 'Shops' ? 'shops' : 'shop_claims';
     final field = label == 'Shops' ? 'approvalStatus' : 'status';
     Query query = FirebaseFirestore.instance.collection(collection);
-    if (status is String) query = query.where(field, isEqualTo: status);
-    else if (status is List) query = query.where(field, whereIn: status as List<Object?>);
+    if (status is String)
+      query = query.where(field, isEqualTo: status);
+    else if (status is List)
+      query = query.where(field, whereIn: status as List<Object?>);
 
     return Expanded(
       child: StreamBuilder<QuerySnapshot>(
@@ -276,13 +352,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             child: Row(children: [
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: color.withOpacity(0.2), shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                    color: color.withOpacity(0.2), shape: BoxShape.circle),
                 child: Icon(icon, color: color, size: 20),
               ),
               const SizedBox(width: 16),
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                TextWidget(text: count.toString(), fontSize: 18, color: Colors.white, isBold: true),
-                TextWidget(text: 'Pending $label', fontSize: 11, color: Colors.white54),
+                TextWidget(
+                    text: count.toString(),
+                    fontSize: 18,
+                    color: Colors.white,
+                    isBold: true),
+                TextWidget(
+                    text: 'Pending $label',
+                    fontSize: 11,
+                    color: Colors.white54),
               ]),
             ]),
           );
@@ -292,188 +376,209 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   }
 
   Widget _buildShopList(dynamic approvalStatus) {
-    final String uiStatus = (approvalStatus is List) ? 'pending_approval' : approvalStatus.toString();
-    Query<Map<String, dynamic>> query = FirebaseFirestore.instance.collection('shops');
-    
-    if (approvalStatus is String) {
-      query = query.where('approvalStatus', isEqualTo: approvalStatus);
-    } else if (approvalStatus is List) {
-      query = query.where('approvalStatus', whereIn: approvalStatus as List<Object?>);
+    final String uiStatus = (approvalStatus is List)
+        ? 'pending_approval'
+        : approvalStatus.toString();
+    Stream<QuerySnapshot<Map<String, dynamic>>> stream;
+
+    if (uiStatus == 'pending_approval') {
+      stream = _pendingShopsStream;
+    } else if (uiStatus == 'approved') {
+      stream = _approvedShopsStream;
+    } else {
+      stream = _rejectedShopsStream;
     }
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: query.snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    return Column(
+      children: [
+        if (uiStatus == 'approved') _buildSearchAndFilterBar(),
+        Expanded(
+          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: stream,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-        if (snapshot.hasError) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: SelectableText(
-                'Firestore Error: ${snapshot.error}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.red),
-              ),
-            ),
-          );
-        }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: SelectableText(
+                      'Firestore Error: ${snapshot.error}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ),
+                );
+              }
 
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Column(
-            children: [
-              if (uiStatus == 'approved') _buildSearchAndFilterBar(),
-              if (uiStatus == 'pending_approval') _buildSelectModeToggle(color: Colors.green),
-              if (uiStatus == 'approved') _buildSelectModeToggle(color: Colors.blueAccent),
-              Expanded(
-                child: _buildEmptyState(
-                  uiStatus == 'pending_approval'
-                      ? 'All Caught Up!'
-                      : uiStatus == 'approved'
-                          ? 'No Approved Shops'
-                          : 'No Denied Requests',
-                  uiStatus == 'pending_approval'
-                      ? 'There are no pending submissions to review right now.'
-                      : 'Your filtered list is currently empty.',
-                  uiStatus == 'pending_approval'
-                      ? Icons.auto_awesome_rounded
-                      : uiStatus == 'approved'
-                          ? Icons.verified_user_rounded
-                          : Icons.history_rounded,
-                ),
-              ),
-            ],
-          );
-        }
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return Column(
+                  children: [
+                    if (uiStatus == 'pending_approval')
+                      _buildSelectModeToggle(color: Colors.green),
+                    if (uiStatus == 'approved')
+                      _buildSelectModeToggle(color: Colors.blueAccent),
+                    Expanded(
+                      child: _buildEmptyState(
+                        uiStatus == 'pending_approval'
+                            ? 'All Caught Up!'
+                            : uiStatus == 'approved'
+                                ? 'No Approved Shops'
+                                : 'No Denied Requests',
+                        uiStatus == 'pending_approval'
+                            ? 'There are no pending submissions to review right now.'
+                            : 'Your filtered list is currently empty.',
+                        uiStatus == 'pending_approval'
+                            ? Icons.auto_awesome_rounded
+                            : uiStatus == 'approved'
+                                ? Icons.verified_user_rounded
+                                : Icons.history_rounded,
+                      ),
+                    ),
+                  ],
+                );
+              }
 
-        var docs = snapshot.data!.docs.where((doc) {
-          final data = doc.data();
-          final name = (data['name'] as String? ?? '').toLowerCase();
-          final address = (data['address'] as String? ?? '').toLowerCase();
-          final submissionType = data['submissionType'] as String? ?? 'community';
-          final ownerId = data['ownerId'] as String?;
-          final isBusiness = (submissionType == 'business' || (ownerId != null && ownerId.isNotEmpty));
+              var docs = snapshot.data!.docs.where((doc) {
+                final data = doc.data();
+                final name = (data['name'] as String? ?? '').toLowerCase();
+                final address =
+                    (data['address'] as String? ?? '').toLowerCase();
+                final submissionType =
+                    data['submissionType'] as String? ?? 'community';
+                final ownerId = data['ownerId'] as String?;
+                final isBusiness = (submissionType == 'business' ||
+                    (ownerId != null && ownerId.isNotEmpty));
 
-          // Search Filter (Real-time First-Letter Matching)
-          bool matchesSearch = true;
-          if (_searchQuery.isNotEmpty) {
-            final query = _searchQuery.toLowerCase();
-            // Requirement: Prioritize name startsWith, but fallback to contains for name and address
-            matchesSearch = name.startsWith(query) || 
-                           name.contains(query) ||
-                           address.contains(query);
-          }
+                // Search Filter (Real-time First-Letter Matching)
+                bool matchesSearch = true;
+                if (_searchQuery.isNotEmpty) {
+                  final query = _searchQuery.toLowerCase();
+                  // Requirement: Prioritize name startsWith, but fallback to contains for name and address
+                  matchesSearch = name.startsWith(query) ||
+                      name.contains(query) ||
+                      address.contains(query);
+                }
 
-          // Source Filter (only for Approved tab)
-          bool matchesSource = true;
-          if (uiStatus == 'approved' && _approvedSourceFilter != 'All') {
-            if (_approvedSourceFilter == 'Community') {
-              matchesSource = !isBusiness;
-            } else if (_approvedSourceFilter == 'Business') {
-              matchesSource = isBusiness;
-            }
-          }
+                // Source Filter (only for Approved tab)
+                bool matchesSource = true;
+                if (uiStatus == 'approved' && _approvedSourceFilter != 'All') {
+                  if (_approvedSourceFilter == 'Community') {
+                    matchesSource = !isBusiness;
+                  } else if (_approvedSourceFilter == 'Business') {
+                    matchesSource = isBusiness;
+                  }
+                }
 
-          return matchesSearch && matchesSource;
-        }).toList();
+                return matchesSearch && matchesSource;
+              }).toList();
 
-        // Sort results to put "startsWith" matches at the top during search
-        if (_searchQuery.isNotEmpty) {
-          final query = _searchQuery.toLowerCase();
-          docs.sort((a, b) {
-            final nameA = (a.data()['name'] as String? ?? '').toLowerCase();
-            final nameB = (b.data()['name'] as String? ?? '').toLowerCase();
-            final startsA = nameA.startsWith(query);
-            final startsB = nameB.startsWith(query);
+              // Sort results to put "startsWith" matches at the top during search
+              if (_searchQuery.isNotEmpty) {
+                final query = _searchQuery.toLowerCase();
+                docs.sort((a, b) {
+                  final nameA =
+                      (a.data()['name'] as String? ?? '').toLowerCase();
+                  final nameB =
+                      (b.data()['name'] as String? ?? '').toLowerCase();
+                  final startsA = nameA.startsWith(query);
+                  final startsB = nameB.startsWith(query);
 
-            if (startsA && !startsB) return -1;
-            if (!startsA && startsB) return 1;
-            return 0;
-          });
-        }
+                  if (startsA && !startsB) return -1;
+                  if (!startsA && startsB) return 1;
+                  return 0;
+                });
+              }
 
-        // Compute selection info from the filtered docs
-        final allIds = docs.map((d) => d.id).toSet();
-        final total = docs.length;
+              // Compute selection info from the filtered docs
+              final allIds = docs.map((d) => d.id).toSet();
+              final total = docs.length;
 
-        return Column(
-          children: [
-            if (uiStatus == 'approved') _buildSearchAndFilterBar(),
-            // Select Mode Toggle
-            if (uiStatus == 'pending_approval')
-              _buildSelectModeToggle(color: Colors.green),
-            if (uiStatus == 'approved')
-              _buildSelectModeToggle(color: Colors.blueAccent),
-            // Dual-Action Bulk Bar for Pending
-            if (_isSelectionMode && uiStatus == 'pending_approval')
-              _buildDualActionBar(
-                totalCount: total,
-                selectedCount: _selectedShopIds.length,
-                isAllSelected: total > 0 && _selectedShopIds.containsAll(allIds),
-                onSelectAll: () {
-                  setState(() {
-                    if (_selectedShopIds.containsAll(allIds)) {
-                      _selectedShopIds.clear();
-                    } else {
-                      _selectedShopIds = Set.from(allIds);
-                    }
-                  });
-                },
-                action1Label: 'Reject',
-                action1Icon: Icons.cancel_rounded,
-                action1Color: Colors.orange,
-                onAction1: () => _bulkRejectShops(Set.from(_selectedShopIds)),
-                action2Label: 'Approve',
-                action2Icon: Icons.check_circle_rounded,
-                action2Color: Colors.green,
-                onAction2: () => _bulkApproveShops(Set.from(_selectedShopIds)),
-              ),
-            // Dual-Action Bulk Bar for Approved
-            if (_isSelectionMode && uiStatus == 'approved')
-              _buildDualActionBar(
-                totalCount: total,
-                selectedCount: _selectedShopIds.length,
-                isAllSelected: total > 0 && _selectedShopIds.containsAll(allIds),
-                onSelectAll: () {
-                  setState(() {
-                    if (_selectedShopIds.containsAll(allIds)) {
-                      _selectedShopIds.clear();
-                    } else {
-                      _selectedShopIds = Set.from(allIds);
-                    }
-                  });
-                },
-                action1Label: 'Unpublish',
-                action1Icon: Icons.visibility_off_rounded,
-                action1Color: Colors.blueAccent,
-                onAction1: () => _bulkUnpublishShops(Set.from(_selectedShopIds)),
-                action2Label: 'Archive',
-                action2Icon: Icons.archive_rounded,
-                action2Color: Colors.orange,
-                onAction2: () => _bulkArchiveShops(Set.from(_selectedShopIds)),
-              ),
-            if (_isSelectionMode) const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: docs.length,
-                itemBuilder: (context, index) {
-                  final doc = docs[index];
-                  final data = doc.data();
-                  return _isSelectionMode
-                      ? _buildSelectableShopCard(doc.id, data, uiStatus)
-                      : _buildShopCard(doc.id, data, uiStatus);
-                },
-              ),
-            ),
-          ],
-        );
-      },
+              return Column(
+                children: [
+                  // Select Mode Toggle
+                  if (uiStatus == 'pending_approval')
+                    _buildSelectModeToggle(color: Colors.green),
+                  if (uiStatus == 'approved')
+                    _buildSelectModeToggle(color: Colors.blueAccent),
+                  // Dual-Action Bulk Bar for Pending
+                  if (_isSelectionMode && uiStatus == 'pending_approval')
+                    _buildDualActionBar(
+                      totalCount: total,
+                      selectedCount: _selectedShopIds.length,
+                      isAllSelected:
+                          total > 0 && _selectedShopIds.containsAll(allIds),
+                      onSelectAll: () {
+                        setState(() {
+                          if (_selectedShopIds.containsAll(allIds)) {
+                            _selectedShopIds.clear();
+                          } else {
+                            _selectedShopIds = Set.from(allIds);
+                          }
+                        });
+                      },
+                      action1Label: 'Reject',
+                      action1Icon: Icons.cancel_rounded,
+                      action1Color: Colors.orange,
+                      onAction1: () =>
+                          _bulkRejectShops(Set.from(_selectedShopIds)),
+                      action2Label: 'Approve',
+                      action2Icon: Icons.check_circle_rounded,
+                      action2Color: Colors.green,
+                      onAction2: () =>
+                          _bulkApproveShops(Set.from(_selectedShopIds)),
+                    ),
+                  // Dual-Action Bulk Bar for Approved
+                  if (_isSelectionMode && uiStatus == 'approved')
+                    _buildDualActionBar(
+                      totalCount: total,
+                      selectedCount: _selectedShopIds.length,
+                      isAllSelected:
+                          total > 0 && _selectedShopIds.containsAll(allIds),
+                      onSelectAll: () {
+                        setState(() {
+                          if (_selectedShopIds.containsAll(allIds)) {
+                            _selectedShopIds.clear();
+                          } else {
+                            _selectedShopIds = Set.from(allIds);
+                          }
+                        });
+                      },
+                      action1Label: 'Unpublish',
+                      action1Icon: Icons.visibility_off_rounded,
+                      action1Color: Colors.blueAccent,
+                      onAction1: () =>
+                          _bulkUnpublishShops(Set.from(_selectedShopIds)),
+                      action2Label: 'Archive',
+                      action2Icon: Icons.archive_rounded,
+                      action2Color: Colors.orange,
+                      onAction2: () =>
+                          _bulkArchiveShops(Set.from(_selectedShopIds)),
+                    ),
+                  if (_isSelectionMode) const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: docs.length,
+                      itemBuilder: (context, index) {
+                        final doc = docs[index];
+                        final data = doc.data();
+                        return _isSelectionMode
+                            ? _buildSelectableShopCard(doc.id, data, uiStatus)
+                            : _buildShopCard(doc.id, data, uiStatus);
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
-
 
   Widget _buildShopCard(
       String shopId, Map<String, dynamic> data, String approvalStatus) {
@@ -584,7 +689,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                           children: [
                             if (postedAt != null)
                               TextWidget(
-                                text: 'Posted ${_formatDate(postedAt.toDate())}',
+                                text:
+                                    'Posted ${_formatDate(postedAt.toDate())}',
                                 fontSize: 10,
                                 color: Colors.white24,
                               ),
@@ -631,7 +737,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: const Text('Approve', style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: const Text('Approve',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ],
                     )
@@ -649,34 +756,48 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                                 children: [
                                   // Publish/Unpublish Toggle
                                   TextButton.icon(
-                                    onPressed: () => _togglePublishShop(shopId, isHidden),
+                                    onPressed: () =>
+                                        _togglePublishShop(shopId, isHidden),
                                     style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
                                       minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
                                     ),
                                     icon: Icon(
-                                      isHidden ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                                      isHidden
+                                          ? Icons.visibility_rounded
+                                          : Icons.visibility_off_rounded,
                                       size: 13,
                                       color: Colors.blueAccent,
                                     ),
                                     label: Text(
                                       isHidden ? 'PUBLISH' : 'UNPUBLISH',
-                                      style: const TextStyle(fontSize: 11, color: Colors.blueAccent, fontWeight: FontWeight.bold),
+                                      style: const TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.blueAccent,
+                                          fontWeight: FontWeight.bold),
                                     ),
                                   ),
                                   // Archive Button
                                   TextButton.icon(
                                     onPressed: () => _archiveShop(shopId),
                                     style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
                                       minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
                                     ),
-                                    icon: const Icon(Icons.archive_rounded, size: 13, color: Colors.orange),
+                                    icon: const Icon(Icons.archive_rounded,
+                                        size: 13, color: Colors.orange),
                                     label: const Text(
                                       'ARCHIVE',
-                                      style: TextStyle(fontSize: 11, color: Colors.orange, fontWeight: FontWeight.bold),
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.orange,
+                                          fontWeight: FontWeight.bold),
                                     ),
                                   ),
                                 ],
@@ -697,40 +818,58 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                                 children: [
                                   if (approvalStatus == 'archived')
                                     TextButton.icon(
-                                      onPressed: () => _deleteShopPermanently(shopId, name),
+                                      onPressed: () =>
+                                          _deleteShopPermanently(shopId, name),
                                       style: TextButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
                                         minimumSize: Size.zero,
-                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
                                       ),
-                                      icon: const Icon(Icons.delete_forever_rounded, size: 13, color: Colors.redAccent),
+                                      icon: const Icon(
+                                          Icons.delete_forever_rounded,
+                                          size: 13,
+                                          color: Colors.redAccent),
                                       label: const Text(
                                         'DELETE',
-                                        style: TextStyle(fontSize: 11, color: Colors.redAccent, fontWeight: FontWeight.bold),
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.redAccent,
+                                            fontWeight: FontWeight.bold),
                                       ),
                                     ),
                                   TextButton(
                                     onPressed: () => _revertToPending(shopId),
                                     style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
                                       minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
                                     ),
                                     child: const Text('Revert to Pending',
-                                        style: TextStyle(fontSize: 11, color: Colors.blue)),
+                                        style: TextStyle(
+                                            fontSize: 11, color: Colors.blue)),
                                   ),
                                   if (approvalStatus == 'rejected')
                                     TextButton.icon(
                                       onPressed: () => _archiveShop(shopId),
                                       style: TextButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
                                         minimumSize: Size.zero,
-                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
                                       ),
-                                      icon: const Icon(Icons.archive_rounded, size: 13, color: Colors.orange),
+                                      icon: const Icon(Icons.archive_rounded,
+                                          size: 13, color: Colors.orange),
                                       label: const Text(
                                         'ARCHIVE',
-                                        style: TextStyle(fontSize: 11, color: Colors.orange, fontWeight: FontWeight.bold),
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.orange,
+                                            fontWeight: FontWeight.bold),
                                       ),
                                     ),
                                 ],
@@ -748,8 +887,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   Widget _buildSourceBadge(Map<String, dynamic> data) {
     final submissionType = data['submissionType'] as String? ?? 'community';
     final ownerId = data['ownerId'] as String?;
-    final isBusiness = submissionType == 'business' || (ownerId != null && ownerId.isNotEmpty);
-    
+    final isBusiness =
+        submissionType == 'business' || (ownerId != null && ownerId.isNotEmpty);
+
     final color = isBusiness ? Colors.blue : Colors.amber;
     final label = isBusiness ? 'BUSINESS CLAIMED' : 'COMMUNITY ADDED';
 
@@ -777,7 +917,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
     final color = isHidden ? Colors.orange : Colors.green;
     final label = isHidden ? 'UNPUBLISHED' : 'PUBLISHED';
-    final icon = isHidden ? Icons.visibility_off_rounded : Icons.visibility_rounded;
+    final icon =
+        isHidden ? Icons.visibility_off_rounded : Icons.visibility_rounded;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -805,10 +946,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   Widget _buildStatusIndicator(String status, bool isVerified) {
     Color color = status == 'approved' ? Colors.green : Colors.redAccent;
-    IconData icon = status == 'approved' 
-        ? Icons.check_circle_rounded
-        : Icons.block_flipped;
-        
+    IconData icon =
+        status == 'approved' ? Icons.check_circle_rounded : Icons.block_flipped;
+
     return Row(
       children: [
         const SizedBox(width: 8),
@@ -827,9 +967,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 
-  Widget _buildSearchAndFilterBar({String? currentFilter, ValueChanged<String>? onFilterChanged}) {
+  Widget _buildSearchAndFilterBar(
+      {String? currentFilter, ValueChanged<String>? onFilterChanged}) {
     final activeFilter = currentFilter ?? _approvedSourceFilter;
-    final onChanged = onFilterChanged ?? (val) => setState(() => _approvedSourceFilter = val);
+    final onChanged =
+        onFilterChanged ?? (val) => setState(() => _approvedSourceFilter = val);
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Column(
@@ -848,17 +990,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               style: const TextStyle(color: Colors.white, fontSize: 14),
               decoration: InputDecoration(
                 hintText: 'Search by name or location...',
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 14),
-                prefixIcon: Icon(Icons.search_rounded, color: Colors.white.withOpacity(0.3)),
-                suffixIcon: _searchQuery.isNotEmpty 
-                  ? IconButton(
-                      icon: const Icon(Icons.clear_rounded, color: Colors.white54, size: 18),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() => _searchQuery = '');
-                      },
-                    )
-                  : null,
+                hintStyle: TextStyle(
+                    color: Colors.white.withOpacity(0.3), fontSize: 14),
+                prefixIcon: Icon(Icons.search_rounded,
+                    color: Colors.white.withOpacity(0.3)),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear_rounded,
+                            color: Colors.white54, size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(vertical: 12),
               ),
@@ -880,7 +1025,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 
-  Widget _buildFilterChip(String label, String activeFilter, ValueChanged<String> onChanged) {
+  Widget _buildFilterChip(
+      String label, String activeFilter, ValueChanged<String> onChanged) {
     final isSelected = activeFilter == label;
     return GestureDetector(
       onTap: () => onChanged(label),
@@ -888,7 +1034,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? primary.withOpacity(0.2) : Colors.white.withOpacity(0.05),
+          color: isSelected
+              ? primary.withOpacity(0.2)
+              : Colors.white.withOpacity(0.05),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected ? primary : Colors.white.withOpacity(0.1),
@@ -910,21 +1058,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     return DateFormat('MMM dd, yyyy').format(date);
   }
 
-
   Future<void> _approveShop(String shopId, String submissionType) async {
     try {
       final firestore = FirebaseFirestore.instance;
-      
+
       // 1. Fetch shop to get the submitter's UID
       final shopDoc = await firestore.collection('shops').doc(shopId).get();
       if (!shopDoc.exists) return;
-      
+
       final shopData = shopDoc.data()!;
-      final posterId = shopData['posterId'] ?? shopData['ownerId'] ?? (shopData['postedBy'] as Map?)?['uid'];
+      final posterId = shopData['posterId'] ??
+          shopData['ownerId'] ??
+          (shopData['postedBy'] as Map?)?['uid'];
 
       // 2. Perform updates in a batch
       final batch = firestore.batch();
-      
+
       batch.update(firestore.collection('shops').doc(shopId), {
         'approvalStatus': 'approved',
         'isVerified': true,
@@ -1020,21 +1169,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     }
   }
 
-  Future<void> _togglePublishShop(String shopId, bool currentHiddenStatus) async {
+  Future<void> _togglePublishShop(
+      String shopId, bool currentHiddenStatus) async {
     final action = currentHiddenStatus ? 'publish' : 'unpublish';
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('${action[0].toUpperCase()}${action.substring(1)} Shop?', 
+        title: Text('${action[0].toUpperCase()}${action.substring(1)} Shop?',
             style: const TextStyle(color: Colors.white)),
         content: Text(
-          currentHiddenStatus 
-            ? 'This will make the shop visible to all users in the Explore feed.'
-            : 'This will hide the shop from the Explore feed and discovery results.',
-          style: const TextStyle(color: Colors.white70)
-        ),
+            currentHiddenStatus
+                ? 'This will make the shop visible to all users in the Explore feed.'
+                : 'This will hide the shop from the Explore feed and discovery results.',
+            style: const TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -1043,7 +1192,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: currentHiddenStatus ? Colors.green : Colors.blueAccent,
+              backgroundColor:
+                  currentHiddenStatus ? Colors.green : Colors.blueAccent,
               foregroundColor: Colors.white,
             ),
             child: Text(action[0].toUpperCase() + action.substring(1)),
@@ -1061,14 +1211,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(!currentHiddenStatus ? 'Shop unpublished (hidden)' : 'Shop published (visible)'),
+            content: Text(!currentHiddenStatus
+                ? 'Shop unpublished (hidden)'
+                : 'Shop published (visible)'),
             backgroundColor: Colors.blueAccent,
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -1078,10 +1231,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
-        title: const Text('Archive Shop?', style: TextStyle(color: Colors.white)),
-        content: const Text('This will hide the shop from public view and move it to the archive.', style: TextStyle(color: Colors.white70)),
+        title:
+            const Text('Archive Shop?', style: TextStyle(color: Colors.white)),
+        content: const Text(
+            'This will hide the shop from public view and move it to the archive.',
+            style: TextStyle(color: Colors.white70)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
@@ -1099,11 +1257,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         'isHidden': true,
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Shop archived successfully'), backgroundColor: Colors.orange));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Shop archived successfully'),
+            backgroundColor: Colors.orange));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -1113,13 +1274,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
-        title: Text('Delete $shopName?', style: const TextStyle(color: Colors.redAccent)),
+        title: Text('Delete $shopName?',
+            style: const TextStyle(color: Colors.redAccent)),
         content: const Text(
           'CRITICAL ACTION: This will permanently delete this shop and all its data (reviews, products, etc.) from Firestore. This cannot be undone.',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
@@ -1153,7 +1317,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           .collection('shop_claims')
           .where('shopId', isEqualTo: shopId)
           .get();
-      
+
       if (claimsQuery.docs.isNotEmpty) {
         final claimBatch = firestore.batch();
         for (var doc in claimsQuery.docs) {
@@ -1173,13 +1337,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error deleting shop: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error deleting shop: $e')));
       }
     }
   }
 
   // ======================== BULK SELECTION HELPERS ========================
-
 
   void _exitSelectionMode() {
     setState(() {
@@ -1229,7 +1393,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     ),
                   ),
                   child: isAllSelected
-                      ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
+                      ? const Icon(Icons.check_rounded,
+                          size: 14, color: Colors.white)
                       : null,
                 ),
                 const SizedBox(width: 8),
@@ -1272,7 +1437,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             ),
             child: const Text(
               'Cancel',
-              style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600),
             ),
           ),
           const SizedBox(width: 4),
@@ -1280,11 +1448,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           ElevatedButton.icon(
             onPressed: selectedCount > 0 ? onAction : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: selectedCount > 0 ? actionColor : Colors.grey[800],
+              backgroundColor:
+                  selectedCount > 0 ? actionColor : Colors.grey[800],
               foregroundColor: Colors.white,
               elevation: 0,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
               minimumSize: Size.zero,
             ),
             icon: Icon(actionIcon, size: 14),
@@ -1342,7 +1512,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     ),
                   ),
                   child: isAllSelected
-                      ? const Icon(Icons.check_rounded, size: 14, color: Colors.black)
+                      ? const Icon(Icons.check_rounded,
+                          size: 14, color: Colors.black)
                       : null,
                 ),
                 const SizedBox(width: 8),
@@ -1368,7 +1539,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             ),
             child: const Text(
               'Cancel',
-              style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600),
             ),
           ),
           const SizedBox(width: 6),
@@ -1376,30 +1550,38 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           ElevatedButton.icon(
             onPressed: selectedCount > 0 ? onAction1 : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: selectedCount > 0 ? action1Color : Colors.grey[800],
+              backgroundColor:
+                  selectedCount > 0 ? action1Color : Colors.grey[800],
               foregroundColor: Colors.white,
               elevation: 0,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
               minimumSize: Size.zero,
             ),
             icon: Icon(action1Icon, size: 13),
-            label: Text(action1Label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            label: Text(action1Label,
+                style:
+                    const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
           ),
           const SizedBox(width: 6),
           // Action 2 Button
           ElevatedButton.icon(
             onPressed: selectedCount > 0 ? onAction2 : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: selectedCount > 0 ? action2Color : Colors.grey[800],
+              backgroundColor:
+                  selectedCount > 0 ? action2Color : Colors.grey[800],
               foregroundColor: Colors.white,
               elevation: 0,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
               minimumSize: Size.zero,
             ),
             icon: Icon(action2Icon, size: 13),
-            label: Text(action2Label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            label: Text(action2Label,
+                style:
+                    const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -1426,17 +1608,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: _isSelectionMode ? color.withOpacity(0.15) : Colors.white.withOpacity(0.05),
+            color: _isSelectionMode
+                ? color.withOpacity(0.15)
+                : Colors.white.withOpacity(0.05),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: _isSelectionMode ? color.withOpacity(0.4) : Colors.white.withOpacity(0.1),
+              color: _isSelectionMode
+                  ? color.withOpacity(0.4)
+                  : Colors.white.withOpacity(0.1),
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                _isSelectionMode ? Icons.close_rounded : Icons.checklist_rounded,
+                _isSelectionMode
+                    ? Icons.close_rounded
+                    : Icons.checklist_rounded,
                 size: 14,
                 color: _isSelectionMode ? color : Colors.white54,
               ),
@@ -1456,7 +1644,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 
-  Widget _buildSelectableShopCard(String shopId, Map<String, dynamic> data, String status) {
+  Widget _buildSelectableShopCard(
+      String shopId, Map<String, dynamic> data, String status) {
     final isSelected = _selectedShopIds.contains(shopId);
     return GestureDetector(
       onLongPress: () {
@@ -1484,7 +1673,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             ? BoxDecoration(
                 borderRadius: BorderRadius.circular(28),
                 border: Border.all(
-                  color: isSelected ? primary.withOpacity(0.6) : Colors.transparent,
+                  color: isSelected
+                      ? primary.withOpacity(0.6)
+                      : Colors.transparent,
                   width: 2,
                 ),
               )
@@ -1518,7 +1709,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     ],
                   ),
                   child: isSelected
-                      ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+                      ? const Icon(Icons.check_rounded,
+                          size: 16, color: Colors.white)
                       : null,
                 ),
               ),
@@ -1556,7 +1748,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             ? BoxDecoration(
                 borderRadius: BorderRadius.circular(28),
                 border: Border.all(
-                  color: isSelected ? Colors.purpleAccent.withOpacity(0.6) : Colors.transparent,
+                  color: isSelected
+                      ? Colors.purpleAccent.withOpacity(0.6)
+                      : Colors.transparent,
                   width: 2,
                 ),
               )
@@ -1590,7 +1784,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     ],
                   ),
                   child: isSelected
-                      ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+                      ? const Icon(Icons.check_rounded,
+                          size: 16, color: Colors.white)
                       : null,
                 ),
               ),
@@ -1602,7 +1797,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   // ======================== BULK FIRESTORE OPERATIONS ========================
 
-
   Future<void> _bulkArchiveShops(Set<String> ids) async {
     if (ids.isEmpty) return;
     final confirm = await showDialog<bool>(
@@ -1610,7 +1804,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Archive Selected Shops?', style: TextStyle(color: Colors.white)),
+        title: const Text('Archive Selected Shops?',
+            style: TextStyle(color: Colors.white)),
         content: Text(
           'This will archive ${ids.length} shop(s) and hide them from public view.',
           style: const TextStyle(color: Colors.white70),
@@ -1618,12 +1813,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('Cancel', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-            child: Text('Archive ${ids.length}', style: const TextStyle(color: Colors.white)),
+            child: Text('Archive ${ids.length}',
+                style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1649,7 +1846,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
       }
     }
   }
@@ -1661,7 +1859,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Delete ${ids.length} Shop(s)?', style: const TextStyle(color: Colors.redAccent)),
+        title: Text('Delete ${ids.length} Shop(s)?',
+            style: const TextStyle(color: Colors.redAccent)),
         content: Text(
           'CRITICAL ACTION: This will permanently delete ${ids.length} shop(s) and all their data (reviews, products, etc.) from Firestore. This cannot be undone.',
           style: const TextStyle(color: Colors.white70),
@@ -1669,12 +1868,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('Cancel', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: Text('DELETE ${ids.length}', style: const TextStyle(color: Colors.white)),
+            child: Text('DELETE ${ids.length}',
+                style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1694,7 +1895,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
         // Collect all subcollection docs + claims in parallel
         final subcollections = ['reviews', 'jobs', 'products', 'gallery'];
-        final subFutures = subcollections.map((sub) => shopRef.collection(sub).get());
+        final subFutures =
+            subcollections.map((sub) => shopRef.collection(sub).get());
         final claimsFuture = firestore
             .collection('shop_claims')
             .where('shopId', isEqualTo: shopId)
@@ -1721,19 +1923,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
       }
     }
   }
 
-  Future<void> _bulkDeleteClaims(Set<String> ids, {bool dissociate = false}) async {
+  Future<void> _bulkDeleteClaims(Set<String> ids,
+      {bool dissociate = false}) async {
     if (ids.isEmpty) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Delete ${ids.length} Claim(s)?', style: const TextStyle(color: Colors.redAccent)),
+        title: Text('Delete ${ids.length} Claim(s)?',
+            style: const TextStyle(color: Colors.redAccent)),
         content: Text(
           dissociate
               ? 'This will permanently delete ${ids.length} claim record(s) and dissociate the shops from their owners.'
@@ -1743,12 +1948,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('Cancel', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: Text('DELETE ${ids.length}', style: const TextStyle(color: Colors.white)),
+            child: Text('DELETE ${ids.length}',
+                style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1765,7 +1972,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       // Fire all claim deletions in parallel
       await Future.wait(ids.map((claimId) async {
         if (dissociate) {
-          final claimSnap = await firestore.collection('shop_claims').doc(claimId).get();
+          final claimSnap =
+              await firestore.collection('shop_claims').doc(claimId).get();
           if (claimSnap.exists) {
             final data = claimSnap.data()!;
             final shopId = data['shopId'] as String?;
@@ -1796,7 +2004,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
       }
     }
   }
@@ -1808,7 +2017,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Archive Selected Claims?', style: TextStyle(color: Colors.white)),
+        title: const Text('Archive Selected Claims?',
+            style: TextStyle(color: Colors.white)),
         content: Text(
           'This will remove ${ids.length} rejected claim record(s).',
           style: const TextStyle(color: Colors.white70),
@@ -1816,12 +2026,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('Cancel', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-            child: Text('Archive ${ids.length}', style: const TextStyle(color: Colors.white)),
+            child: Text('Archive ${ids.length}',
+                style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1845,7 +2057,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
       }
     }
   }
@@ -1857,7 +2070,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Revert ${ids.length} Shop(s) to Pending?', style: const TextStyle(color: Colors.blueAccent)),
+        title: Text('Revert ${ids.length} Shop(s) to Pending?',
+            style: const TextStyle(color: Colors.blueAccent)),
         content: Text(
           'This will move ${ids.length} shop(s) back to the pending review queue.',
           style: const TextStyle(color: Colors.white70),
@@ -1865,12 +2079,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('Cancel', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-            child: Text('REVERT ${ids.length}', style: const TextStyle(color: Colors.white)),
+            child: Text('REVERT ${ids.length}',
+                style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1897,7 +2113,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
       }
     }
   }
@@ -1909,7 +2126,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Approve ${ids.length} Shop(s)?', style: const TextStyle(color: Colors.green)),
+        title: Text('Approve ${ids.length} Shop(s)?',
+            style: const TextStyle(color: Colors.green)),
         content: Text(
           'This will approve ${ids.length} shop(s) and make them visible. Business submissions will also upgrade the owner accounts.',
           style: const TextStyle(color: Colors.white70),
@@ -1917,12 +2135,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('Cancel', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: Text('APPROVE ${ids.length}', style: const TextStyle(color: Colors.white)),
+            child: Text('APPROVE ${ids.length}',
+                style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1940,8 +2160,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         if (!shopDoc.exists) return;
 
         final shopData = shopDoc.data()!;
-        final submissionType = shopData['submissionType'] as String? ?? 'community';
-        final posterId = shopData['posterId'] ?? shopData['ownerId'] ?? (shopData['postedBy'] as Map?)?['uid'];
+        final submissionType =
+            shopData['submissionType'] as String? ?? 'community';
+        final posterId = shopData['posterId'] ??
+            shopData['ownerId'] ??
+            (shopData['postedBy'] as Map?)?['uid'];
 
         final batch = firestore.batch();
         batch.update(firestore.collection('shops').doc(shopId), {
@@ -1968,7 +2191,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
       }
     }
   }
@@ -1980,7 +2204,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Reject ${ids.length} Shop(s)?', style: const TextStyle(color: Colors.orange)),
+        title: Text('Reject ${ids.length} Shop(s)?',
+            style: const TextStyle(color: Colors.orange)),
         content: Text(
           'This will reject ${ids.length} pending shop submission(s).',
           style: const TextStyle(color: Colors.white70),
@@ -1988,12 +2213,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('Cancel', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-            child: Text('REJECT ${ids.length}', style: const TextStyle(color: Colors.white)),
+            child: Text('REJECT ${ids.length}',
+                style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -2024,7 +2251,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
       }
     }
   }
@@ -2036,7 +2264,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Unpublish ${ids.length} Shop(s)?', style: const TextStyle(color: Colors.blueAccent)),
+        title: Text('Unpublish ${ids.length} Shop(s)?',
+            style: const TextStyle(color: Colors.blueAccent)),
         content: Text(
           'This will hide ${ids.length} shop(s) from the Explore feed and discovery results.',
           style: const TextStyle(color: Colors.white70),
@@ -2044,12 +2273,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('Cancel', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-            child: Text('UNPUBLISH ${ids.length}', style: const TextStyle(color: Colors.white)),
+            child: Text('UNPUBLISH ${ids.length}',
+                style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -2075,11 +2306,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
       }
     }
   }
-
 
   Widget _buildSegmentedFilter({
     required String label1,
@@ -2173,11 +2404,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       .snapshots(),
                   builder: (context, snapshot) {
                     final total = snapshot.data?.docs.length ?? 0;
-                    final allIds = snapshot.data?.docs.map((d) => d.id).toSet() ?? {};
+                    final allIds =
+                        snapshot.data?.docs.map((d) => d.id).toSet() ?? {};
                     return _buildDualActionBar(
                       totalCount: total,
                       selectedCount: _selectedShopIds.length,
-                      isAllSelected: total > 0 && _selectedShopIds.containsAll(allIds),
+                      isAllSelected:
+                          total > 0 && _selectedShopIds.containsAll(allIds),
                       onSelectAll: () {
                         setState(() {
                           if (_selectedShopIds.containsAll(allIds)) {
@@ -2190,11 +2423,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       action1Label: 'Revert',
                       action1Icon: Icons.undo_rounded,
                       action1Color: Colors.blueAccent,
-                      onAction1: () => _bulkRevertToPending(Set.from(_selectedShopIds)),
+                      onAction1: () =>
+                          _bulkRevertToPending(Set.from(_selectedShopIds)),
                       action2Label: 'Archive',
                       action2Icon: Icons.archive_rounded,
                       action2Color: Colors.orange,
-                      onAction2: () => _bulkArchiveShops(Set.from(_selectedShopIds)),
+                      onAction2: () =>
+                          _bulkArchiveShops(Set.from(_selectedShopIds)),
                     );
                   },
                 )
@@ -2205,11 +2440,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       .snapshots(),
                   builder: (context, snapshot) {
                     final total = snapshot.data?.docs.length ?? 0;
-                    final allIds = snapshot.data?.docs.map((d) => d.id).toSet() ?? {};
+                    final allIds =
+                        snapshot.data?.docs.map((d) => d.id).toSet() ?? {};
                     return _buildBulkActionBar(
                       totalCount: total,
                       selectedCount: _selectedClaimIds.length,
-                      isAllSelected: total > 0 && _selectedClaimIds.containsAll(allIds),
+                      isAllSelected:
+                          total > 0 && _selectedClaimIds.containsAll(allIds),
                       onSelectAll: () {
                         setState(() {
                           if (_selectedClaimIds.containsAll(allIds)) {
@@ -2219,7 +2456,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                           }
                         });
                       },
-                      onAction: () => _bulkArchiveClaims(Set.from(_selectedClaimIds)),
+                      onAction: () =>
+                          _bulkArchiveClaims(Set.from(_selectedClaimIds)),
                       actionLabel: 'Archive',
                       actionIcon: Icons.archive_rounded,
                       actionColor: Colors.orange,
@@ -2236,25 +2474,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                      return const Center(child: Padding(
+                      return const Center(
+                          child: Padding(
                         padding: EdgeInsets.all(20.0),
-                        child: Text('No denied shops', style: TextStyle(color: Colors.white24, fontSize: 13)),
+                        child: Text('No denied shops',
+                            style:
+                                TextStyle(color: Colors.white24, fontSize: 13)),
                       ));
                     }
 
                     // Apply search & source filter
                     var docs = snapshot.data!.docs.where((doc) {
                       final data = doc.data();
-                      final name = (data['name'] as String? ?? '').toLowerCase();
-                      final address = (data['address'] as String? ?? '').toLowerCase();
-                      final submissionType = data['submissionType'] as String? ?? 'community';
+                      final name =
+                          (data['name'] as String? ?? '').toLowerCase();
+                      final address =
+                          (data['address'] as String? ?? '').toLowerCase();
+                      final submissionType =
+                          data['submissionType'] as String? ?? 'community';
                       final ownerId = data['ownerId'] as String?;
-                      final isBusiness = (submissionType == 'business' || (ownerId != null && ownerId.isNotEmpty));
+                      final isBusiness = (submissionType == 'business' ||
+                          (ownerId != null && ownerId.isNotEmpty));
 
                       bool matchesSearch = true;
                       if (_searchQuery.isNotEmpty) {
                         final q = _searchQuery.toLowerCase();
-                        matchesSearch = name.startsWith(q) || name.contains(q) || address.contains(q);
+                        matchesSearch = name.startsWith(q) ||
+                            name.contains(q) ||
+                            address.contains(q);
                       }
 
                       bool matchesSource = true;
@@ -2273,8 +2520,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     if (_searchQuery.isNotEmpty) {
                       final q = _searchQuery.toLowerCase();
                       docs.sort((a, b) {
-                        final startsA = (a.data()['name'] as String? ?? '').toLowerCase().startsWith(q);
-                        final startsB = (b.data()['name'] as String? ?? '').toLowerCase().startsWith(q);
+                        final startsA = (a.data()['name'] as String? ?? '')
+                            .toLowerCase()
+                            .startsWith(q);
+                        final startsB = (b.data()['name'] as String? ?? '')
+                            .toLowerCase()
+                            .startsWith(q);
                         if (startsA && !startsB) return -1;
                         if (!startsA && startsB) return 1;
                         return 0;
@@ -2282,9 +2533,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     }
 
                     if (docs.isEmpty) {
-                      return const Center(child: Padding(
+                      return const Center(
+                          child: Padding(
                         padding: EdgeInsets.all(20.0),
-                        child: Text('No matching shops', style: TextStyle(color: Colors.white24, fontSize: 13)),
+                        child: Text('No matching shops',
+                            style:
+                                TextStyle(color: Colors.white24, fontSize: 13)),
                       ));
                     }
 
@@ -2294,7 +2548,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       itemBuilder: (context, index) {
                         final doc = docs[index];
                         return _isSelectionMode
-                            ? _buildSelectableShopCard(doc.id, doc.data(), 'rejected')
+                            ? _buildSelectableShopCard(
+                                doc.id, doc.data(), 'rejected')
                             : _buildShopCard(doc.id, doc.data(), 'rejected');
                       },
                     );
@@ -2321,7 +2576,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             });
           },
         ),
-    
+
         // Select Mode Toggle + Bulk Action Bar
         _buildSelectModeToggle(color: Colors.redAccent),
         if (_isSelectionMode)
@@ -2333,11 +2588,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       .snapshots(),
                   builder: (context, snapshot) {
                     final total = snapshot.data?.docs.length ?? 0;
-                    final allIds = snapshot.data?.docs.map((d) => d.id).toSet() ?? {};
+                    final allIds =
+                        snapshot.data?.docs.map((d) => d.id).toSet() ?? {};
                     return _buildBulkActionBar(
                       totalCount: total,
                       selectedCount: _selectedShopIds.length,
-                      isAllSelected: total > 0 && _selectedShopIds.containsAll(allIds),
+                      isAllSelected:
+                          total > 0 && _selectedShopIds.containsAll(allIds),
                       onSelectAll: () {
                         setState(() {
                           if (_selectedShopIds.containsAll(allIds)) {
@@ -2347,7 +2604,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                           }
                         });
                       },
-                      onAction: () => _bulkDeleteShops(Set.from(_selectedShopIds)),
+                      onAction: () =>
+                          _bulkDeleteShops(Set.from(_selectedShopIds)),
                       actionLabel: 'Delete',
                       actionIcon: Icons.delete_forever_rounded,
                       actionColor: Colors.redAccent,
@@ -2361,11 +2619,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       .snapshots(),
                   builder: (context, snapshot) {
                     final total = snapshot.data?.docs.length ?? 0;
-                    final allIds = snapshot.data?.docs.map((d) => d.id).toSet() ?? {};
+                    final allIds =
+                        snapshot.data?.docs.map((d) => d.id).toSet() ?? {};
                     return _buildBulkActionBar(
                       totalCount: total,
                       selectedCount: _selectedClaimIds.length,
-                      isAllSelected: total > 0 && _selectedClaimIds.containsAll(allIds),
+                      isAllSelected:
+                          total > 0 && _selectedClaimIds.containsAll(allIds),
                       onSelectAll: () {
                         setState(() {
                           if (_selectedClaimIds.containsAll(allIds)) {
@@ -2375,7 +2635,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                           }
                         });
                       },
-                      onAction: () => _bulkDeleteClaims(Set.from(_selectedClaimIds), dissociate: true),
+                      onAction: () => _bulkDeleteClaims(
+                          Set.from(_selectedClaimIds),
+                          dissociate: true),
                       actionLabel: 'Delete',
                       actionIcon: Icons.delete_forever_rounded,
                       actionColor: Colors.redAccent,
@@ -2392,25 +2654,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                      return const Center(child: Padding(
+                      return const Center(
+                          child: Padding(
                         padding: EdgeInsets.all(20.0),
-                        child: Text('No archived shops', style: TextStyle(color: Colors.white24, fontSize: 13)),
+                        child: Text('No archived shops',
+                            style:
+                                TextStyle(color: Colors.white24, fontSize: 13)),
                       ));
                     }
 
                     // Apply search & source filter
                     var docs = snapshot.data!.docs.where((doc) {
                       final data = doc.data();
-                      final name = (data['name'] as String? ?? '').toLowerCase();
-                      final address = (data['address'] as String? ?? '').toLowerCase();
-                      final submissionType = data['submissionType'] as String? ?? 'community';
+                      final name =
+                          (data['name'] as String? ?? '').toLowerCase();
+                      final address =
+                          (data['address'] as String? ?? '').toLowerCase();
+                      final submissionType =
+                          data['submissionType'] as String? ?? 'community';
                       final ownerId = data['ownerId'] as String?;
-                      final isBusiness = (submissionType == 'business' || (ownerId != null && ownerId.isNotEmpty));
+                      final isBusiness = (submissionType == 'business' ||
+                          (ownerId != null && ownerId.isNotEmpty));
 
                       bool matchesSearch = true;
                       if (_searchQuery.isNotEmpty) {
                         final q = _searchQuery.toLowerCase();
-                        matchesSearch = name.startsWith(q) || name.contains(q) || address.contains(q);
+                        matchesSearch = name.startsWith(q) ||
+                            name.contains(q) ||
+                            address.contains(q);
                       }
 
                       bool matchesSource = true;
@@ -2429,8 +2700,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     if (_searchQuery.isNotEmpty) {
                       final q = _searchQuery.toLowerCase();
                       docs.sort((a, b) {
-                        final startsA = (a.data()['name'] as String? ?? '').toLowerCase().startsWith(q);
-                        final startsB = (b.data()['name'] as String? ?? '').toLowerCase().startsWith(q);
+                        final startsA = (a.data()['name'] as String? ?? '')
+                            .toLowerCase()
+                            .startsWith(q);
+                        final startsB = (b.data()['name'] as String? ?? '')
+                            .toLowerCase()
+                            .startsWith(q);
                         if (startsA && !startsB) return -1;
                         if (!startsA && startsB) return 1;
                         return 0;
@@ -2438,9 +2713,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     }
 
                     if (docs.isEmpty) {
-                      return const Center(child: Padding(
+                      return const Center(
+                          child: Padding(
                         padding: EdgeInsets.all(20.0),
-                        child: Text('No matching shops', style: TextStyle(color: Colors.white24, fontSize: 13)),
+                        child: Text('No matching shops',
+                            style:
+                                TextStyle(color: Colors.white24, fontSize: 13)),
                       ));
                     }
 
@@ -2450,7 +2728,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       itemBuilder: (context, index) {
                         final doc = docs[index];
                         return _isSelectionMode
-                            ? _buildSelectableShopCard(doc.id, doc.data(), 'archived')
+                            ? _buildSelectableShopCard(
+                                doc.id, doc.data(), 'archived')
                             : _buildShopCard(doc.id, doc.data(), 'archived');
                       },
                     );
@@ -2476,12 +2755,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               ? StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                   stream: FirebaseFirestore.instance
                       .collection('shops')
-                      .where('approvalStatus', isEqualTo: 'awaiting_verification')
+                      .where('approvalStatus',
+                          isEqualTo: 'awaiting_verification')
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                       return const Center(
-                        child: Text('No direct business submissions', style: TextStyle(color: Colors.white24, fontSize: 13)),
+                        child: Text('No direct business submissions',
+                            style:
+                                TextStyle(color: Colors.white24, fontSize: 13)),
                       );
                     }
                     return ListView.builder(
@@ -2493,19 +2775,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         final mappedData = {
                           'shopId': doc.id,
                           'shopName': data['name'],
-                          'claimantEmail': (data['postedBy'] as Map?)?['email'] ?? 'User Submittal',
+                          'claimantEmail':
+                              (data['postedBy'] as Map?)?['email'] ??
+                                  'User Submittal',
                           'claimantId': data['posterId'] ?? data['ownerId'],
-                          'status': 'awaiting_verification', 
+                          'status': 'awaiting_verification',
                           'createdAt': data['postedAt'],
                           'isDirectSubmission': true,
                           'permitImageUrl': data['permitImageUrl'],
                           'idImageUrl': data['idImageUrl'],
                           'businessLegalName': data['businessLegalName'],
                           'applicantRole': data['applicantRole'],
-                          'verificationDocReference': data['verificationDocReference'],
+                          'verificationDocReference':
+                              data['verificationDocReference'],
                           'legalAttestation': data['legalAttestation'],
                           'legalTermsAccepted': data['legalTermsAccepted'],
-                          'dataProcessingConsent': data['dataProcessingConsent'],
+                          'dataProcessingConsent':
+                              data['dataProcessingConsent'],
                         };
                         return _buildClaimCard(doc.id, mappedData);
                       },
@@ -2518,7 +2804,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 
-  Widget _buildClaimsList({String status = 'pending', bool isEmbedded = false}) {
+  Widget _buildClaimsList(
+      {String status = 'pending', bool isEmbedded = false}) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
           .collection('shop_claims')
@@ -2544,17 +2831,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           if (isEmbedded) {
-            return const Center(child: Padding(
+            return const Center(
+                child: Padding(
               padding: EdgeInsets.all(20.0),
-              child: Text('No processed claims', style: TextStyle(color: Colors.white10, fontSize: 13)),
+              child: Text('No processed claims',
+                  style: TextStyle(color: Colors.white10, fontSize: 13)),
             ));
           }
           return _buildEmptyState(
             status == 'pending' ? 'No Pending Claims' : 'History is Empty',
-            status == 'pending' 
+            status == 'pending'
                 ? 'Great job! You have handled all ownership claims.'
                 : 'No processed claims found in this category.',
-            status == 'pending' ? Icons.verified_rounded : Icons.folder_off_rounded,
+            status == 'pending'
+                ? Icons.verified_rounded
+                : Icons.folder_off_rounded,
           );
         }
 
@@ -2562,7 +2853,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
         return ListView.builder(
           shrinkWrap: isEmbedded,
-          physics: isEmbedded ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
+          physics: isEmbedded
+              ? const NeverScrollableScrollPhysics()
+              : const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           itemCount: docs.length,
           itemBuilder: (context, index) {
@@ -2611,7 +2904,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 
-
   Widget _buildClaimCard(String claimId, Map<String, dynamic> data) {
     final shopName = data['shopName'] as String? ?? 'Unknown Shop';
     final claimantEmail = data['claimantEmail'] as String? ?? 'No email';
@@ -2643,7 +2935,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       color: Colors.purple.withOpacity(0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.assignment_ind_rounded, color: Colors.purpleAccent, size: 24),
+                    child: const Icon(Icons.assignment_ind_rounded,
+                        color: Colors.purpleAccent, size: 24),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -2672,24 +2965,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
                           child: InkWell(
-                        onTap: () {
-                          if (data['isDirectSubmission'] == true) {
-                            _deleteShopPermanently(claimId, shopName);
-                          } else {
-                            _deleteArchiveItem(claimId);
-                          }
-                        },
+                            onTap: () {
+                              if (data['isDirectSubmission'] == true) {
+                                _deleteShopPermanently(claimId, shopName);
+                              } else {
+                                _deleteArchiveItem(claimId);
+                              }
+                            },
                             borderRadius: BorderRadius.circular(12),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                                border: Border.all(
+                                    color: Colors.redAccent.withOpacity(0.3)),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.delete_rounded, color: Colors.redAccent, size: 12),
+                                  Icon(Icons.delete_rounded,
+                                      color: Colors.redAccent, size: 12),
                                   SizedBox(width: 4),
                                   Text(
                                     'REMOVE',
@@ -2713,7 +3009,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 children: [
                   if (idUrl != null || permitUrl != null)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
                         color: Colors.blue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(10),
@@ -2721,10 +3018,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.attachment_rounded, size: 14, color: Colors.blue),
+                          const Icon(Icons.attachment_rounded,
+                              size: 14, color: Colors.blue),
                           const SizedBox(width: 6),
                           const Text('DOCS ATTACHED',
-                              style: TextStyle(color: Colors.blue, fontSize: 10, fontWeight: FontWeight.bold)),
+                              style: TextStyle(
+                                  color: Colors.blue,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -2784,11 +3085,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     final claimantEmail = data['claimantEmail'] as String? ?? 'No email';
     final legalName = data['businessLegalName'] as String? ?? 'Not provided';
     final role = data['applicantRole'] as String? ?? 'Not provided';
-    final docRef = data['verificationDocReference'] as String? ?? 'Not provided';
+    final docRef =
+        data['verificationDocReference'] as String? ?? 'Not provided';
     final permitUrl = data['permitImageUrl'] as String?;
     final idUrl = data['idImageUrl'] as String?;
     final createdAt = data['createdAt'] as Timestamp?;
-    
+
     final attestation = data['legalAttestation'] as bool? ?? false;
     final termsAccepted = data['legalTermsAccepted'] as bool? ?? false;
     final dataConsent = data['dataProcessingConsent'] as bool? ?? false;
@@ -2821,7 +3123,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   ),
                 ),
                 const SizedBox(height: 20),
-                
+
                 // Content
                 Expanded(
                   child: SingleChildScrollView(
@@ -2853,46 +3155,58 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                                 ],
                               ),
                             ),
-                            _buildStatusIndicator(data['status'] ?? 'pending', data['status'] == 'approved'),
+                            _buildStatusIndicator(data['status'] ?? 'pending',
+                                data['status'] == 'approved'),
                           ],
                         ),
                         const SizedBox(height: 40),
-                        
+
                         _buildReviewSection('Claimant Identity', [
                           _buildDetailRow('Professional Email', claimantEmail),
                           _buildDetailRow('Legal Entity Name', legalName),
                           _buildDetailRow('Applicant Position', role),
                         ]),
-                        
+
                         const SizedBox(height: 32),
                         _buildReviewSection('Evidence & Docs', [
                           _buildDetailRow('Document Reference', docRef),
                           if (permitUrl != null) ...[
                             const SizedBox(height: 12),
-                            TextWidget(text: 'Business Permit / BIR COR', fontSize: 12, color: Colors.grey),
+                            TextWidget(
+                                text: 'Business Permit / BIR COR',
+                                fontSize: 12,
+                                color: Colors.grey),
                             const SizedBox(height: 8),
                             _buildImagePreview(permitUrl, 'Business Permit'),
                           ],
                           if (idUrl != null) ...[
                             const SizedBox(height: 20),
-                            TextWidget(text: 'Representative ID', fontSize: 12, color: Colors.grey),
+                            TextWidget(
+                                text: 'Representative ID',
+                                fontSize: 12,
+                                color: Colors.grey),
                             const SizedBox(height: 8),
                             _buildImagePreview(idUrl, 'ID Card'),
                           ],
                           if (permitUrl == null && idUrl == null)
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 24),
-                              child: Text('No visual documents provided.', style: TextStyle(color: Colors.amber, fontSize: 13)),
+                              child: Text('No visual documents provided.',
+                                  style: TextStyle(
+                                      color: Colors.amber, fontSize: 13)),
                             ),
                         ]),
-                        
+
                         const SizedBox(height: 32),
                         _buildReviewSection('Legal Compliance', [
-                          _buildLegalTag('Authorized Representative', attestation),
-                          _buildLegalTag('Terms of Service Accepted', termsAccepted),
-                          _buildLegalTag('Data Processing Consent', dataConsent),
+                          _buildLegalTag(
+                              'Authorized Representative', attestation),
+                          _buildLegalTag(
+                              'Terms of Service Accepted', termsAccepted),
+                          _buildLegalTag(
+                              'Data Processing Consent', dataConsent),
                         ]),
-                        
+
                         const SizedBox(height: 120), // Space for buttons
                       ],
                     ),
@@ -2902,16 +3216,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             ),
 
             // Bottom Actions
-            if (data['status'] == 'pending' || data['isDirectSubmission'] == true)
+            if (data['status'] == 'pending' ||
+                data['isDirectSubmission'] == true)
               Positioned(
                 bottom: 0,
                 left: 0,
                 right: 0,
                 child: Container(
-                  padding: EdgeInsets.fromLTRB(24, 16, 24, MediaQuery.of(context).padding.bottom + 16),
+                  padding: EdgeInsets.fromLTRB(
+                      24, 16, 24, MediaQuery.of(context).padding.bottom + 16),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Colors.black.withOpacity(0), const Color(0xFF1A1A1A)],
+                      colors: [
+                        Colors.black.withOpacity(0),
+                        const Color(0xFF1A1A1A)
+                      ],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       stops: const [0, 0.2],
@@ -2932,8 +3251,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
-                          child: Text(data['isDirectSubmission'] == true ? 'Reject Shop' : 'Reject Claim', 
-                            style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                          child: Text(
+                              data['isDirectSubmission'] == true
+                                  ? 'Reject Shop'
+                                  : 'Reject Claim',
+                              style: const TextStyle(
+                                  color: Colors.redAccent,
+                                  fontWeight: FontWeight.bold)),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -2944,18 +3268,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                             if (data['isDirectSubmission'] == true) {
                               _approveShop(data['shopId'], 'business');
                             } else {
-                              _approveClaim(claimId, data['shopId'], data['claimantId']);
+                              _approveClaim(
+                                  claimId, data['shopId'], data['claimantId']);
                             }
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16)),
                             elevation: 0,
                           ),
-                          child: Text(data['isDirectSubmission'] == true ? 'Approve Shop' : 'Confirm Approval', 
-                            style: const TextStyle(fontWeight: FontWeight.bold)),
+                          child: Text(
+                              data['isDirectSubmission'] == true
+                                  ? 'Approve Shop'
+                                  : 'Confirm Approval',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ),
                     ],
@@ -3011,7 +3341,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       decoration: BoxDecoration(
         color: (value ? Colors.green : Colors.redAccent).withOpacity(0.05),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: (value ? Colors.green : Colors.redAccent).withOpacity(0.15)),
+        border: Border.all(
+            color: (value ? Colors.green : Colors.redAccent).withOpacity(0.15)),
       ),
       child: Row(
         children: [
@@ -3021,7 +3352,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             size: 16,
           ),
           const SizedBox(width: 10),
-          Expanded(child: TextWidget(text: label, fontSize: 13, color: Colors.white70)),
+          Expanded(
+              child:
+                  TextWidget(text: label, fontSize: 13, color: Colors.white70)),
         ],
       ),
     );
@@ -3052,7 +3385,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   top: 20,
                   right: 20,
                   child: IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                    icon:
+                        const Icon(Icons.close, color: Colors.white, size: 30),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ),
@@ -3086,7 +3420,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   color: Colors.black54,
                   child: const Center(
-                    child: Text('Tap to zoom', style: TextStyle(color: Colors.white, fontSize: 12)),
+                    child: Text('Tap to zoom',
+                        style: TextStyle(color: Colors.white, fontSize: 12)),
                   ),
                 ),
               ),
@@ -3097,45 +3432,49 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 
-  Future<void> _approveClaim(String claimId, String? shopId, String? claimantId) async {
+  Future<void> _approveClaim(
+      String claimId, String? shopId, String? claimantId) async {
     if (shopId == null || claimantId == null) return;
-    
+
     try {
       // ✅ ATOMIC TRANSACTION: Prevents race conditions and ownership hijacking
-      final result = await FirebaseFirestore.instance.runTransaction<Map<String, dynamic>>((txn) async {
+      final result = await FirebaseFirestore.instance
+          .runTransaction<Map<String, dynamic>>((txn) async {
         // 1. Read shop document
-        final shopRef = FirebaseFirestore.instance.collection('shops').doc(shopId);
+        final shopRef =
+            FirebaseFirestore.instance.collection('shops').doc(shopId);
         final shopSnap = await txn.get(shopRef);
-        
+
         if (!shopSnap.exists) {
           throw Exception('Shop no longer exists');
         }
-        
+
         final shopData = shopSnap.data()!;
         final currentOwnerId = shopData['ownerId'];
-        
+
         // 2. Check if shop already claimed by SOMEONE ELSE
-        if (currentOwnerId != null && 
-            currentOwnerId.toString().trim().isNotEmpty && 
+        if (currentOwnerId != null &&
+            currentOwnerId.toString().trim().isNotEmpty &&
             currentOwnerId != claimantId) {
           throw Exception('This shop is already claimed by another user');
         }
-        
+
         // 3. Read all pending claims for this shop
         final claimsQuery = await FirebaseFirestore.instance
             .collection('shop_claims')
             .where('shopId', isEqualTo: shopId)
             .where('status', isEqualTo: 'pending')
             .get();
-        
+
         // 4. Approve the selected claim
-        final claimRef = FirebaseFirestore.instance.collection('shop_claims').doc(claimId);
+        final claimRef =
+            FirebaseFirestore.instance.collection('shop_claims').doc(claimId);
         txn.update(claimRef, {
           'status': 'approved',
           'approvedAt': FieldValue.serverTimestamp(),
           'approvedBy': FirebaseAuth.instance.currentUser?.uid,
         });
-        
+
         // 5. Update shop with ownerId
         txn.update(shopRef, {
           'ownerId': claimantId,
@@ -3147,7 +3486,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           'approvedAt': FieldValue.serverTimestamp(),
           'approvedBy': FirebaseAuth.instance.currentUser?.uid,
         });
-        
+
         // 6. Auto-reject all other pending claims
         for (final claimDoc in claimsQuery.docs) {
           if (claimDoc.id != claimId) {
@@ -3161,12 +3500,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         }
 
         // 7. Update user account type to business
-        final userRef = FirebaseFirestore.instance.collection('users').doc(claimantId);
+        final userRef =
+            FirebaseFirestore.instance.collection('users').doc(claimantId);
         txn.update(userRef, {
           'accountType': 'business',
           'lastVerifiedAt': FieldValue.serverTimestamp(),
         });
-        
+
         return {
           'success': true,
           'rejectedCount': claimsQuery.docs.length - 1,
@@ -3206,7 +3546,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   Future<void> _rejectClaim(String claimId, {String? shopId}) async {
     try {
-      await FirebaseFirestore.instance.collection('shop_claims').doc(claimId).update({
+      await FirebaseFirestore.instance
+          .collection('shop_claims')
+          .doc(claimId)
+          .update({
         'status': 'rejected',
         'rejectedAt': FieldValue.serverTimestamp(),
         'rejectedBy': FirebaseAuth.instance.currentUser?.uid,
@@ -3214,7 +3557,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
       // 2. Dissociate shop if provided
       if (shopId != null) {
-        final shopRef = FirebaseFirestore.instance.collection('shops').doc(shopId);
+        final shopRef =
+            FirebaseFirestore.instance.collection('shops').doc(shopId);
         final shopSnap = await shopRef.get();
         if (shopSnap.exists) {
           await shopRef.update({
@@ -3250,7 +3594,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.grey[900],
-        title: const Text('Migrate Legacy Shops', style: TextStyle(color: Colors.white)),
+        title: const Text('Migrate Legacy Shops',
+            style: TextStyle(color: Colors.white)),
         content: const Text(
           'This will add approvalStatus and submissionType fields to all shops missing them.\n\n'
           'Shops with ownerId will be marked as approved business shops.\n'
@@ -3277,43 +3622,46 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     try {
       final firestore = FirebaseFirestore.instance;
       final allShops = await firestore.collection('shops').get();
-      
+
       int migratedCount = 0;
       int skippedCount = 0;
       final batch = firestore.batch();
-      
+
       for (final doc in allShops.docs) {
         final data = doc.data();
         final hasApprovalStatus = data.containsKey('approvalStatus');
         final hasSubmissionType = data.containsKey('submissionType');
-        
+
         if (!hasApprovalStatus || !hasSubmissionType) {
           final ownerId = data['ownerId'];
-          final hasOwner = ownerId != null && ownerId.toString().trim().isNotEmpty;
-          
+          final hasOwner =
+              ownerId != null && ownerId.toString().trim().isNotEmpty;
+
           final migrationData = <String, dynamic>{};
-          
+
           if (!hasApprovalStatus) {
-            migrationData['approvalStatus'] = hasOwner ? 'approved' : 'pending_approval';
+            migrationData['approvalStatus'] =
+                hasOwner ? 'approved' : 'pending_approval';
           }
-          
+
           if (!hasSubmissionType) {
-            migrationData['submissionType'] = hasOwner ? 'business' : 'community';
+            migrationData['submissionType'] =
+                hasOwner ? 'business' : 'community';
           }
-          
+
           if (hasOwner && !data.containsKey('isVerified')) {
             migrationData['isVerified'] = true;
           }
-          
+
           batch.update(doc.reference, migrationData);
           migratedCount++;
         } else {
           skippedCount++;
         }
       }
-      
+
       await batch.commit();
-      
+
       if (mounted) {
         showDialog(
           context: context,
@@ -3323,7 +3671,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               children: [
                 Icon(Icons.check_circle, color: Colors.green),
                 SizedBox(width: 12),
-                Text('Migration Complete', style: TextStyle(color: Colors.white)),
+                Text('Migration Complete',
+                    style: TextStyle(color: Colors.white)),
               ],
             ),
             content: Text(
@@ -3358,7 +3707,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
-        title: const Text('Remove from Archive?', style: TextStyle(color: Colors.white)),
+        title: const Text('Remove from Archive?',
+            style: TextStyle(color: Colors.white)),
         content: const Text(
           'This will permanently delete this claim record and dissociate the shop from the user.\n'
           'The user will be able to claim or submit a shop again.',
@@ -3367,12 +3717,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('Cancel', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: const Text('Remove & Reset', style: TextStyle(color: Colors.white)),
+            child: const Text('Remove & Reset',
+                style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -3382,14 +3734,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
     try {
       // 1. Fetch claim to get shopId
-      final claimSnap = await FirebaseFirestore.instance.collection('shop_claims').doc(claimId).get();
+      final claimSnap = await FirebaseFirestore.instance
+          .collection('shop_claims')
+          .doc(claimId)
+          .get();
       if (claimSnap.exists) {
         final data = claimSnap.data()!;
         final shopId = data['shopId'] as String?;
-        
+
         // 2. Dissociate shop if it exists
         if (shopId != null) {
-          final shopRef = FirebaseFirestore.instance.collection('shops').doc(shopId);
+          final shopRef =
+              FirebaseFirestore.instance.collection('shops').doc(shopId);
           final shopSnap = await shopRef.get();
           if (shopSnap.exists) {
             await shopRef.update({
@@ -3405,8 +3761,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       }
 
       // 3. Delete the claim record
-      await FirebaseFirestore.instance.collection('shop_claims').doc(claimId).delete();
-      
+      await FirebaseFirestore.instance
+          .collection('shop_claims')
+          .doc(claimId)
+          .delete();
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -3449,7 +3808,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('Cancel', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -3458,9 +3818,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('Run Cleanup', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text('Run Cleanup',
+                style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -3469,7 +3831,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   Future<void> _runCleanup() async {
     if (!mounted) return;
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -3479,7 +3841,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           children: [
             CircularProgressIndicator(color: Colors.orange),
             SizedBox(height: 16),
-            Text('Scanning Firestore...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Text('Scanning Firestore...',
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -3489,18 +3853,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       final firestore = FirebaseFirestore.instance;
       final List<CleanupCandidate> candidates = [];
       final Set<String> existingShopIds = {}; // To verify valid claims
-      
+
       // Cache valid user IDs
       final Map<String, bool> userExistenceCache = {};
-      
+
       // 1. Fetch all shops
       final shopsSnapshot = await firestore.collection('shops').get();
-      
+
       for (final shopDoc in shopsSnapshot.docs) {
         final data = shopDoc.data();
         final name = (data['name'] as String? ?? '').trim();
         final address = (data['address'] as String? ?? '').trim();
-        
+
         // Keep track of valid shop IDs
         existingShopIds.add(shopDoc.id);
 
@@ -3513,11 +3877,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             description: name.isEmpty ? 'No Name' : name,
             reference: shopDoc.reference,
           ));
-          continue; 
+          continue;
         }
-        
+
         // --- REVIEW CHECK ---
-        final reviewsSnapshot = await shopDoc.reference.collection('reviews').get();
+        final reviewsSnapshot =
+            await shopDoc.reference.collection('reviews').get();
         for (final reviewDoc in reviewsSnapshot.docs) {
           final userId = reviewDoc.data()['userId'] as String?;
           final reviewText = reviewDoc.data()['text'] as String? ?? 'No text';
@@ -3536,14 +3901,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             }
           }
         }
-        
+
         // --- EVENT COMMENT CHECK ---
-        final eventsSnapshot = await shopDoc.reference.collection('events').get();
+        final eventsSnapshot =
+            await shopDoc.reference.collection('events').get();
         for (final eventDoc in eventsSnapshot.docs) {
-          final commentsSnapshot = await eventDoc.reference.collection('comments').get();
+          final commentsSnapshot =
+              await eventDoc.reference.collection('comments').get();
           for (final commentDoc in commentsSnapshot.docs) {
             final userId = commentDoc.data()['userId'] as String?;
-            final commentText = commentDoc.data()['text'] as String? ?? 'No text';
+            final commentText =
+                commentDoc.data()['text'] as String? ?? 'No text';
             if (userId != null) {
               if (!userExistenceCache.containsKey(userId)) {
                 await _checkUserExists(userId, userExistenceCache);
@@ -3561,7 +3929,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           }
         }
       }
-      
+
       // 2. Fetch all shop claims to check for orphans
       final claimsSnapshot = await firestore.collection('shop_claims').get();
       for (final claimDoc in claimsSnapshot.docs) {
@@ -3571,7 +3939,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
         // ORPHAN CHECK: If shopId is missing OR shopId is not in our known list of shops
         if (claimShopId == null || !existingShopIds.contains(claimShopId)) {
-           candidates.add(CleanupCandidate(
+          candidates.add(CleanupCandidate(
             id: claimDoc.id,
             type: 'claim',
             reason: 'Orphaned Claim',
@@ -3584,7 +3952,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       Navigator.pop(context); // Close loading dialog
 
       // 2. Fetch all shared collections
-      final sharedSnapshot = await firestore.collection('sharedCollections').get();
+      final sharedSnapshot =
+          await firestore.collection('sharedCollections').get();
       for (final sharedDoc in sharedSnapshot.docs) {
         final data = sharedDoc.data();
         final userId = data['userId'] as String?;
@@ -3592,7 +3961,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         final title = data['title'] as String? ?? 'Untitled Collection';
 
         if (userId != null && listId != null) {
-          final listRef = firestore.collection('users').doc(userId).collection('lists').doc(listId);
+          final listRef = firestore
+              .collection('users')
+              .doc(userId)
+              .collection('lists')
+              .doc(listId);
           final listSnap = await listRef.get();
 
           if (!listSnap.exists) {
@@ -3610,7 +3983,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       if (candidates.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('✨ Firestore is clean! No junk documents found.')),
+            const SnackBar(
+                content:
+                    Text('✨ Firestore is clean! No junk documents found.')),
           );
         }
       } else {
@@ -3620,7 +3995,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       Navigator.pop(context);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Scan failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('❌ Scan failed: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -3635,12 +4011,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         height: MediaQuery.of(context).size.height * 0.85,
         decoration: const BoxDecoration(
           color: Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+          borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(32), topRight: Radius.circular(32)),
         ),
         child: Column(
           children: [
             const SizedBox(height: 12),
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+            Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 24),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -3649,13 +4031,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('CLEANUP REVIEW', style: TextStyle(color: primary, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                      const Text('CLEANUP REVIEW',
+                          style: TextStyle(
+                              color: primary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1)),
                       const SizedBox(height: 4),
-                      Text('${candidates.length} ITEMS FOUND', style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                      Text('${candidates.length} ITEMS FOUND',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold)),
                     ],
                   ),
                   const Spacer(),
-                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close, color: Colors.white54)),
+                  IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, color: Colors.white54)),
                 ],
               ),
             ),
@@ -3682,16 +4075,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                             color: _getTypeColor(item.type).withOpacity(0.1),
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(_getTypeIcon(item.type), color: _getTypeColor(item.type), size: 18),
+                          child: Icon(_getTypeIcon(item.type),
+                              color: _getTypeColor(item.type), size: 18),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(item.reason, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                              Text(item.reason,
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13)),
                               const SizedBox(height: 2),
-                              Text(item.description, style: const TextStyle(color: Colors.white38, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                              Text(item.description,
+                                  style: const TextStyle(
+                                      color: Colors.white38, fontSize: 11),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis),
                             ],
                           ),
                         ),
@@ -3702,10 +4104,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               ),
             ),
             Container(
-              padding: EdgeInsets.fromLTRB(24, 16, 24, MediaQuery.of(context).padding.bottom + 16),
+              padding: EdgeInsets.fromLTRB(
+                  24, 16, 24, MediaQuery.of(context).padding.bottom + 16),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.black.withOpacity(0), const Color(0xFF1A1A1A)],
+                  colors: [
+                    Colors.black.withOpacity(0),
+                    const Color(0xFF1A1A1A)
+                  ],
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                 ),
@@ -3719,10 +4125,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   backgroundColor: Colors.redAccent,
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 56),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
                   elevation: 0,
                 ),
-                child: const Text('Confirm Delete All', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: const Text('Confirm Delete All',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ),
           ],
@@ -3733,23 +4141,35 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   IconData _getTypeIcon(String type) {
     switch (type) {
-      case 'shop': return Icons.storefront;
-      case 'review': return Icons.star_rate_rounded;
-      case 'comment': return Icons.comment_rounded;
-      case 'collection': return Icons.folder_delete_rounded;
-      case 'claim': return Icons.assignment_late_rounded;
-      default: return Icons.help;
+      case 'shop':
+        return Icons.storefront;
+      case 'review':
+        return Icons.star_rate_rounded;
+      case 'comment':
+        return Icons.comment_rounded;
+      case 'collection':
+        return Icons.folder_delete_rounded;
+      case 'claim':
+        return Icons.assignment_late_rounded;
+      default:
+        return Icons.help;
     }
   }
 
   Color _getTypeColor(String type) {
     switch (type) {
-      case 'shop': return Colors.orange;
-      case 'review': return Colors.amber;
-      case 'comment': return Colors.blueAccent;
-      case 'collection': return Colors.redAccent;
-      case 'claim': return Colors.red;
-      default: return Colors.grey;
+      case 'shop':
+        return Colors.orange;
+      case 'review':
+        return Colors.amber;
+      case 'comment':
+        return Colors.blueAccent;
+      case 'collection':
+        return Colors.redAccent;
+      case 'claim':
+        return Colors.red;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -3763,7 +4183,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           children: [
             CircularProgressIndicator(color: Colors.redAccent),
             SizedBox(height: 16),
-            Text('Deleting Data...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Text('Deleting Data...',
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -3775,9 +4197,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         await item.reference.delete();
         deleted++;
       }
-      
+
       Navigator.pop(context); // Close loading dialog
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -3790,7 +4212,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       Navigator.pop(context);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Deletion failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('❌ Deletion failed: $e'),
+              backgroundColor: Colors.red),
         );
       }
     }
@@ -3806,7 +4230,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           children: [
             CircularProgressIndicator(color: Colors.purple),
             SizedBox(height: 16),
-            TextWidget(text: 'Syncing logos...', color: Colors.white, fontSize: 16),
+            TextWidget(
+                text: 'Syncing logos...', color: Colors.white, fontSize: 16),
           ],
         ),
       ),
@@ -3820,8 +4245,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       int deletedCount = 0;
       final Map<String, String> logoLessCafes = {}; // id -> name
       final firestore = FirebaseFirestore.instance;
-      
-      final sharedSnapshot = await firestore.collection('sharedCollections').get();
+
+      final sharedSnapshot =
+          await firestore.collection('sharedCollections').get();
 
       for (final sharedDoc in sharedSnapshot.docs) {
         final data = sharedDoc.data();
@@ -3829,7 +4255,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         final listId = data['listId'];
 
         if (userId != null && listId != null) {
-          final result = await ListBottomSheet.syncLogos(userId, listId, deleteIfEmpty: true);
+          final result = await ListBottomSheet.syncLogos(userId, listId,
+              deleteIfEmpty: true);
           if (result.success) {
             // Collect any missing logos found in this collection
             for (var cafe in result.missingLogos) {
@@ -3848,7 +4275,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             final updatedData = updatedDoc.data();
             final preview = updatedData?['previewLogos'] as List?;
             final count = updatedData?['shopCount'] as int? ?? 0;
-            
+
             if (count == 0 || (preview == null || preview.isEmpty)) {
               emptyCount++;
             }
@@ -3867,16 +4294,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           context: context,
           builder: (context) => AlertDialog(
             backgroundColor: Colors.grey[900],
-            title: const TextWidget(text: 'Sync & Cleanup Complete', color: Colors.white, fontSize: 20, isBold: true),
+            title: const TextWidget(
+                text: 'Sync & Cleanup Complete',
+                color: Colors.white,
+                fontSize: 20,
+                isBold: true),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildSyncResultRow('✅ Updated Collections:', '$updatedCount', Colors.green),
-                _buildSyncResultRow('🗑️ Deleted Ghost (Empty):', '$deletedCount', Colors.redAccent),
-                _buildSyncResultRow('⚠️ Empty (Non-Deleted):', '$emptyCount', Colors.orange),
-                _buildSyncResultRow('🚫 Skipped (Invalid Data):', '$skippedCount', Colors.blue),
-                _buildSyncResultRow('❌ Failed (Network/Error):', '$errorCount', Colors.red),
+                _buildSyncResultRow(
+                    '✅ Updated Collections:', '$updatedCount', Colors.green),
+                _buildSyncResultRow('🗑️ Deleted Ghost (Empty):',
+                    '$deletedCount', Colors.redAccent),
+                _buildSyncResultRow(
+                    '⚠️ Empty (Non-Deleted):', '$emptyCount', Colors.orange),
+                _buildSyncResultRow(
+                    '🚫 Skipped (Invalid Data):', '$skippedCount', Colors.blue),
+                _buildSyncResultRow(
+                    '❌ Failed (Network/Error):', '$errorCount', Colors.red),
                 const SizedBox(height: 16),
                 if (logoLessCafes.isNotEmpty)
                   Center(
@@ -3884,14 +4320,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.orange.withOpacity(0.2),
                         foregroundColor: Colors.orange,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
                       ),
                       onPressed: () {
                         Navigator.pop(context);
                         _showLogoAuditSheet(logoLessCafes);
                       },
                       icon: const Icon(Icons.search),
-                      label: TextWidget(text: 'Review ${logoLessCafes.length} Logo-less Cafes', color: Colors.orange, fontSize: 13),
+                      label: TextWidget(
+                          text:
+                              'Review ${logoLessCafes.length} Logo-less Cafes',
+                          color: Colors.orange,
+                          fontSize: 13),
                     ),
                   )
                 else
@@ -3915,7 +4356,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       Navigator.pop(context);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Sync failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('❌ Sync failed: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -3939,13 +4381,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const TextWidget(text: 'Logo-less Cafe Audit', fontSize: 22, color: Colors.white, isBold: true),
-                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close, color: Colors.white)),
+                  const TextWidget(
+                      text: 'Logo-less Cafe Audit',
+                      fontSize: 22,
+                      color: Colors.white,
+                      isBold: true),
+                  IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, color: Colors.white)),
                 ],
               ),
               const SizedBox(height: 8),
               TextWidget(
-                text: 'These shops were found in shared collections but missing a logo URL. You can remove them from the system below.',
+                text:
+                    'These shops were found in shared collections but missing a logo URL. You can remove them from the system below.',
                 fontSize: 14,
                 color: Colors.white70,
               ),
@@ -3968,22 +4417,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                           Container(
                             width: 40,
                             height: 40,
-                            decoration: BoxDecoration(color: Colors.orange.withOpacity(0.2), shape: BoxShape.circle),
-                            child: const Icon(Icons.no_photography, color: Colors.orange, size: 20),
+                            decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.2),
+                                shape: BoxShape.circle),
+                            child: const Icon(Icons.no_photography,
+                                color: Colors.orange, size: 20),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                TextWidget(text: shopName, color: Colors.white, fontSize: 15, isBold: true),
-                                TextWidget(text: 'ID: $shopId', color: Colors.white54, fontSize: 11),
+                                TextWidget(
+                                    text: shopName,
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    isBold: true),
+                                TextWidget(
+                                    text: 'ID: $shopId',
+                                    color: Colors.white54,
+                                    fontSize: 11),
                               ],
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                            onPressed: () => _confirmDeleteShop(context, shopId, shopName, () {
+                            icon: const Icon(Icons.delete_outline,
+                                color: Colors.redAccent),
+                            onPressed: () => _confirmDeleteShop(
+                                context, shopId, shopName, () {
                               setModalState(() => cafes.remove(shopId));
                             }),
                           ),
@@ -4000,31 +4461,41 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 
-  void _confirmDeleteShop(BuildContext context, String shopId, String name, VoidCallback onDeleted) {
+  void _confirmDeleteShop(BuildContext context, String shopId, String name,
+      VoidCallback onDeleted) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.grey[900],
         title: const Text('Delete Shop?'),
-        content: Text('Are you sure you want to permanently delete "$name"? This will remove it from all collections and the main database.'),
+        content: Text(
+            'Are you sure you want to permanently delete "$name"? This will remove it from all collections and the main database.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
               try {
-                await FirebaseFirestore.instance.collection('shops').doc(shopId).delete();
+                await FirebaseFirestore.instance
+                    .collection('shops')
+                    .doc(shopId)
+                    .delete();
                 onDeleted();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Deleted $name')),
                 );
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.red),
+                  SnackBar(
+                      content: Text('Failed to delete: $e'),
+                      backgroundColor: Colors.red),
                 );
               }
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+            child:
+                const Text('Delete', style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
@@ -4046,14 +4517,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   Future<void> _checkUserExists(String userId, Map<String, bool> cache) async {
     try {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
       cache[userId] = doc.exists;
     } catch (_) {
-      cache[userId] = false; 
+      cache[userId] = false;
     }
   }
 }
-
 
 class CleanupCandidate {
   final String id;

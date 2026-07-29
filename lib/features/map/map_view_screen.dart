@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:ui' as ui;
+import 'dart:typed_data';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -28,6 +31,7 @@ class _MapViewScreenState extends State<MapViewScreen> {
   // When true, we skip the auto-center after GPS resolves so we don't
   // hijack the camera away from where the user is looking.
   bool _userHasInteracted = false;
+  final ValueNotifier<double> _sheetExtent = ValueNotifier<double>(0.35);
   
   // Tracks the live camera position. If the native map is forced to rebuild 
   // (e.g., when myLocationEnabled changes), we restore exactly to this spot.
@@ -37,9 +41,18 @@ class _MapViewScreenState extends State<MapViewScreen> {
   Stream<DocumentSnapshot<Map<String, dynamic>>>? _userStream;
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _shopsStream;
 
+  BitmapDescriptor? _customMarker;
+
+  @override
+  void dispose() {
+    _sheetExtent.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
+    _loadCustomMarker();
     
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -58,6 +71,26 @@ class _MapViewScreenState extends State<MapViewScreen> {
     // STEP A: Coordinate Acquisition (Permission & GPS)
     // ----------------------------------------------------------------------
     _getUserLocation();
+  }
+
+  Future<void> _loadCustomMarker() async {
+    try {
+      final ByteData data = await rootBundle.load('assets/images/cofi_icon_red_white_pin.png');
+      final ui.Codec codec = await ui.instantiateImageCodec(
+        data.buffer.asUint8List(),
+        targetWidth: 120, // 120px is crisp but not overwhelmingly large for a map pin
+      );
+      final ui.FrameInfo fi = await codec.getNextFrame();
+      final ByteData? byteData = await fi.image.toByteData(format: ui.ImageByteFormat.png);
+      
+      if (byteData != null && mounted) {
+        setState(() {
+          _customMarker = BitmapDescriptor.fromBytes(byteData.buffer.asUint8List());
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading custom marker: $e');
+    }
   }
 
   Future<void> _getUserLocation() async {
@@ -318,6 +351,7 @@ class _MapViewScreenState extends State<MapViewScreen> {
                       right: 16,
                       child: SafeArea(
                         child: FloatingActionButton(
+                          heroTag: 'recenter',
                           onPressed: _recenterToUserLocation,
                           backgroundColor: Colors.white,
                           mini: true,
@@ -325,6 +359,53 @@ class _MapViewScreenState extends State<MapViewScreen> {
                         ),
                       ),
                     ),
+                  
+                  // 6. Zoom Controls (+/-)
+                  ValueListenableBuilder<double>(
+                    valueListenable: _sheetExtent,
+                    builder: (context, extent, child) {
+                      // Hide the zoom controls when the sheet is pulled fully up (extent >= 0.7)
+                      if (_selectedShopId != null || extent < 0.7) {
+                        final screenHeight = MediaQuery.of(context).size.height;
+                        
+                        // If a shop is selected, it anchors above the custom SelectedShopCard.
+                        // Otherwise, it dynamically floats snugly above the bottom sheet's current height.
+                        final bottomPosition = _selectedShopId != null 
+                            ? 150.0 
+                            : (extent * screenHeight) + 8.0;
+
+                        return Positioned(
+                          bottom: bottomPosition,
+                          right: 16,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              FloatingActionButton(
+                                heroTag: 'zoomIn',
+                                onPressed: () {
+                                  _mapController?.animateCamera(CameraUpdate.zoomIn());
+                                },
+                                backgroundColor: Colors.white,
+                                mini: true,
+                                child: const Icon(Icons.add, color: Colors.black87),
+                              ),
+                              const SizedBox(height: 8),
+                              FloatingActionButton(
+                                heroTag: 'zoomOut',
+                                onPressed: () {
+                                  _mapController?.animateCamera(CameraUpdate.zoomOut());
+                                },
+                                backgroundColor: Colors.white,
+                                mini: true,
+                                child: const Icon(Icons.remove, color: Colors.black87),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
                   
                   // 6. Loading Location Indicator
                   if (_isLoadingLocation)
@@ -390,6 +471,8 @@ class _MapViewScreenState extends State<MapViewScreen> {
         Marker(
           markerId: MarkerId(doc.id),
           position: LatLng(lat, lng),
+          anchor: const Offset(0.5, 1.0), // Anchors the pin exactly at its bottom tip so it doesn't crop or float
+          icon: _customMarker ?? BitmapDescriptor.defaultMarkerWithHue(355.0),
           onTap: () => _selectShop(doc.id, data),
         ),
       );
@@ -493,214 +576,295 @@ class _MapViewScreenState extends State<MapViewScreen> {
       filteredDocs = List.from(docs);
     }
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.35,
-      minChildSize: 0.15,
-      maxChildSize: 0.8,
-      builder: (context, scrollController) {
+    final double screenHeight = MediaQuery.of(context).size.height;
+    // Calculate a safe minimum size to fit the 70px toolbar height perfectly.
+    // This makes the design responsive across different OS and device sizes.
+    final double safeMinSize = (75.0 / screenHeight).clamp(0.08, 0.35);
+
+    return NotificationListener<DraggableScrollableNotification>(
+      onNotification: (notification) {
+        if (_sheetExtent.value != notification.extent) {
+          _sheetExtent.value = notification.extent;
+        }
+        return true;
+      },
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.35,
+        minChildSize: safeMinSize,
+        maxChildSize: 0.8,
+        snap: true,
+        snapSizes: [safeMinSize, 0.35, 0.8],
+        builder: (context, scrollController) {
         return Container(
           decoration: BoxDecoration(
-            color: Colors.grey[900],
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
+            color: const Color(0xFF1C1C1E),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.05), width: 1),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 10,
-                offset: const Offset(0, -2),
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: 20,
+                offset: const Offset(0, -5),
               ),
             ],
           ),
-          child: Column(
-            children: [
-              // Handle
-              Center(
-                child: Container(
-                  margin: const EdgeInsets.only(top: 10, bottom: 5),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[600],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              // Header
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Text(
-                  _userLocation != null 
-                      ? 'Nearby Cafes (${filteredDocs.length} within 2km)'
-                      : 'Nearby Cafes (${filteredDocs.length})',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Bold',
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              const Divider(height: 1, color: Colors.white24),
-              // List or Empty State
-              Expanded(
-                child: filteredDocs.isEmpty && _userLocation != null
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.location_off, size: 48, color: Colors.grey[600]),
-                            const SizedBox(height: 12),
-                            Text(
-                              'No cafes within 2km',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey[400],
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Try exploring the map for more options',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
+          child: CustomScrollView(
+            controller: scrollController,
+            slivers: [
+              SliverAppBar(
+                pinned: true,
+                automaticallyImplyLeading: false,
+                backgroundColor: Colors.transparent,
+                surfaceTintColor: Colors.transparent,
+                elevation: 0,
+                toolbarHeight: 70,
+                primary: false,
+                titleSpacing: 0,
+                title: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Handle
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 12, bottom: 8),
+                        width: 36,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(2.5),
                         ),
-                      )
-                    : ListView.builder(
-                  controller: scrollController,
-                  padding: EdgeInsets.zero,
-                  itemCount: filteredDocs.length,
-                  itemBuilder: (context, index) {
-                    final doc = filteredDocs[index];
-                    final data = doc.data();
-                    final name = (data['name'] as String?) ?? 'Unknown';
-                    final address = (data['address'] as String?) ?? '';
-                    final num embeddedRating = (data['ratings'] as num?) ?? 0.0;
-                    final int embeddedCount = (data['reviews'] as List?)?.length ?? 0;
-                    
-                    // Logic for ratings adapted from CafeDetailsScreen
-
-                     // Calculate average rating from reviews list
-
-
-                    
-
-                    final gallery = (data['gallery'] as List?)?.cast<String>() ?? [];
-                    final imageUrl = gallery.isNotEmpty ? gallery[0] : '';
-
-                    return InkWell(
-                      onTap: () => _selectShop(doc.id, data),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        child: Row(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Container(
-                                width: 60,
-                                height: 60,
-                                color: Colors.grey[800],
-                                child: imageUrl.isNotEmpty
-                                    ? Image.network(imageUrl, fit: BoxFit.cover)
-                                    : const Icon(Icons.store, color: Colors.white54),
+                      ),
+                    ),
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Nearby Cafes',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'Bold',
+                              letterSpacing: -0.5,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              _userLocation != null ? '${filteredDocs.length} within 2km' : '${filteredDocs.length} total',
+                              style: const TextStyle(
+                                color: Colors.amber,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    name,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 15,
-                                      color: Colors.white,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    address,
-                                    style: TextStyle(
-                                      color: Colors.grey[400],
-                                      fontSize: 12,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const SizedBox(height: 4),
-                                  // Live ratings from subcollection (most accurate)
-                                  StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                                    stream: FirebaseFirestore.instance
-                                        .collection('shops')
-                                        .doc(doc.id)
-                                        .collection('reviews')
-                                        .snapshots(),
-                                    builder: (context, snapshot) {
-                                      double rating = 0.0;
-                                      int count = 0;
-                                      
-                                      if (snapshot.hasData) {
-                                        final docs = snapshot.data!.docs;
-                                        final scores = docs
-                                            .map((d) => d.data()['rating'])
-                                            .whereType<num>()
-                                            .map((n) => n.toDouble())
-                                            .toList();
-                                        count = scores.length;
-                                        if (count > 0) {
-                                          rating = scores.reduce((a, b) => a + b) / count;
-                                        }
-                                      } else {
-                                        // Fallback to embedded data while loading
-                                        rating = embeddedRating.toDouble();
-                                        count = embeddedCount;
-                                      }
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ), // Closes SliverAppBar
+              if (filteredDocs.isEmpty && _userLocation != null)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.location_off, size: 48, color: Colors.grey[600]),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No cafes within 2km',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[400],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Try exploring the map for more options',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final doc = filteredDocs[index];
+                      final data = doc.data();
+                      final name = (data['name'] as String?) ?? 'Unknown';
+                      final address = (data['address'] as String?) ?? '';
+                      final num embeddedRating = (data['ratings'] as num?) ?? 0.0;
+                      final int embeddedCount = (data['reviews'] as List?)?.length ?? 0;
+                      
+                      final gallery = (data['gallery'] as List?)?.cast<String>() ?? [];
+                      final imageUrl = gallery.isNotEmpty ? gallery[0] : '';
 
-                                      return Row(
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2C2C2E),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.05), width: 1),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => _selectShop(doc.id, data),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    width: 72,
+                                    height: 72,
+                                    color: Colors.black26,
+                                    child: imageUrl.isNotEmpty
+                                        ? Image.network(imageUrl, fit: BoxFit.cover)
+                                        : const Icon(Icons.store, color: Colors.white54, size: 30),
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          letterSpacing: -0.3,
+                                          color: Colors.white,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
                                         children: [
-                                          const Icon(Icons.star, size: 14, color: Colors.amber),
-                                          const SizedBox(width: 2),
-                                          Text(
-                                            rating.toStringAsFixed(1),
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 12,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          Text(
-                                            ' ($count)',
-                                            style: TextStyle(
-                                              color: Colors.grey[400],
-                                              fontSize: 12,
+                                          Icon(Icons.location_on_rounded, size: 12, color: Colors.grey[400]),
+                                          const SizedBox(width: 4),
+                                          Expanded(
+                                            child: Text(
+                                              address,
+                                              style: TextStyle(
+                                                color: Colors.grey[400],
+                                                fontSize: 13,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
                                           ),
                                         ],
-                                      );
-                                    },
-                                  )
-                                ],
-                              ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                                        stream: FirebaseFirestore.instance
+                                            .collection('shops')
+                                            .doc(doc.id)
+                                            .collection('reviews')
+                                            .snapshots(),
+                                        builder: (context, snapshot) {
+                                          double rating = 0.0;
+                                          int count = 0;
+                                          
+                                          if (snapshot.hasData) {
+                                            final docs = snapshot.data!.docs;
+                                            final scores = docs
+                                                .map((d) => d.data()['rating'])
+                                                .whereType<num>()
+                                                .map((n) => n.toDouble())
+                                                .toList();
+                                            count = scores.length;
+                                            if (count > 0) {
+                                              rating = scores.reduce((a, b) => a + b) / count;
+                                            }
+                                          } else {
+                                            rating = embeddedRating.toDouble();
+                                            count = embeddedCount;
+                                          }
+
+                                          return Row(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.amber.withValues(alpha: 0.15),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(Icons.star_rounded, size: 14, color: Colors.amber),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      rating.toStringAsFixed(1),
+                                                      style: const TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 12,
+                                                        color: Colors.amber,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                '($count reviews)',
+                                                style: TextStyle(
+                                                  color: Colors.grey[500],
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          );
+                                        },
+                                      )
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.05),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.chevron_right_rounded, size: 20, color: Colors.white70),
+                                ),
+                              ],
                             ),
-                            const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
-                          ],
+                          ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                    childCount: filteredDocs.length,
+                  ),
                 ),
-              ),
             ],
           ),
         );
       },
-    );
+    ));
   }
 
   void _selectShop(String id, Map<String, dynamic> data) {
