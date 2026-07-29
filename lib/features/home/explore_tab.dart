@@ -5,6 +5,7 @@ import 'package:cofi/features/events/event_details_screen.dart';
 import 'package:cofi/services/google_sign_in_service.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -14,11 +15,19 @@ import 'package:get_storage/get_storage.dart';
 import 'package:cofi/widgets/premium_background.dart';
 import 'package:cofi/utils/formatters.dart';
 
+import 'explore/widgets/explore_shop_card.dart';
+import 'explore/widgets/explore_featured_card.dart';
+import 'explore/widgets/explore_search_bar.dart';
+import 'explore/widgets/explore_events_section.dart';
+import 'explore/utils/explore_utils.dart';
+import 'explore/services/recommendation_service.dart';
+
 class ExploreTab extends StatefulWidget {
   final VoidCallback? onOpenCommunity;
   final GlobalKey? searchKey;
   final GlobalKey? filterKey;
-  const ExploreTab({super.key, this.onOpenCommunity, this.searchKey, this.filterKey});
+  const ExploreTab(
+      {super.key, this.onOpenCommunity, this.searchKey, this.filterKey});
 
   @override
   State<ExploreTab> createState() => _ExploreTabState();
@@ -63,211 +72,6 @@ class _ExploreTabState extends State<ExploreTab> {
   /// - [amenityTagWeights]: Optional map of amenity tag to weight value (defaults provided)
   ///
   /// Returns: A double value between 0.0 and 1.0 representing similarity
-  double calculateCosineSimilarity({
-    required List<Map<String, dynamic>> user1Reviews,
-    required List<Map<String, dynamic>> user2Reviews,
-    required Map<String, List<String>> shopAmenities,
-    Map<String, double>? visitTagWeights,
-    Map<String, double>? amenityTagWeights,
-  }) {
-    // ========================================================================
-    // STEP 1: Define default weights for visit tags and amenity tags
-    // ========================================================================
-    // Visit tags represent the purpose/context of a user's visit to a café.
-    //
-    // Professor's weighting system — Visit Data = 30% total.
-    // Four tags share that 30% equally: 30 × 25/100 = 7.5 each.
-    // Stored as percentage points; divided by 100.0 at point of use.
-    //
-    // Visit Data subtotal: 7.5 + 7.5 + 7.5 + 7.5 = 30.0 pp
-    final Map<String, double> defaultVisitTagWeights = {
-      'Study Session':    7.5 / 100.0, // Visit Data: 30% × 25% = 7.5 pp
-      'Business Meeting': 7.5 / 100.0, // Visit Data: 30% × 25% = 7.5 pp
-      'Chill / Hangout':  7.5 / 100.0, // Visit Data: 30% × 25% = 7.5 pp
-      'Group Gathering':  7.5 / 100.0, // Visit Data: 30% × 25% = 7.5 pp
-    };
-
-    // Amenity tags represent the features/characteristics of a café.
-    //
-    // Professor's weighting system — amenity subtotals:
-    //   Type of Drinks  = 20 pp
-    //   Pastries        = 10 pp
-    //   Convenience     = 20 pp
-    //   Vibe            = 20 pp
-    //   Grand total     = 70 pp
-    //
-    // NOTE: 'Study Sessions' is an alias for the visit tag 'Study Session'
-    // and is intentionally NOT weighted here to avoid double-counting.
-    final Map<String, double> defaultAmenityTagWeights = {
-      // --- Type of Drinks (total 20 pp) ---
-      'Specialty Coffee':   6.0 / 100.0, // Drinks: dominant type
-      'Espresso':           2.0 / 100.0,
-      'Flat White':         2.0 / 100.0,
-      'Spanish Latte':      2.0 / 100.0,
-      'Vietnamese Coffee':  2.0 / 100.0,
-      'Cold Brew':          2.0 / 100.0,
-      'Pour Over':          2.0 / 100.0,
-      'Matcha Drinks':      2.0 / 100.0,
-
-      // --- Pastries (total 10 pp) ---
-      'Pastries':           10.0 / 100.0,
-
-      // --- Convenience (total 20 pp) ---
-      'Work-Friendly (Wi-Fi + outlets)': 4.0 / 100.0,
-      'Pet-Friendly':                    4.0 / 100.0,
-      'Parking Available':               4.0 / 100.0,
-      'Artsy / Aesthetic':               2.0 / 100.0,
-      'Instagrammable':                  2.0 / 100.0,
-      'Night Café (Open Late)':          2.0 / 100.0,
-      'Family Friendly':                 2.0 / 100.0,
-
-      // --- Vibe (total 20 pp) ---
-      'Minimalist / Modern': 5.0 / 100.0,
-      'Rustic / Cozy':       5.0 / 100.0,
-      'Outdoor / Garden':    5.0 / 100.0,
-      'Seaside / Scenic':    5.0 / 100.0,
-    };
-
-    // Use provided weights or fall back to defaults
-    final visitWeights = visitTagWeights ?? defaultVisitTagWeights;
-    final amenityWeights = amenityTagWeights ?? defaultAmenityTagWeights;
-
-    // ========================================================================
-    // STEP 2: Build lookup maps for efficient access to user reviews by shopId
-    // ========================================================================
-    // Create a map from shopId to review data for each user.
-    // This allows O(1) lookup when finding common cafés.
-    final Map<String, Map<String, dynamic>> user1ReviewMap = {
-      for (var review in user1Reviews)
-        if (review['shopId'] != null) review['shopId'] as String: review
-    };
-
-    final Map<String, Map<String, dynamic>> user2ReviewMap = {
-      for (var review in user2Reviews)
-        if (review['shopId'] != null) review['shopId'] as String: review
-    };
-
-    // ========================================================================
-    // STEP 3: Find common cafés (cafés that both users have rated)
-    // ========================================================================
-    // The algorithm only considers cafés where BOTH users have left reviews.
-    // This is essential for computing meaningful similarity.
-    final Set<String> user1Shops = user1ReviewMap.keys.toSet();
-    final Set<String> user2Shops = user2ReviewMap.keys.toSet();
-    final Set<String> commonShops = user1Shops.intersection(user2Shops);
-
-    // If there are no common cafés, similarity cannot be computed
-    // Return 0.0 indicating no measurable similarity
-    if (commonShops.isEmpty) {
-      return 0.0;
-    }
-
-    // ========================================================================
-    // STEP 4: Calculate component values for each common café
-    // ========================================================================
-    // Initialize accumulators for the cosine similarity formula:
-    // - numerator: Σ(Xp + Tp + Ap)(Yp + Tp + Ap)
-    // - sumUser1Squared: Σ(Xp + Tp + Ap)²
-    // - sumUser2Squared: Σ(Yp + Tp + Ap)²
-    double numerator = 0.0;
-    double sumUser1Squared = 0.0;
-    double sumUser2Squared = 0.0;
-
-    for (final shopId in commonShops) {
-      // Get review data for both users for this café
-      final review1 = user1ReviewMap[shopId]!;
-      final review2 = user2ReviewMap[shopId]!;
-
-      // ----------------------------------------------------------------------
-      // STEP 4a: Extract ratings (Xp and Yp)
-      // ----------------------------------------------------------------------
-      // Ratings are on a 1-5 scale. Convert to double for calculation.
-      final double xp = (review1['rating'] as num?)?.toDouble() ?? 0.0;
-      final double yp = (review2['rating'] as num?)?.toDouble() ?? 0.0;
-
-      // ----------------------------------------------------------------------
-      // STEP 4b: Calculate visit tag weight (Tp)
-      // ----------------------------------------------------------------------
-      // Tp represents the weighted sum of matching visit tags between users.
-      // If both users tagged their visit with the same purpose, it increases
-      // the similarity weight for this café.
-      final List<String> user1VisitTags =
-          (review1['tags'] as List?)?.cast<String>() ?? [];
-      final List<String> user2VisitTags =
-          (review2['tags'] as List?)?.cast<String>() ?? [];
-
-      // Find common visit tags and sum their weights
-      double tp = 0.0;
-      for (final tag in user1VisitTags) {
-        if (user2VisitTags.contains(tag)) {
-          // Both users used this tag - add its weight
-          tp += visitWeights[tag] ?? 0.5; // Default weight if tag not in map
-        }
-      }
-
-      // ----------------------------------------------------------------------
-      // STEP 4c: Calculate amenity weight (Ap)
-      // ----------------------------------------------------------------------
-      // Ap represents the weighted sum of amenity tags for this café.
-      // This reflects the café's characteristics that both users experienced.
-      final List<String> cafeAmenities = shopAmenities[shopId] ?? [];
-
-      double ap = 0.0;
-      for (final amenity in cafeAmenities) {
-        ap += amenityWeights[amenity] ?? 0.3; // Default weight if not in map
-      }
-
-      // ----------------------------------------------------------------------
-      // STEP 4d: Calculate combined scores for this café
-      // ----------------------------------------------------------------------
-      // For user 1: (Xp + Tp + Ap)
-      // For user 2: (Yp + Tp + Ap)
-      // Note: Tp and Ap are the same for both users as they relate to the café
-      final double user1Score = xp + tp + ap;
-      final double user2Score = yp + tp + ap;
-
-      // ----------------------------------------------------------------------
-      // STEP 4e: Accumulate values for the formula
-      // ----------------------------------------------------------------------
-      // Numerator: Add the product of both user scores
-      numerator += user1Score * user2Score;
-
-      // Denominators: Add squared scores for each user
-      sumUser1Squared += user1Score * user1Score;
-      sumUser2Squared += user2Score * user2Score;
-    }
-
-    // ========================================================================
-    // STEP 5: Calculate the final cosine similarity value
-    // ========================================================================
-    // Formula: numerator / (sqrt(sumUser1Squared) * sqrt(sumUser2Squared))
-    //
-    // Handle edge case where denominators might be zero (no valid data)
-    final double denominator = (sumUser1Squared > 0 && sumUser2Squared > 0)
-        ? (sqrt(sumUser1Squared) * sqrt(sumUser2Squared))
-        : 0.0;
-
-    // Avoid division by zero
-    if (denominator == 0.0) {
-      return 0.0;
-    }
-
-    // Calculate final similarity score
-    final double similarity = numerator / denominator;
-
-    // ========================================================================
-    // STEP 6: Clamp result to valid range [0.0, 1.0]
-    // ========================================================================
-    // Due to floating-point arithmetic, the result might slightly exceed 1.0
-    // or be slightly negative. Clamp to ensure valid range.
-    return similarity.clamp(0.0, 1.0);
-  }
-
-  /// Helper function: Square root calculation using dart:math
-  double sqrt(double value) {
-    if (value <= 0) return 0.0;
-    return math.sqrt(value);
-  }
 
   // ==========================================================================
   // END OF COSINE SIMILARITY ALGORITHM
@@ -285,6 +89,12 @@ class _ExploreTabState extends State<ExploreTab> {
   Set<String> _bookmarks = {};
   Set<String> _visited = {};
   List<String> _userInterests = []; // New field to store user interests
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _cachedShopsStream;
+  late Stream<QuerySnapshot<Map<String, dynamic>>> _featuredShopsStream;
+
+  void _updateShopsStream() {
+    _cachedShopsStream = _getShopsStream(_userInterests);
+  }
 
   // Map of shopId -> recommendation score computed from similar users (cosine-based)
   Map<String, double> _shopRecommendationScores = {};
@@ -336,6 +146,12 @@ class _ExploreTabState extends State<ExploreTab> {
   @override
   void initState() {
     super.initState();
+    _updateShopsStream();
+    _featuredShopsStream = FirebaseFirestore.instance
+        .collection('shops')
+        .where('isFeatured', isEqualTo: true)
+        .limit(5)
+        .snapshots();
     _user = FirebaseAuth.instance.currentUser;
     if (_user != null) {
       _userStream = FirebaseFirestore.instance
@@ -378,6 +194,7 @@ class _ExploreTabState extends State<ExploreTab> {
         final interests = (data?['interests'] as List?)?.cast<String>() ?? [];
         setState(() {
           _userInterests = interests;
+          _updateShopsStream();
         });
       }
     } catch (e) {
@@ -390,117 +207,15 @@ class _ExploreTabState extends State<ExploreTab> {
   /// This uses _findSimilarUsers(), which is based on calculateCosineSimilarity.
   /// includes Caching (24h) and optimizations.
   Future<void> _loadRecommendationScores({bool forceRefresh = false}) async {
-    if (_user == null) return;
-
-    // 1. Check Cache first
-    if (!forceRefresh) {
-      final int? timestamp = _box.read(_recTimeKey);
-      final Map<String, dynamic>? cachedScores = _box.read(_recCacheKey);
-      
-      if (timestamp != null && cachedScores != null) {
-        final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
-        final diff = DateTime.now().difference(date);
-        
-        // Cache is valid for 24 hours
-        if (diff.inHours < 24) {
-          print('✅ [ALGORITHM] Loading weighted scores from CACHE (Valid for 24h)');
-          print('   Timestamp: $date');
-          setState(() {
-            _shopRecommendationScores = Map<String, double>.from(cachedScores);
-          });
-          return;
-        }
-      }
-    }
-
-    print('🔄 [ALGORITHM] Recalculating Cosine Similarity & Weighted Scores...');
-    
-    try {
-      final similarUsers = await _findSimilarUsers();
-      if (similarUsers.isEmpty) {
-        print('⚠️ [ALGORITHM] No similar users found. Logic skipped.');
-        return;
-      }
-
-      print('👥 [ALGORITHM] Found ${similarUsers.length} similar users for collaborative filtering.');
-      for (final twin in similarUsers) {
-        print('   👯 TASTE TWIN: ${twin['userName']} | Similarity: ${(twin['similarity'] as double).toStringAsFixed(2)} | Common Shops: ${twin['commonShops']}');
-      }
-
-      final Map<String, double> userSimilarity = {
-        for (final u in similarUsers)
-          u['userId'] as String: (u['similarity'] as double),
-      };
-
-      // OPTIMIZATION: Only fetch popular/verified shops for recommendation candidates
-      // Instead of all shops (which could be thousands), limit to top 50 active ones
-      final shopsSnapshot = await FirebaseFirestore.instance
-          .collection('shops')
-          .where('isVerified', isEqualTo: true)
-          .orderBy('ratings', descending: true)
-          .limit(100) 
-          .get();
-
-      final currentUserDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(_user!.uid)
-          .get();
-      final currentData = currentUserDoc.data() ?? {};
-      final currentBookmarks =
-          (currentData['bookmarks'] as List?)?.cast<String>() ?? [];
-      final currentVisited =
-          (currentData['visited'] as List?)?.cast<String>() ?? [];
-      final currentShopSet = <String>{...currentBookmarks, ...currentVisited};
-
-      final Map<String, double> scores = {};
-
-      for (final shopDoc in shopsSnapshot.docs) {
-        final shopId = shopDoc.id;
-
-        // Skip shops user already knows
-        if (currentShopSet.contains(shopId)) continue;
-        
-        // Optimization: Use a subcollection query limits
-        final reviewsSnapshot =
-            await shopDoc.reference.collection('reviews').limit(20).get();
-
-        double score = 0.0;
-        double totalSim = 0.0;
-
-        for (final reviewDoc in reviewsSnapshot.docs) {
-          final data = reviewDoc.data();
-          final userId = data['userId'] as String?;
-          if (userId == null) continue;
-
-          final sim = userSimilarity[userId];
-          if (sim == null || sim <= 0) continue;
-
-          final rating = (data['rating'] as num?)?.toDouble() ?? 0.0;
-          // Weighted scoring: similarity * rating
-          score += sim * rating;
-          totalSim += sim;
-        }
-
-        if (totalSim > 0.0) {
-          // Normalize: weighted average
-          final finalScore = (score / totalSim).clamp(0.0, 5.0);
-          scores[shopId] = finalScore;
-          print('✨ [ALGORITHM] Recommendation Found: ${shopDoc.data()['name']} -> Score: ${finalScore.toStringAsFixed(2)}');
-        }
-      }
-
-      // Save to Cache
-      await _box.write(_recCacheKey, scores);
-      await _box.write(_recTimeKey, DateTime.now().millisecondsSinceEpoch);
-      print('💾 [ALGORITHM] Scores saved to local cache.');
-
-      if (!mounted) return;
-      setState(() {
-        _shopRecommendationScores = scores;
-      });
-    } catch (e) {
-      print('❌ [ALGORITHM] Error calculating scores: $e');
-    }
+    final scores = await RecommendationService().loadRecommendationScores(
+      user: _user,
+      box: _box,
+      forceRefresh: forceRefresh,
+    );
+    if (!mounted) return;
+    setState(() {
+      _shopRecommendationScores = scores;
+    });
   }
 
   @override
@@ -520,294 +235,341 @@ class _ExploreTabState extends State<ExploreTab> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: RefreshIndicator(
-          color: primary,
-          backgroundColor: Colors.black,
-          notificationPredicate: (ScrollNotification notification) => notification.depth == 0,
-          onRefresh: () async {
-            // TRIGGER FOR ALGORITHM DEMONSTRATION
-            // Clears cache and forces a full re-run of Cosine Similarity in the background (no await)
-            _loadRecommendationScores(forceRefresh: true);
-            
-            // Also refresh other streams if needed (optional)
-            if (mounted) setState(() {});
-          },
-          child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        children: [
-                const SizedBox(height: 16),
-                _buildSearchBar(),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 44,
-          width: double.infinity,
-          child: ListView.separated(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            scrollDirection: Axis.horizontal,
-            itemCount: filterChips.length,
-            separatorBuilder: (context, index) => const SizedBox(width: 8),
-            itemBuilder: (context, i) {
-              // Automatically remove "For You" chip when searching as requested
-              if (_query.isNotEmpty && i == 0) return const SizedBox.shrink();
-              
-              return FilterChip(
-                label: TextWidget(
-                  text: filterChips[i],
-                  fontSize: 14,
-                  color: Colors.white,
-                  isBold: true,
-                ),
-                backgroundColor: _selectedChip == i
-                    ? Colors.white12
-                    : const Color(0xFF222222),
-                selected: _selectedChip == i,
-                selectedColor: primary,
-                checkmarkColor: white,
-                onSelected: (_) {
-                  setState(() {
-                    _selectedChip = i;
-                  });
-                },
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                side: const BorderSide(
-                  color: Colors.white12,
-                  width: 1,
-                ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 6),
-        // Tag filters
-        // _buildTagFilters(),
-        const SizedBox(height: 18),
-        if (_query.isEmpty && _selectedFilters.isEmpty) ...[
-          _sectionTitle('Monthly Featured Cafe Shops'),
-          const SizedBox(height: 10),
-          if (_userStream != null)
-            StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      body: _userStream == null
+          ? _buildScrollView(null, null)
+          : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
               stream: _userStream,
               builder: (context, userSnap) {
                 if (userSnap.hasData) {
                   final data = userSnap.data!.data();
-                  final bm =
+                  final list =
                       (data?['bookmarks'] as List?)?.cast<String>() ?? [];
-                  final vd = (data?['visited'] as List?)?.cast<String>() ?? [];
-                  _bookmarks = bm.toSet();
-                  _visited = vd.toSet();
+                  final vlist =
+                      (data?['visited'] as List?)?.cast<String>() ?? [];
+                  _bookmarks = list.toSet();
+                  _visited = vlist.toSet();
+
+                  final newInterests =
+                      (data?['interests'] as List?)?.cast<String>() ?? [];
+                  if (newInterests.join(',') != _userInterests.join(',')) {
+                    _userInterests = newInterests;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        setState(() {
+                          _updateShopsStream();
+                        });
+                      }
+                    });
+                  }
                 }
+
                 return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: _getFeaturedShopsStream(),
-                  builder: (context, snap) {
-                    if (!snap.hasData) {
-                      return const SizedBox(
-                        height: 200,
-                        child: Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                  stream: _cachedShopsStream ?? _getShopsStream(_userInterests),
+                  builder: (context, shopsSnap) {
+                    return _buildScrollView(userSnap, shopsSnap);
+                  },
+                );
+              },
+            ),
+    );
+  }
+
+  Widget _buildScrollView(
+    AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>>? userSnap,
+    AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>>? shopsSnap,
+  ) {
+    final filterChips = [
+      'For You',
+      'Popular',
+      'Newest',
+      'Open now',
+    ];
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        await _loadRecommendationScores(forceRefresh: true);
+      },
+      color: primary,
+      backgroundColor: Colors.black87,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics()),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 16),
+                _buildSearchBar(),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 44,
+                  width: double.infinity,
+                  child: ListView.separated(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: filterChips.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 8),
+                    itemBuilder: (context, i) {
+                      // Automatically remove "For You" chip when searching as requested
+                      if (_query.isNotEmpty && i == 0)
+                        return const SizedBox.shrink();
+
+                      return FilterChip(
+                        label: TextWidget(
+                          text: filterChips[i],
+                          fontSize: 14,
+                          color: Colors.white,
+                          isBold: true,
                         ),
+                        backgroundColor: _selectedChip == i
+                            ? Colors.white12
+                            : const Color(0xFF222222),
+                        selected: _selectedChip == i,
+                        selectedColor: primary,
+                        checkmarkColor: white,
+                        onSelected: (_) {
+                          setState(() {
+                            _selectedChip = i;
+                            _updateShopsStream();
+                          });
+                        },
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        side: const BorderSide(
+                          color: Colors.white12,
+                          width: 1,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
                       );
-                    }
-                    final docs = snap.data!.docs;
-                    // Sort featured shops using collaborative algorithm
-                    return FutureBuilder<
-                        List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
-                      future: Future.value(_sortFeaturedShops(docs)),
-                      builder: (context, sortedSnap) {
-                        if (!sortedSnap.hasData) {
+                    },
+                  ),
+                ),
+                const SizedBox(height: 6),
+                // Tag filters
+                // _buildTagFilters(),
+                const SizedBox(height: 18),
+                if (_query.isEmpty && _selectedFilters.isEmpty) ...[
+                  _sectionTitle('Monthly Featured Cafe Shops'),
+                  const SizedBox(height: 10),
+                  if (userSnap != null)
+                    StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                      stream: _featuredShopsStream,
+                      builder: (context, snap) {
+                        if (snap.connectionState == ConnectionState.waiting) {
                           return const SizedBox(
-                            height: 200,
+                            height: 275,
                             child: Center(
                               child: CircularProgressIndicator(strokeWidth: 2),
                             ),
                           );
                         }
-                        final sorted = sortedSnap.data!;
-                        if (sorted.isEmpty) {
-                          return const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: Text('No featured shops yet',
-                                style: TextStyle(color: Colors.white70)),
-                          );
-                        }
-                        return SizedBox(
-                          height: 275,
-                          child: ListView.separated(
-                            physics: const BouncingScrollPhysics(),
-                            scrollDirection: Axis.horizontal,
-                            itemCount: sorted.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(width: 12),
-                            itemBuilder: (context, idx) {
-                              final d = sorted[idx];
-                              return SizedBox(
-                                width: 360,
-                                child: _buildFeaturedCard(
-                                  shopData: d.data(),
-                                  id: d.id,
-                                  name: ((d.data()['name'] ?? '') as String?) ??
-                                      '',
-                                  city:
-                                      _getAddressAsString(d.data()['address']),
-                                  hours: _hoursFromSchedule(
-                                      _getScheduleAsMap(d.data()['schedule'])),
-                                  ratingText: _ratingStreamText(
-                                    d.id,
-                                    d.data()['ratings'],
-                                    (d.data()['reviews'] is List
-                                        ? (d.data()['reviews'] as List).length
-                                        : 0),
-                                  ),
-                                  isBookmarked: _bookmarks.contains(d.id),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => CafeDetailsScreen(
-                                          shopId: d.id,
-                                          shop: d.data(),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  onBookmark: () => _toggleBookmark(
-                                    d.id,
-                                    _bookmarks.contains(d.id),
-                                  ),
+                        final docs = snap.data!.docs;
+                        // Sort featured shops using collaborative algorithm
+                        return FutureBuilder<
+                            List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
+                          future: Future.value(_sortFeaturedShops(docs)),
+                          builder: (context, sortedSnap) {
+                          if (sortedSnap.connectionState ==
+                              ConnectionState.waiting) {
+                            return const SizedBox(
+                              height: 275,
+                                child: Center(
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 ),
                               );
-                            },
-                          ),
-                        );
-                      },
-                    );
-                  },
-                );
-              },
-            )
-          else
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text('Sign in to see featured',
-                  style: TextStyle(color: Colors.white70)),
-            ),
-          const SizedBox(height: 18),
-          _sectionTitle('Upcoming Events'),
-          const SizedBox(height: 10),
-          _buildEventsSection(),
-          const SizedBox(height: 18),
-        ],
-        GestureDetector(
-            onTap: () => widget.onOpenCommunity?.call(),
-            child: _buildCheckCommunityButton()),
-        const SizedBox(height: 18),
-        _sectionTitle('Shops'),
-        const SizedBox(height: 10),
-        // Bookmarks + Shops stream
-        if (_userStream != null)
-          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-            stream: _userStream,
-            builder: (context, userSnap) {
-              List<String> userInterests = [];
-              if (userSnap.hasData) {
-                final data = userSnap.data!.data();
-                final list =
-                    (data?['bookmarks'] as List?)?.cast<String>() ?? [];
-                final vlist = (data?['visited'] as List?)?.cast<String>() ?? [];
-                _bookmarks = list.toSet();
-                _visited = vlist.toSet();
-                userInterests = (data?['interests'] as List?)?.cast<String>() ?? [];
-              }
-              return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: _getShopsStream(userInterests),
-                builder: (context, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                        child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ));
-                  }
-                  if (snap.hasError) {
-                    return const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text('Failed to load shops',
-                          style: TextStyle(color: Colors.white70)),
-                    );
-                  }
-                  final docs = snap.data?.docs ?? [];
-                  // Apply filters and sorting based on chips and bottom-sheet
-                  final filtered = _applyFilters(docs, userInterests);
-                  if (filtered.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text('No verified shops yet. Recently added community shops are being reviewed by admins.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white70)),
-                    );
-                  }
-                  return Column(
-                    children: [
-                      for (int i = 0; i < filtered.length; i++) ...[
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => CafeDetailsScreen(
-                                  shopId: filtered[i].id,
-                                  shop: filtered[i].data(),
-                                ),
+                            }
+                            final sorted = sortedSnap.data!;
+                            if (sorted.isEmpty) {
+                              return const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: Text('No featured shops yet',
+                                    style: TextStyle(color: Colors.white70)),
+                              );
+                            }
+                            return SizedBox(
+                              height: 275,
+                              child: ListView.separated(
+                                physics: const BouncingScrollPhysics(),
+                                scrollDirection: Axis.horizontal,
+                                itemCount: sorted.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(width: 12),
+                                itemBuilder: (context, idx) {
+                                  final d = sorted[idx];
+                                  return SizedBox(
+                                    width: 360,
+                                    child: _buildFeaturedCard(
+                                      shopData: d.data(),
+                                      id: d.id,
+                                      name: ((d.data()['name'] ?? '')
+                                              as String?) ??
+                                          '',
+                                      city: _getAddressAsString(
+                                          d.data()['address']),
+                                      hours: _hoursFromSchedule(
+                                          _getScheduleAsMap(
+                                              d.data()['schedule'])),
+                                      ratingText: TextWidget(
+                                        text: _ratingText(
+                                          d.data()['ratings'],
+                                          (d.data()['reviews'] is List
+                                              ? (d.data()['reviews'] as List).length
+                                              : 0),
+                                        ),
+                                        fontSize: 13,
+                                        color: Colors.white,
+                                      ),
+                                      isBookmarked: _bookmarks.contains(d.id),
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                CafeDetailsScreen(
+                                              shopId: d.id,
+                                              shop: d.data(),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      onBookmark: () => _toggleBookmark(
+                                        d.id,
+                                        _bookmarks.contains(d.id),
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                             );
                           },
-                          child: _buildShopCard(
-                            logo:
-                                ((filtered[i].data()['logoUrl'] ?? '') as String?) ?? '',
-                            id: filtered[i].id,
-                            name: ((filtered[i].data()['name'] ?? '') as String?) ?? '',
-                            city: _getAddressAsString(filtered[i].data()['address']),
-                            hours: _hoursFromSchedule(
-                                _getScheduleAsMap(filtered[i].data()['schedule'])),
-                            ratingText: _ratingStreamText(
-                              filtered[i].id,
-                              filtered[i].data()['ratings'],
-                              (filtered[i].data()['reviews'] is List
-                                  ? (filtered[i].data()['reviews'] as List).length
-                                  : 0),
-                            ),
-                            isBookmarked: _bookmarks.contains(filtered[i].id),
-                            icon: FontAwesomeIcons.coffee,
-                            onBookmark: () => _toggleBookmark(
-                              filtered[i].id,
-                              _bookmarks.contains(filtered[i].id),
-                            ),
-                            rank: (_selectedChip == 0 && _selectedFilters.isEmpty && _query.isEmpty) ? (i + 1) : null,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                      const SizedBox(height: 24),
-                    ],
-                  );
-                },
-              );
-            },
-          )
-        else
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('Sign in to see shops',
-                style: TextStyle(color: Colors.white70)),
+                        );
+                      },
+                    )
+                  else
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text('Sign in to see featured',
+                          style: TextStyle(color: Colors.white70)),
+                    ),
+                  const SizedBox(height: 18),
+                  _sectionTitle('Upcoming Events'),
+                  const SizedBox(height: 10),
+                  _buildEventsSection(),
+                  const SizedBox(height: 18),
+                ],
+                GestureDetector(
+                    onTap: () => widget.onOpenCommunity?.call(),
+                    child: _buildCheckCommunityButton()),
+                const SizedBox(height: 18),
+                  _sectionTitle('Shops'),
+                  const SizedBox(height: 10),
+                ],
+              ),
+            ),
           ),
+          // Shops stream result
+          if (shopsSnap != null) ...[
+            _buildShopsSliver(shopsSnap),
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+          ]
         ],
       ),
-    ),
+    );
+  }
+
+  Widget _buildShopsSliver(
+      AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snap) {
+    if (snap.connectionState == ConnectionState.waiting) {
+      return const SliverToBoxAdapter(
+          child: Center(
+              child: Padding(
+        padding: EdgeInsets.all(16),
+        child: CircularProgressIndicator(strokeWidth: 2),
+      )));
+    }
+    if (snap.hasError) {
+      return const SliverToBoxAdapter(
+          child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Text('Failed to load shops',
+            style: TextStyle(color: Colors.white70)),
+      ));
+    }
+    final docs = snap.data?.docs ?? [];
+    // Apply filters and sorting based on chips and bottom-sheet
+    final filtered = _applyFilters(docs, _userInterests);
+    if (filtered.isEmpty) {
+      return const SliverToBoxAdapter(
+          child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+            'No verified shops yet. Recently added community shops are being reviewed by admins.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70)),
+      ));
+    }
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, i) {
+            return Column(
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => CafeDetailsScreen(
+                          shopId: filtered[i].id,
+                          shop: filtered[i].data(),
+                        ),
+                      ),
+                    );
+                  },
+                  child: _buildShopCard(
+                    logo: ((filtered[i].data()['logoUrl'] ?? '') as String?) ??
+                        '',
+                    id: filtered[i].id,
+                    name: ((filtered[i].data()['name'] ?? '') as String?) ?? '',
+                    city: _getAddressAsString(filtered[i].data()['address']),
+                    hours: _hoursFromSchedule(
+                        _getScheduleAsMap(filtered[i].data()['schedule'])),
+                    ratingText: TextWidget(text: _ratingText(filtered[i].data()['ratings'], (filtered[i].data()['reviews'] is List ? (filtered[i].data()['reviews'] as List).length : 0)), fontSize: 13, color: Colors.white),
+                    isBookmarked: _bookmarks.contains(filtered[i].id),
+                    icon: FontAwesomeIcons.coffee,
+                    onBookmark: () => _toggleBookmark(
+                      filtered[i].id,
+                      _bookmarks.contains(filtered[i].id),
+                    ),
+                    rank: (_selectedChip == 0 &&
+                            _selectedFilters.isEmpty &&
+                            _query.isEmpty)
+                        ? (i + 1)
+                        : null,
+                    galleryImages: (filtered[i].data()['gallery'] as List?)
+                            ?.cast<String>() ??
+                        [],
+                    isVerified: filtered[i].data()['isVerified'] == true,
+                    submissionType: (filtered[i].data()['submissionType'] ??
+                        'community') as String,
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+            );
+          },
+          childCount: filtered.length,
+        ),
+      ),
     );
   }
 
@@ -838,17 +600,9 @@ class _ExploreTabState extends State<ExploreTab> {
     return sorted;
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> _getFeaturedShopsStream() {
-    // Query featured shops only (configurable by admin)
-    // No rating orderBy to avoid requiring a composite index
-    return FirebaseFirestore.instance
-        .collection('shops')
-        .where('isFeatured', isEqualTo: true)
-        .limit(5)
-        .snapshots();
-  }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> _getShopsStream(List<String> userInterests) {
+  Stream<QuerySnapshot<Map<String, dynamic>>> _getShopsStream(
+      List<String> userInterests) {
     // Default behavior based on selected chip
     switch (_selectedChip) {
       case 0: // For You (Recommendations)
@@ -860,7 +614,7 @@ class _ExploreTabState extends State<ExploreTab> {
             .orderBy('postedAt', descending: true)
             .limit(300)
             .snapshots();
-            
+
       case 2: // Newest
         return FirebaseFirestore.instance
             .collection('shops')
@@ -868,7 +622,7 @@ class _ExploreTabState extends State<ExploreTab> {
             .orderBy('postedAt', descending: true)
             .limit(300)
             .snapshots();
-            
+
       case 3: // Open now
         return FirebaseFirestore.instance
             .collection('shops')
@@ -876,7 +630,7 @@ class _ExploreTabState extends State<ExploreTab> {
             .orderBy('postedAt', descending: true)
             .limit(300)
             .snapshots();
-            
+
       case 1: // Popular
       default:
         return FirebaseFirestore.instance
@@ -892,7 +646,10 @@ class _ExploreTabState extends State<ExploreTab> {
       List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
       List<String> interests) {
     // Visibility Filter: Hide shops that are explicitly marked as hidden or archived
-    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> out = docs.where((d) => d.data()['isHidden'] != true && d.data()['approvalStatus'] != 'archived');
+    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> out = docs.where(
+        (d) =>
+            d.data()['isHidden'] != true &&
+            d.data()['approvalStatus'] != 'archived');
 
     // Bottom sheet filters
     if (_isFavorites) {
@@ -904,14 +661,18 @@ class _ExploreTabState extends State<ExploreTab> {
     if (_isOpenToday) {
       out = out.where((d) {
         final sched = d.data()['schedule'];
-        final map = (sched is Map) ? Map<String, dynamic>.from(sched) : <String, dynamic>{};
+        final map = (sched is Map)
+            ? Map<String, dynamic>.from(sched)
+            : <String, dynamic>{};
         return _isOpenTodayFromSchedule(map);
       });
     }
     if (_isOpenNow) {
       out = out.where((d) {
         final sched = d.data()['schedule'];
-        final map = (sched is Map) ? Map<String, dynamic>.from(sched) : <String, dynamic>{};
+        final map = (sched is Map)
+            ? Map<String, dynamic>.from(sched)
+            : <String, dynamic>{};
         return _isOpenNowFromSchedule(map);
       });
     }
@@ -920,7 +681,8 @@ class _ExploreTabState extends State<ExploreTab> {
     if (_selectedFilters.isNotEmpty) {
       out = out.where((d) {
         final tags = (d.data()['tags'] as List?)?.cast<String>() ?? [];
-        return _selectedFilters.any((selectedTag) => tags.contains(selectedTag));
+        return _selectedFilters
+            .any((selectedTag) => tags.contains(selectedTag));
       });
     }
 
@@ -930,7 +692,8 @@ class _ExploreTabState extends State<ExploreTab> {
         final data = d.data();
         final submissionType = data['submissionType'] as String? ?? 'community';
         final ownerId = data['ownerId'] as String?;
-        final isBusiness = (submissionType == 'business' || (ownerId != null && ownerId.isNotEmpty));
+        final isBusiness = (submissionType == 'business' ||
+            (ownerId != null && ownerId.isNotEmpty));
 
         if (_sourceFilter == 'Business') {
           return isBusiness;
@@ -975,7 +738,8 @@ class _ExploreTabState extends State<ExploreTab> {
         final sb = _shopRecommendationScores[b.id] ?? 0.0;
 
         // 2) Get Interest Bonus (Content-based)
-        double _getBonus(QueryDocumentSnapshot<Map<String, dynamic>> d, List<String> interests) {
+        double _getBonus(QueryDocumentSnapshot<Map<String, dynamic>> d,
+            List<String> interests) {
           if (interests.isEmpty) return 0.0;
           final tags = (d.data()['tags'] as List?)?.cast<String>() ?? [];
           final matchCount = tags.where((t) => interests.contains(t)).length;
@@ -1013,13 +777,14 @@ class _ExploreTabState extends State<ExploreTab> {
         final tags = (d.data()['tags'] as List?)?.cast<String>() ?? [];
         final matches = tags.where((t) => interests.contains(t)).toList();
         final bonus = matches.length * 1.5;
-        print('   #${i+1} ${d.data()['name']} | Final Score: ${(collab + bonus).toStringAsFixed(2)} '
-              '(Collab: ${collab.toStringAsFixed(2)} + Interests: ${bonus.toStringAsFixed(2)} [${matches.join(', ')}])');
+        print(
+            '   #${i + 1} ${d.data()['name']} | Final Score: ${(collab + bonus).toStringAsFixed(2)} '
+            '(Collab: ${collab.toStringAsFixed(2)} + Interests: ${bonus.toStringAsFixed(2)} [${matches.join(', ')}])');
       }
-    }
- else if (_selectedChip == 1 || (_selectedChip == 0 && _selectedFilters.isNotEmpty)) {
+    } else if (_selectedChip == 1 ||
+        (_selectedChip == 0 && _selectedFilters.isNotEmpty)) {
       // 1: Popular OR (For You with tag filters) - Sort by ratings, then by review count
-       list.sort((a, b) {
+      list.sort((a, b) {
         num ra = a.data().containsKey('ratings') && a.data()['ratings'] is num
             ? a.data()['ratings'] as num
             : 0;
@@ -1027,7 +792,7 @@ class _ExploreTabState extends State<ExploreTab> {
             ? b.data()['ratings'] as num
             : 0;
         if (rb != ra) return rb.compareTo(ra);
-        
+
         // Secondary: review count
         int ca = ((a.data()['reviews'] as List?)?.length ?? 0);
         int cb = ((b.data()['reviews'] as List?)?.length ?? 0);
@@ -1036,23 +801,27 @@ class _ExploreTabState extends State<ExploreTab> {
     } else if (_selectedChip == 2) {
       // 2: Newest - Sort by postedAt (already sorted by Firestore, but ensure it)
       list.sort((a, b) {
-         final ta = (a.data()['postedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
-         final tb = (b.data()['postedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
-         return tb.compareTo(ta);
+        final ta =
+            (a.data()['postedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+        final tb =
+            (b.data()['postedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+        return tb.compareTo(ta);
       });
     } else if (_selectedChip == 3) {
       // 3: Open Now - Sort by postedAt for now (or distance if available)
-       list.sort((a, b) {
-         final ta = (a.data()['postedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
-         final tb = (b.data()['postedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
-         return tb.compareTo(ta);
+      list.sort((a, b) {
+        final ta =
+            (a.data()['postedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+        final tb =
+            (b.data()['postedAt'] as Timestamp?)?.toDate() ?? DateTime(2000);
+        return tb.compareTo(ta);
       });
     }
 
     // Additional filtering for Open Now chip (Index 3)
-    if (_selectedChip == 3) { 
-        list.retainWhere((d) => _isOpenNowFromSchedule(
-            (d.data()['schedule'] ?? {}) as Map<String, dynamic>));
+    if (_selectedChip == 3) {
+      list.retainWhere((d) => _isOpenNowFromSchedule(
+          (d.data()['schedule'] ?? {}) as Map<String, dynamic>));
     }
     return list;
   }
@@ -1068,157 +837,22 @@ class _ExploreTabState extends State<ExploreTab> {
     required VoidCallback onTap,
     required VoidCallback onBookmark,
   }) {
-    final gallery = _getGalleryList(shopData['gallery']);
-    final isVerified = (shopData['isVerified'] as bool?) ?? false;
-    final submissionType = (shopData['submissionType'] as String?) ?? 'community';
-
-    // Helper for gallery slider
-    return Column(
-      children: [
-        GestureDetector(
-          onTap: onTap,
-          child: _buildFeaturedGallerySlider(
-            galleryImages: gallery,
-            isBookmarked: isBookmarked,
-            onBookmark: onBookmark,
-            isVerified: isVerified,
-            submissionType: submissionType,
-            isFeatured: true, // This is for the Featured Section
-          ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    TextWidget(
-                      text: hours,
-                      fontSize: 13,
-                      color: Colors.white70,
-                    ),
-                    const SizedBox(width: 10),
-                    const FaIcon(FontAwesomeIcons.solidStar,
-                        color: Colors.amber, size: 16),
-                     const SizedBox(width: 5),
-                    ratingText,
-                  ],
-                ),
-                const SizedBox(height: 2),
-                SizedBox(
-                  width: 280,
-                  child: TextWidget(
-                    text: name,
-                    fontSize: 17,
-                    color: Colors.white,
-                    isBold: true,
-                    maxLines: 1,
-                  ),
-                ),
-                SizedBox(
-                  width: 280,
-                  child: Text(
-                    formatAddress(city),
-                    style: TextStyle(
-                      fontSize: city.length > 30 ? 10.5 : 12,
-                      color: Colors.white70,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    maxLines: 1,
-                  ),
-                ),
-              ],
-            ),
-            if (shopData['logoUrl'] != null && (shopData['logoUrl'] as String).startsWith('http'))
-              CachedNetworkImage(
-                imageUrl: shopData['logoUrl'],
-                imageBuilder: (context, imageProvider) => CircleAvatar(
-                  radius: 20,
-                  backgroundImage: imageProvider,
-                ),
-                placeholder: (context, url) => CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Colors.grey[800],
-                  child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
-                ),
-                errorWidget: (context, url, error) => CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Colors.grey[800],
-                  child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
-                ),
-              )
-            else
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: Colors.grey[800],
-                child: const Icon(Icons.local_cafe,
-                    color: Colors.white70, size: 20),
-              ),
-          ],
-        ),
-      ],
+    return ExploreFeaturedCard(
+      shopData: shopData,
+      id: id,
+      name: name,
+      city: city,
+      hours: hours,
+      ratingText: ratingText,
+      isBookmarked: isBookmarked,
+      onTap: onTap,
+      onBookmark: onBookmark,
     );
   }
 
-  Widget _buildSubmissionBadge(bool isVerified, String submissionType, {bool hasRankBadge = false, bool isFeatured = false}) {
-    if (!isVerified && !isFeatured) return const SizedBox.shrink();
-    
-    // UI/UX MASTER PALETTE: Cohesive with CoFi's Maroon (#8B0C17)
-    final Color badgeColor = isFeatured 
-        ? primary.withOpacity(0.9) 
-        : (submissionType == 'business' 
-            ? const Color(0xFF546E7A).withOpacity(0.85) // Cool Slate (Professional)
-            : const Color(0xFFF1C40F).withOpacity(0.85)); // Premium Gold/Yellow (Community)
-            
-    final IconData badgeIcon = isFeatured
-        ? Icons.auto_awesome 
-        : (submissionType == 'business' ? Icons.verified : Icons.people);
-        
-    final String badgeText = isFeatured
-        ? 'FEATURED SHOP'
-        : (submissionType == 'business' ? 'Verified' : 'Community Added');
-
-    return Positioned(
-      top: hasRankBadge ? 46 : 12,
-      left: 12,
-      child: Container(
-        decoration: BoxDecoration(
-          color: badgeColor,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.25),
-              blurRadius: 6,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              badgeIcon,
-              color: Colors.white,
-              size: 13,
-            ),
-            const SizedBox(width: 5),
-            Text(
-              badgeText,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  Widget _buildSubmissionBadge(bool isVerified, String submissionType,
+      {bool hasRankBadge = false, bool isFeatured = false}) {
+    return const SizedBox.shrink();
   }
 
   Widget _buildFeaturedGallerySlider({
@@ -1229,346 +863,62 @@ class _ExploreTabState extends State<ExploreTab> {
     String submissionType = 'community',
     bool isFeatured = false,
   }) {
-    if (galleryImages.isEmpty) {
-      return Container(
-        height: 200,
-        decoration: BoxDecoration(
-          color: Colors.grey[800],
-          borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(18), bottom: Radius.circular(18)),
-        ),
-        child: Stack(
-          children: [
-            const Center(
-              child: Icon(Icons.image, color: Colors.white38, size: 50),
-            ),
-            _buildSubmissionBadge(isVerified, submissionType, hasRankBadge: false, isFeatured: isFeatured),
-            Align(
-              alignment: Alignment.topRight,
-              child: IconButton(
-                icon: Icon(
-                  isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                  color: Colors.white,
-                ),
-                onPressed: onBookmark,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return StatefulBuilder(
-      builder: (context, setSliderState) {
-        final currentIndex = ValueNotifier<int>(0);
-        final pageController = PageController();
-        return Container(
-          height: 200,
-          decoration: BoxDecoration(
-            color: Colors.grey[800],
-            borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(18), bottom: Radius.circular(18)),
-          ),
-          child: Stack(
-            children: [
-              PageView.builder(
-                controller: pageController,
-                onPageChanged: (index) {
-                  currentIndex.value = index;
-                },
-                itemCount: galleryImages.length,
-                itemBuilder: (context, index) {
-                  return ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(18), bottom: Radius.circular(18)),
-                    child: CachedNetworkImage(
-                      imageUrl: galleryImages[index],
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      height: 200,
-                      placeholder: (context, url) => const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      errorWidget: (context, url, error) => const Center(
-                        child:
-                            Icon(Icons.image, color: Colors.white38, size: 50),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              _buildSubmissionBadge(isVerified, submissionType, hasRankBadge: false, isFeatured: isFeatured),
-              // Bookmark button
-              Align(
-                alignment: Alignment.topRight,
-                child: IconButton(
-                  icon: Icon(
-                    isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                    color: Colors.white,
-                  ),
-                  onPressed: onBookmark,
-                ),
-              ),
-              // Left arrow button
-              if (galleryImages.length > 1)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: GestureDetector(
-                      onTap: () {
-                        pageController.previousPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black38,
-                          shape: BoxShape.circle,
-                        ),
-                        padding: const EdgeInsets.all(8),
-                        child: const Icon(
-                          Icons.arrow_back_ios_new,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              // Right arrow button
-              if (galleryImages.length > 1)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
-                      onTap: () {
-                        pageController.nextPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black38,
-                          shape: BoxShape.circle,
-                        ),
-                        padding: const EdgeInsets.all(8),
-                        child: const Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              // Dots indicator
-              if (galleryImages.length > 1)
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: ValueListenableBuilder<int>(
-                      valueListenable: currentIndex,
-                      builder: (context, index, _) {
-                        return Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(
-                            galleryImages.length,
-                            (i) => Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              width: index == i ? 12 : 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color:
-                                    index == i ? Colors.white : Colors.white54,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildSearchBar() {
-    return Container(
-      key: widget.searchKey,
-      decoration: BoxDecoration(
-        color: const Color(0xFF222222),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          const Icon(Icons.search, color: Colors.white54),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: _searchCtrl,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                hintText: 'Find Cafes',
-                hintStyle: TextStyle(color: Colors.white54),
-                border: InputBorder.none,
-              ),
-              textInputAction: TextInputAction.search,
-              onSubmitted: (_) => setState(() {}),
-            ),
+    return ExploreSearchBar(
+      searchKey: widget.searchKey,
+      filterKey: widget.filterKey,
+      searchCtrl: _searchCtrl,
+      query: _query,
+      onClear: () {
+        _searchCtrl.clear();
+        setState(() => _query = '');
+      },
+      onFilterTap: () {
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.black,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          IconButton(
-            key: widget.filterKey,
-            icon: const Icon(Icons.tune, color: Colors.white54),
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.black,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                ),
-                builder: (context) => _buildFilterBottomSheet(context),
-              );
-            },
-          ),
-          if (_query.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.clear, color: Colors.white54),
-              onPressed: () {
-                _searchCtrl.clear();
-                setState(() => _query = '');
-              },
-            ),
-        ],
-      ),
+          builder: (context) => _buildFilterBottomSheet(context),
+        );
+      },
+      onSubmitted: (_) => setState(() {}),
     );
   }
 
   String _ratingText(dynamic ratings, dynamic ratingCount) {
-    final num r = (ratings is num) ? ratings : 0;
-    final num c = (ratingCount is num) ? ratingCount : 0;
-    final display = (c > 0) ? (r.toDouble()).toStringAsFixed(1) : '0.0';
-    return '$display (${c.toInt()})';
+    return ExploreUtils.ratingText(ratings, ratingCount);
   }
 
   String _hoursFromSchedule(Map<String, dynamic> schedule) {
-    final key = _weekdayKey(DateTime.now().weekday);
-    final day = _getMapValue(schedule[key] ?? {});
-    final isOpen = (day['isOpen'] ?? false) == true;
-    final open = (day['open'] ?? '') as String?;
-    final close = (day['close'] ?? '') as String?;
-    if (isOpen && (open?.isNotEmpty ?? false) && (close?.isNotEmpty ?? false)) {
-      return '${_to12h(open ?? '')} - ${_to12h(close ?? '')}';
-    }
-    return 'Closed today';
+    return ExploreUtils.hoursFromSchedule(schedule);
   }
 
-  // Live rating/count from reviews subcollection with fallback
-  Widget _ratingStreamText(
-      String shopId, dynamic embeddedRatings, int embeddedCount) {
-    final query = FirebaseFirestore.instance
-        .collection('shops')
-        .doc(shopId)
-        .collection('reviews');
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: query.snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return TextWidget(
-            text: _ratingText(embeddedRatings, embeddedCount),
-            fontSize: 13,
-            color: Colors.white,
-          );
-        }
-        final docs = snapshot.data!.docs;
-        final ratings = docs
-            .map((d) => d.data()['rating'])
-            .whereType<num>()
-            .map((n) => n.toDouble())
-            .toList();
-        final count = ratings.length;
-        final avg = count == 0 ? 0.0 : ratings.reduce((a, b) => a + b) / count;
-        final text = '${avg.toStringAsFixed(1)} ($count)';
-        return TextWidget(text: text, fontSize: 13, color: Colors.white);
-      },
-    );
-  }
+
 
   bool _isOpenTodayFromSchedule(Map<String, dynamic> schedule) {
-    final key = _weekdayKey(DateTime.now().weekday);
-    final dayObj = schedule[key];
-    final day = (dayObj is Map) ? Map<String, dynamic>.from(dayObj) : <String, dynamic>{};
-    return (day['isOpen'] ?? false) == true;
+    return ExploreUtils.isOpenTodayFromSchedule(schedule);
   }
 
   bool _isOpenNowFromSchedule(Map<String, dynamic> schedule) {
-    final key = _weekdayKey(DateTime.now().weekday);
-    final dayObj = schedule[key];
-    final day = (dayObj is Map) ? Map<String, dynamic>.from(dayObj) : <String, dynamic>{};
-    if ((day['isOpen'] ?? false) != true) return false;
-    final open = (day['open'] ?? '') as String;
-    final close = (day['close'] ?? '') as String;
-    if (open.isEmpty || close.isEmpty) return false;
-    int om = _toMinutes(open);
-    int cm = _toMinutes(close);
-    final now = DateTime.now();
-    int nm = now.hour * 60 + now.minute;
-    // Handle overnight ranges (e.g., 22:00 - 02:00)
-    if (cm <= om) {
-      // closes next day
-      return nm >= om || nm < cm;
-    }
-    return nm >= om && nm < cm;
+    return ExploreUtils.isOpenNowFromSchedule(schedule);
   }
 
   int _toMinutes(String hhmm) {
-    final parts = hhmm.split(':');
-    if (parts.length != 2) return 0;
-    final h = int.tryParse(parts[0]) ?? 0;
-    final m = int.tryParse(parts[1]) ?? 0;
-    return h * 60 + m;
+    return 0; // Not used outside of ExploreUtils anymore
   }
 
   String _to12h(String hhmm) {
-    final parts = hhmm.split(':');
-    if (parts.length != 2) return hhmm;
-    int h = int.tryParse(parts[0]) ?? 0;
-    final m = int.tryParse(parts[1]) ?? 0;
-    final suffix = h >= 12 ? 'PM' : 'AM';
-    h = h % 12;
-    if (h == 0) h = 12;
-    final mm = m.toString().padLeft(2, '0');
-    return '$h:$mm $suffix';
+    return ExploreUtils.to12h(hhmm);
   }
 
   String _weekdayKey(int weekday) {
-    switch (weekday) {
-      case DateTime.monday:
-        return 'monday';
-      case DateTime.tuesday:
-        return 'tuesday';
-      case DateTime.wednesday:
-        return 'wednesday';
-      case DateTime.thursday:
-        return 'thursday';
-      case DateTime.friday:
-        return 'friday';
-      case DateTime.saturday:
-        return 'saturday';
-      case DateTime.sunday:
-      default:
-        return 'sunday';
-    }
+    return ExploreUtils.weekdayKey(weekday);
   }
 
   Future<void> _toggleBookmark(String shopId, bool isBookmarked) async {
@@ -1589,26 +939,12 @@ class _ExploreTabState extends State<ExploreTab> {
 
   /// Helper function to safely extract address as a String
   String _getAddressAsString(dynamic addressData) {
-    if (addressData == null) {
-      return '';
-    }
-    if (addressData is String) {
-      return addressData;
-    } else if (addressData is Map) {
-      // If address is a Map, try to extract the city or first available field
-      final map = addressData as Map<String, dynamic>;
-      return (map['city'] as String?) ?? (map['address'] as String?) ?? '';
-    }
-    return '';
+    return ExploreUtils.getAddressAsString(addressData);
   }
-
 
   /// Helper function to safely extract gallery URLs as List<String>
   List<String> _getGalleryList(dynamic galleryData) {
-    if (galleryData is List) {
-      return galleryData.whereType<String>().cast<String>().toList();
-    }
-    return [];
+    return ExploreUtils.getGalleryList(galleryData);
   }
 
   /// Helper function to safely convert schedule Map
@@ -1625,10 +961,7 @@ class _ExploreTabState extends State<ExploreTab> {
 
   /// Helper function to safely get a nested map value
   Map<String, dynamic> _getMapValue(dynamic value) {
-    if (value is Map) {
-      return Map<String, dynamic>.from(value);
-    }
-    return {};
+    return ExploreUtils.getMapValue(value);
   }
 
   /// Helper function to sort featured shops using collaborative algorithm
@@ -1726,7 +1059,7 @@ class _ExploreTabState extends State<ExploreTab> {
             allShopReviews.where((r) => r['userId'] != _user!.uid).toList();
 
         // Calculate similarity score
-        final score = calculateCosineSimilarity(
+        final score = RecommendationService().calculateCosineSimilarity(
           user1Reviews: userCombined,
           user2Reviews: otherUsersReviews,
           shopAmenities: shopAmenities,
@@ -1791,151 +1124,6 @@ class _ExploreTabState extends State<ExploreTab> {
     required Widget ratingText,
     required bool isBookmarked,
     required IconData icon,
-    required String logo,
-    required VoidCallback onBookmark,
-    int? rank,
-  }) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream:
-          FirebaseFirestore.instance.collection('shops').doc(id).snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Column(
-              children: [
-                Container(
-                  height: 200,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[800],
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(18), bottom: Radius.circular(18)),
-                  ),
-                  child: const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            TextWidget(
-                              text: hours,
-                              fontSize: 13,
-                              color: Colors.white70,
-                            ),
-                            const SizedBox(width: 10),
-                            const FaIcon(FontAwesomeIcons.solidStar,
-                                color: Colors.amber, size: 16),
-                            const SizedBox(width: 5),
-                            ratingText,
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        SizedBox(
-                          width: 280,
-                          child: TextWidget(
-                            text: name,
-                            fontSize: 17,
-                            color: Colors.white,
-                            isBold: true,
-                            maxLines: 1,
-                          ),
-                        ),
-                        SizedBox(
-                          width: 280,
-                          child: Text(
-                            formatAddress(city),
-                            style: TextStyle(
-                              fontSize: city.length > 30 ? 10.5 : 12,
-                              color: Colors.white70,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            maxLines: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (logo.startsWith('http'))
-                      CachedNetworkImage(
-                        imageUrl: logo,
-                        imageBuilder: (context, imageProvider) => CircleAvatar(
-                          backgroundImage: imageProvider,
-                        ),
-                        placeholder: (context, url) => CircleAvatar(
-                          backgroundColor: Colors.grey[800],
-                          child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
-                        ),
-                        errorWidget: (context, url, error) => CircleAvatar(
-                          backgroundColor: Colors.grey[800],
-                          child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
-                        ),
-                      )
-                    else
-                      CircleAvatar(
-                        backgroundColor: Colors.grey[800],
-                        child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        }
-
-        if (snapshot.hasError) {
-          return _buildShopCardWithImage(
-            logo: logo,
-            id: id,
-            name: name,
-            city: city,
-            hours: hours,
-            ratingText: ratingText,
-            isBookmarked: isBookmarked,
-            icon: icon,
-            onBookmark: onBookmark,
-            galleryImages: [],
-            rank: rank,
-          );
-        }
-
-        final data = snapshot.data?.data() ?? {};
-        final gallery = (data['gallery'] as List?)?.cast<String>() ?? [];
-        final isVerified = (data['isVerified'] as bool?) ?? false;
-        final submissionType = (data['submissionType'] as String?) ?? 'community';
-
-        return _buildShopCardWithImage(
-          logo: logo,
-          id: id,
-          name: name,
-          city: city,
-          hours: hours,
-          ratingText: ratingText,
-          isBookmarked: isBookmarked,
-          icon: icon,
-          onBookmark: onBookmark,
-          galleryImages: gallery,
-          rank: rank,
-          isVerified: isVerified,
-          submissionType: submissionType,
-        );
-      },
-    );
-  }
-
-   Widget _buildShopCardWithImage({
-    required String id,
-    required String name,
-    required String city,
-    required String hours,
-    required Widget ratingText,
-    required bool isBookmarked,
-    required IconData icon,
     required VoidCallback onBookmark,
     required String logo,
     List<String>? galleryImages,
@@ -1943,137 +1131,20 @@ class _ExploreTabState extends State<ExploreTab> {
     bool isVerified = false,
     String submissionType = 'community',
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        children: [
-          Stack(
-            children: [
-              _buildGallerySlider(
-                galleryImages: galleryImages ?? [],
-                isBookmarked: isBookmarked,
-                onBookmark: onBookmark,
-                isVerified: false, 
-                submissionType: submissionType,
-                hasRankBadge: false, 
-              ),
-              // Submission Badge - positioned based on rank badge presence
-              if (isVerified)
-                _buildSubmissionBadge(isVerified, submissionType, hasRankBadge: rank == 1),
-              // NEW: Rank Badge - NOW ONLY FOR TOP 1
-              if (rank == 1)
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: primary,
-                      borderRadius: BorderRadius.circular(12), // Match submission badge
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const FaIcon(FontAwesomeIcons.crown, color: Colors.white, size: 13),
-                        const SizedBox(width: 5),
-                        Text(
-                          '#$rank Recommended',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      TextWidget(
-                        text: hours,
-                        fontSize: 13,
-                        color: Colors.white70,
-                      ),
-                      const SizedBox(width: 10),
-                      const FaIcon(FontAwesomeIcons.solidStar,
-                          color: Colors.amber, size: 16),
-                       const SizedBox(width: 5),
-                      ratingText,
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  SizedBox(
-                    width: 280,
-                    child: TextWidget(
-                      text: name,
-                      fontSize: 17,
-                      color: Colors.white,
-                      isBold: true,
-                      maxLines: 1,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 280,
-                    child: Text(
-                      formatAddress(city),
-                      style: TextStyle(
-                        fontSize: city.length > 30 ? 10.5 : 12,
-                        color: Colors.white70,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      maxLines: 1,
-                    ),
-                  ),
-                ],
-              ),
-              // Logo in bottom right
-              if (logo.startsWith('http'))
-                CachedNetworkImage(
-                  imageUrl: logo,
-                  imageBuilder: (context, imageProvider) => CircleAvatar(
-                    radius: 20,
-                    backgroundImage: imageProvider,
-                  ),
-                  placeholder: (context, url) => CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Colors.grey[800],
-                    child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
-                  ),
-                  errorWidget: (context, url, error) => CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Colors.grey[800],
-                    child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
-                  ),
-                )
-              else
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Colors.grey[800],
-                  child: const Icon(Icons.local_cafe,
-                      color: Colors.white70, size: 20),
-                ),
-            ],
-          ),
-        ],
-      ),
+    return ExploreShopCard(
+      id: id,
+      name: name,
+      city: city,
+      hours: hours,
+      ratingText: ratingText,
+      isBookmarked: isBookmarked,
+      icon: icon,
+      onBookmark: onBookmark,
+      logo: logo,
+      galleryImages: galleryImages,
+      rank: rank,
+      isVerified: isVerified,
+      submissionType: submissionType,
     );
   }
 
@@ -2085,176 +1156,7 @@ class _ExploreTabState extends State<ExploreTab> {
     String submissionType = 'community',
     bool hasRankBadge = false,
   }) {
-    if (galleryImages.isEmpty) {
-      return Container(
-        height: 200,
-        decoration: BoxDecoration(
-          color: Colors.grey[800],
-          borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(18), bottom: Radius.circular(18)),
-        ),
-        child: Stack(
-          children: [
-            const Center(
-              child: Icon(Icons.image, color: Colors.white38, size: 50),
-            ),
-            _buildSubmissionBadge(isVerified, submissionType, hasRankBadge: false),
-            Align(
-              alignment: Alignment.topRight,
-              child: IconButton(
-                icon: Icon(
-                  isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                  color: Colors.white,
-                ),
-                onPressed: onBookmark,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return StatefulBuilder(
-      builder: (context, setGalleryState) {
-        final currentIndex = ValueNotifier<int>(0);
-        final pageController = PageController();
-        return Container(
-          height: 200,
-          decoration: BoxDecoration(
-            color: Colors.grey[800],
-            borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(18), bottom: Radius.circular(18)),
-          ),
-          child: Stack(
-            children: [
-              PageView.builder(
-                controller: pageController,
-                onPageChanged: (index) {
-                  currentIndex.value = index;
-                },
-                itemCount: galleryImages.length,
-                itemBuilder: (context, index) {
-                  return ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(18), bottom: Radius.circular(18)),
-                    child: CachedNetworkImage(
-                      imageUrl: galleryImages[index],
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      height: 200,
-                      placeholder: (context, url) => const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      errorWidget: (context, url, error) => const Center(
-                        child:
-                            Icon(Icons.image, color: Colors.white38, size: 50),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              _buildSubmissionBadge(isVerified, submissionType, hasRankBadge: false),
-              // Bookmark button
-              Align(
-                alignment: Alignment.topRight,
-                child: IconButton(
-                  icon: Icon(
-                    isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                    color: Colors.white,
-                  ),
-                  onPressed: onBookmark,
-                ),
-              ),
-              // Left arrow button
-              if (galleryImages.length > 1)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: GestureDetector(
-                      onTap: () {
-                        pageController.previousPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black38,
-                          shape: BoxShape.circle,
-                        ),
-                        padding: const EdgeInsets.all(8),
-                        child: const Icon(
-                          Icons.arrow_back_ios_new,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              // Right arrow button
-              if (galleryImages.length > 1)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
-                      onTap: () {
-                        pageController.nextPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black38,
-                          shape: BoxShape.circle,
-                        ),
-                        padding: const EdgeInsets.all(8),
-                        child: const Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              // Dots indicator
-              if (galleryImages.length > 1)
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: ValueListenableBuilder<int>(
-                      valueListenable: currentIndex,
-                      builder: (context, index, _) {
-                        return Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(
-                            galleryImages.length,
-                            (i) => Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              width: index == i ? 12 : 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color:
-                                    index == i ? Colors.white : Colors.white54,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildCheckCommunityButton() {
@@ -2297,470 +1199,7 @@ class _ExploreTabState extends State<ExploreTab> {
   }
 
   Widget _buildEventsSection() {
-    final now = DateTime.now();
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collectionGroup('events')
-          .orderBy('createdAt', descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            height: 200,
-            child: Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          );
-        }
-        if (snapshot.hasError) {
-          return const Padding(
-            padding: EdgeInsets.all(12),
-            child: Text('Failed to load events',
-                style: TextStyle(color: Colors.white70)),
-          );
-        }
-        final docs = snapshot.data?.docs ?? [];
-
-        // Auto-archive finished events (mark them as archived)
-        for (final doc in docs) {
-          final event = doc.data();
-          final endDate = event['endDate'];
-          bool isFinished = false;
-
-          if (endDate is String && endDate.isNotEmpty) {
-            try {
-              final end = DateTime.parse(endDate);
-              isFinished = end.isBefore(now);
-            } catch (_) {}
-          }
-
-          // If event is finished and not yet marked as archived, mark it
-          if (isFinished && event['isArchived'] != true) {
-            doc.reference.update({'isArchived': true}).catchError((_) {});
-          }
-        }
-
-        // Filter to only show UPCOMING events (not started, not ended)
-        // NOTE: Paused events are still shown with a visual indicator
-        final upcomingEvents = docs.where((doc) {
-          final event = doc.data();
-
-          // First: Check if event has ended
-          final endDate = event['endDate'];
-          DateTime? endDateTime;
-          if (endDate is Timestamp) {
-            endDateTime = endDate.toDate();
-          } else if (endDate is String && endDate.isNotEmpty) {
-            try {
-              endDateTime = DateTime.parse(endDate);
-            } catch (_) {}
-          }
-
-          // If event has ended, don't show
-          if (endDateTime != null && endDateTime.isBefore(now)) {
-            return false;
-          }
-
-          // Second: Check if event has started
-          final startDate = event['startDate'];
-          DateTime? startDateTime;
-          if (startDate is Timestamp) {
-            startDateTime = startDate.toDate();
-          } else if (startDate is String && startDate.isNotEmpty) {
-            try {
-              startDateTime = DateTime.parse(startDate);
-            } catch (_) {}
-          }
-
-          // Only show if start date is in the future (hasn't started yet)
-          if (startDateTime != null) {
-            return startDateTime.isAfter(now);
-          }
-
-          // If no valid dates found, don't show
-          return false;
-        }).toList();
-
-        if (upcomingEvents.isEmpty) {
-          return Container(
-            width: double.infinity,
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E1E1E),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withOpacity(0.08)),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.event_busy_rounded, size: 32, color: Colors.white38),
-                SizedBox(height: 8),
-                Text(
-                  'No upcoming events',
-                  style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return SizedBox(
-          height: 230,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: upcomingEvents.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (context, idx) {
-              final event = upcomingEvents[idx].data();
-              final eventId = upcomingEvents[idx].id;
-              return SizedBox(
-                width: 360,
-                height: 220,
-                child: GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => EventDetailsScreen(event: {
-                          ...event,
-                          'id': eventId,
-                        }),
-                      ),
-                    );
-                  },
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(18),
-                    child: Container(
-                      height: 220,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.black,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (event['imageUrl']?.toString().startsWith('http') == true)
-                            CachedNetworkImage(
-                              imageUrl: event['imageUrl'],
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(color: Colors.grey[900]),
-                              errorWidget: (context, url, error) => Container(
-                                color: Colors.grey[900],
-                                child: const Icon(Icons.event, color: Colors.white24, size: 48),
-                              ),
-                            ),
-                          // Paused overlay
-                          if (event['isPaused'] == true)
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.5),
-                              ),
-                            ),
-                          // Content
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              // Top badges
-                              Align(
-                                alignment: Alignment.topRight,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: event['isPaused'] == true
-                                      ? Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 10, vertical: 6),
-                                          decoration: BoxDecoration(
-                                            color: Colors.red,
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                          ),
-                                          child: TextWidget(
-                                            text: 'PAUSED',
-                                            fontSize: 12,
-                                            color: Colors.white,
-                                            isBold: true,
-                                          ),
-                                        )
-                                      : Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 10, vertical: 6),
-                                          decoration: BoxDecoration(
-                                            color: Colors.amber,
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                          ),
-                                          child: TextWidget(
-                                            text: 'UPCOMING',
-                                            fontSize: 12,
-                                            color: Colors.black,
-                                            isBold: true,
-                                          ),
-                                        ),
-                                ),
-                              ),
-                              // Bottom text
-                              Align(
-                                alignment: Alignment.bottomLeft,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      TextWidget(
-                                        text: (event['title'] ?? 'Event')
-                                            .toString(),
-                                        fontSize: 18,
-                                        color: Colors.white,
-                                        isBold: true,
-                                        maxLines: 1,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      TextWidget(
-                                        text: _eventSubtitle(event),
-                                        fontSize: 14,
-                                        color: Colors.white,
-                                        maxLines: 1,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  String _eventSubtitle(Map<String, dynamic> event) {
-    final date = event['date'];
-    final start = event['startDate'];
-    final end = event['endDate'];
-
-    // Try startDate first
-    DateTime? startDate;
-    DateTime? endDate;
-
-    // Parse startDate
-    if (start is Timestamp) {
-      startDate = start.toDate();
-    } else if (start is String && start.isNotEmpty) {
-      try {
-        startDate = DateTime.parse(start);
-      } catch (_) {}
-    }
-
-    // Parse endDate
-    if (end is Timestamp) {
-      endDate = end.toDate();
-    } else if (end is String && end.isNotEmpty) {
-      try {
-        endDate = DateTime.parse(end);
-      } catch (_) {}
-    }
-
-    if (startDate != null) {
-      if (endDate != null &&
-          endDate.year == startDate.year &&
-          endDate.month == startDate.month &&
-          endDate.day == startDate.day) {
-        // Same day event
-        return _formatDate(startDate);
-      } else if (endDate != null) {
-        // Multi-day event
-        return '${_formatDate(startDate)} - ${_formatDate(endDate)}';
-      } else {
-        return _formatDate(startDate);
-      }
-    }
-
-    // Try simple date field
-    if (date is String && date.isNotEmpty) return date;
-
-    // Only return TBD if truly no dates exist
-    return 'Date TBD';
-  }
-
-  String _formatDate(DateTime date) {
-    final months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
-    ];
-    return '${months[date.month - 1]} ${date.day}';
-  }
-
-  /// Finds users similar to the current user using the Cosine Similarity algorithm.
-  /// Used internally to derive shop recommendation scores.
-  Future<List<Map<String, dynamic>>> _findSimilarUsers() async {
-    if (_user == null) return [];
-
-    try {
-      // STEP 1: Get current user's reviews AND visits
-      // OPTIMIZATION: Only check top 30 most rated or popular shops to build the vector.
-      // Checking ALL shops (thousands) is inefficient and costly.
-      final shopsSnapshot = await FirebaseFirestore.instance
-          .collection('shops')
-          .orderBy('ratings', descending: true) // Assuming 'ratings' stores average score
-          .limit(30)
-          .get();
-
-      final currentUserReviews = <Map<String, dynamic>>[];
-      final currentUserVisits = <Map<String, dynamic>>[];
-
-      // Get reviews
-      for (final shopDoc in shopsSnapshot.docs) {
-        final reviewsSnapshot = await shopDoc.reference
-            .collection('reviews')
-            .where('userId', isEqualTo: _user!.uid)
-            .get();
-
-        for (final reviewDoc in reviewsSnapshot.docs) {
-          final reviewData = reviewDoc.data();
-          currentUserReviews.add({
-            'shopId': shopDoc.id,
-            'rating': reviewData['rating'],
-            'tags': (reviewData['tags'] as List?)?.cast<String>() ?? [],
-          });
-        }
-
-        // Get visits (with tags)
-        final visitsSnapshot = await shopDoc.reference
-            .collection('visits')
-            .where('userId', isEqualTo: _user!.uid)
-            .get();
-
-        for (final visitDoc in visitsSnapshot.docs) {
-          final visitData = visitDoc.data();
-          currentUserVisits.add({
-            'shopId': shopDoc.id,
-            'tags': (visitData['tags'] as List?)?.cast<String>() ?? [],
-          });
-        }
-      }
-
-      // Combine reviews and visits into one signal
-      final currentUserCombined = [...currentUserReviews, ...currentUserVisits];
-
-      // If current user has no reviews or visits, return empty list
-      if (currentUserCombined.isEmpty) return [];
-
-      // STEP 2: Get all other users' reviews AND visits
-      final allUsersCombined = <String, List<Map<String, dynamic>>>{};
-
-      for (final shopDoc in shopsSnapshot.docs) {
-        // Get all reviews
-        final reviewsSnapshot =
-            await shopDoc.reference.collection('reviews').get();
-
-        for (final reviewDoc in reviewsSnapshot.docs) {
-          final reviewData = reviewDoc.data();
-          final userId = reviewData['userId'] as String?;
-          if (userId == null || userId == _user!.uid) continue;
-
-          allUsersCombined.putIfAbsent(userId, () => []);
-          allUsersCombined[userId]!.add({
-            'shopId': shopDoc.id,
-            'rating': reviewData['rating'],
-            'tags': (reviewData['tags'] as List?)?.cast<String>() ?? [],
-          });
-        }
-
-        // Get all visits
-        final visitsSnapshot =
-            await shopDoc.reference.collection('visits').get();
-
-        for (final visitDoc in visitsSnapshot.docs) {
-          final visitData = visitDoc.data();
-          final userId = visitData['userId'] as String?;
-          if (userId == null || userId == _user!.uid) continue;
-
-          allUsersCombined.putIfAbsent(userId, () => []);
-          allUsersCombined[userId]!.add({
-            'shopId': shopDoc.id,
-            'tags': (visitData['tags'] as List?)?.cast<String>() ?? [],
-          });
-        }
-      }
-
-      // STEP 3: Get shop amenities for all shops
-      final shopAmenities = <String, List<String>>{};
-      for (final shopDoc in shopsSnapshot.docs) {
-        final shopData = shopDoc.data();
-        final tags = (shopData['tags'] as List?)?.cast<String>() ?? [];
-        shopAmenities[shopDoc.id] = tags;
-      }
-
-      // STEP 4: Calculate similarity for each user using the Cosine Similarity algorithm
-      final List<Map<String, dynamic>> similarUsers = [];
-
-      for (final entry in allUsersCombined.entries) {
-        final otherUserId = entry.key;
-        final otherUserCombined = entry.value;
-
-        // Calculate cosine similarity using our implemented algorithm
-        final similarity = calculateCosineSimilarity(
-          user1Reviews: currentUserCombined,
-          user2Reviews: otherUserCombined,
-          shopAmenities: shopAmenities,
-        );
-        // Only include users with meaningful similarity (> 0.1)
-        if (similarity > 0.1) {
-          // Get user info
-          final userDoc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(otherUserId)
-              .get();
-
-          final userName = userDoc.data()?['name'] ?? 'User';
-
-          // Calculate common shops count
-          final currentUserShops =
-              currentUserCombined.map((r) => r['shopId'] as String).toSet();
-          final otherUserShops =
-              otherUserCombined.map((r) => r['shopId'] as String).toSet();
-          final commonShops =
-              currentUserShops.intersection(otherUserShops).length;
-
-          similarUsers.add({
-            'userId': otherUserId,
-            'userName': userName,
-            'similarity': similarity,
-            'commonShops': commonShops,
-          });
-        }
-      }
-
-      // STEP 5: Sort by similarity (highest first) and return top 5
-      similarUsers.sort((a, b) =>
-          (b['similarity'] as double).compareTo(a['similarity'] as double));
-
-      return similarUsers.take(5).toList();
-    } catch (e) {
-      print('Error finding similar users: $e');
-      return [];
-    }
+    return const ExploreEventsSection();
   }
 
   Widget _buildTagFilters() {
@@ -2852,14 +1291,15 @@ class _ExploreTabState extends State<ExploreTab> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: ['All', 'Business', 'Community'].map((source) {
+                        children:
+                            ['All', 'Business', 'Community'].map((source) {
                           final isSelected = _sourceFilter == source;
                           return ChoiceChip(
                             label: TextWidget(
-                              text: source == 'Community' 
-                                  ? 'Community Added' 
-                                  : source == 'Business' 
-                                      ? 'Business Verified' 
+                              text: source == 'Community'
+                                  ? 'Community Added'
+                                  : source == 'Business'
+                                      ? 'Business Verified'
                                       : source,
                               fontSize: 13,
                               color: Colors.white,
@@ -2902,7 +1342,8 @@ class _ExploreTabState extends State<ExploreTab> {
                               spacing: 8,
                               runSpacing: 8,
                               children: entry.value.map((tag) {
-                                final isSelected = _selectedFilters.contains(tag);
+                                final isSelected =
+                                    _selectedFilters.contains(tag);
                                 return FilterChip(
                                   label: TextWidget(
                                     text: tag,
@@ -2939,16 +1380,16 @@ class _ExploreTabState extends State<ExploreTab> {
                       }),
 
                       GestureDetector(
-                        onTap: (_selectedFilters.isEmpty &&
-                                _sourceFilter == 'All')
-                            ? null
-                            : () {
-                                setBottomSheetState(() {
-                                  _selectedFilters.clear();
-                                  _sourceFilter = 'All';
-                                });
-                                setState(() {});
-                              },
+                        onTap:
+                            (_selectedFilters.isEmpty && _sourceFilter == 'All')
+                                ? null
+                                : () {
+                                    setBottomSheetState(() {
+                                      _selectedFilters.clear();
+                                      _sourceFilter = 'All';
+                                    });
+                                    setState(() {});
+                                  },
                         child: Padding(
                           padding: const EdgeInsets.only(bottom: 32),
                           child: TextWidget(
