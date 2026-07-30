@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/utils/formatters.dart';
+import 'package:cofi/services/notification_service.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/widgets/post_event_bottom_sheet.dart';
 import 'package:cofi/utils/colors.dart';
@@ -859,6 +860,30 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
           'participantsCount': FieldValue.increment(1),
         });
       });
+
+      // Notify the business owner in real-time
+      try {
+        final shopDoc = await FirebaseFirestore.instance
+            .collection('shops')
+            .doc(shopId)
+            .get();
+        final ownerId = shopDoc.data()?['ownerId'];
+        
+        if (ownerId != null && ownerId != currentUser.uid) {
+          final userName = userData?['name'] ?? currentUser.displayName ?? 'User';
+          await NotificationService().createEventParticipationNotification(
+            ownerId,
+            eventId,
+            e['title'] ?? 'Event',
+            shopId,
+            userName,
+            currentUser.uid,
+            Timestamp.now(),
+          );
+        }
+      } catch (err) {
+        debugPrint('Failed to send event participation notification: $err');
+      }
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

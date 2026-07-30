@@ -1115,200 +1115,273 @@ class ProfileTab extends StatelessWidget {
 
   void _showJobApplicationsDialog(
       BuildContext context, List<DocumentSnapshot> jobDocs) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: Row(
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        height: MediaQuery.of(context).size.height * 0.75,
+        decoration: BoxDecoration(
+          color: Colors.grey[900]!.withOpacity(0.95),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+          boxShadow: [
+            BoxShadow(
+              color: primary.withOpacity(0.2),
+              blurRadius: 20,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: Column(
           children: [
-            const Icon(Icons.work_history, color: Colors.green, size: 28),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                'Your Job Applications',
-                style: TextStyle(color: Colors.white),
+            const SizedBox(height: 12),
+            Container(
+              width: 50,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.work_history,
+                        color: Colors.green, size: 28),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextWidget(
+                          text: 'Your Applications',
+                          fontSize: 22,
+                          color: Colors.white,
+                          isBold: true,
+                        ),
+                        TextWidget(
+                          text: 'Track your career journey',
+                          fontSize: 14,
+                          color: Colors.white54,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Colors.white54),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                itemCount: jobDocs.length,
+                separatorBuilder: (context, index) => const SizedBox(height: 16),
+                itemBuilder: (context, index) {
+                  final doc = jobDocs[index];
+                  final data = doc.data() as Map<String, dynamic>;
+                  final applications =
+                      (data['applications'] as List<dynamic>?) ?? [];
+                  final userApplications = applications
+                      .where((app) =>
+                          app is Map<String, dynamic> &&
+                          app['applicantId'] ==
+                              FirebaseAuth.instance.currentUser?.uid)
+                      .toList();
+
+                  return GestureDetector(
+                    onTap: () {
+                      final currentUser = FirebaseAuth.instance.currentUser;
+                      if (currentUser == null) return;
+
+                      final userApplication = userApplications.firstWhere(
+                        (app) => app['applicantId'] == currentUser.uid,
+                        orElse: () => null,
+                      );
+
+                      if (userApplication != null) {
+                        FirebaseFirestore.instance
+                            .collection('shops')
+                            .doc(data['shopId'])
+                            .get()
+                            .then((DocumentSnapshot documentSnapshot) {
+                          if (documentSnapshot.exists) {
+                            Navigator.of(ctx).pop();
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => JobChatScreen(
+                                  jobId: doc.id,
+                                  jobTitle: data['title'] ?? 'Unknown Position',
+                                  shopId: data['shopId'] ?? '',
+                                  posterId: documentSnapshot['posterId'] ?? '',
+                                  applicantId: currentUser.uid,
+                                  applicationId: userApplication['id'] ?? '',
+                                ),
+                              ),
+                            );
+                          }
+                        });
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.grey[850]!,
+                            Colors.grey[900]!,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.05),
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 10,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: primary.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.coffee, color: primary),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    TextWidget(
+                                      text: data['title'] ?? 'Unknown Position',
+                                      fontSize: 18,
+                                      color: Colors.white,
+                                      isBold: true,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    TextWidget(
+                                      text: data['address'] ?? 'Unknown Location',
+                                      fontSize: 14,
+                                      color: Colors.white54,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(
+                                Icons.chat_bubble_outline,
+                                color: primary,
+                                size: 24,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          const Divider(color: Colors.white12),
+                          const SizedBox(height: 12),
+                          ...userApplications.map((app) {
+                            final appData = app as Map<String, dynamic>;
+                            final status =
+                                appData['status'] as String? ?? 'pending';
+                            final appliedAt =
+                                appData['appliedAt'] as Timestamp?;
+                            final dateStr = appliedAt != null
+                                ? DateFormat('MMM dd, yyyy')
+                                    .format(appliedAt.toDate())
+                                : 'Unknown date';
+
+                            Color statusColor = Colors.orange;
+                            String statusText = 'Pending Review';
+                            IconData statusIcon = Icons.access_time;
+
+                            if (status == 'accepted') {
+                              statusColor = Colors.green;
+                              statusText = 'Accepted';
+                              statusIcon = Icons.check_circle;
+                            } else if (status == 'rejected') {
+                              statusColor = Colors.red;
+                              statusText = 'Rejected';
+                              statusIcon = Icons.cancel;
+                            }
+
+                            return Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.calendar_today,
+                                        size: 14, color: Colors.white54),
+                                    const SizedBox(width: 6),
+                                    TextWidget(
+                                      text: dateStr,
+                                      fontSize: 13,
+                                      color: Colors.white54,
+                                    ),
+                                  ],
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: statusColor.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: statusColor.withOpacity(0.3),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(statusIcon,
+                                          size: 14, color: statusColor),
+                                      const SizedBox(width: 6),
+                                      TextWidget(
+                                        text: statusText,
+                                        fontSize: 12,
+                                        color: statusColor,
+                                        isBold: true,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ],
         ),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Here are the jobs you\'ve applied to:',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              ...jobDocs.map((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                final applications =
-                    (data['applications'] as List<dynamic>?) ?? [];
-                final userApplications = applications
-                    .where((app) =>
-                        app is Map<String, dynamic> &&
-                        app['applicantId'] ==
-                            FirebaseAuth.instance.currentUser?.uid)
-                    .toList();
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        final currentUser = FirebaseAuth.instance.currentUser;
-                        if (currentUser == null) return;
-
-                        // Find the application data for the current user
-                        final userApplication = userApplications.firstWhere(
-                          (app) => app['applicantId'] == currentUser.uid,
-                          orElse: () => null,
-                        );
-
-                        if (userApplication != null) {
-                          FirebaseFirestore.instance
-                              .collection('shops')
-                              .doc(data['shopId'])
-                              .get()
-                              .then((DocumentSnapshot documentSnapshot) {
-                            if (documentSnapshot.exists) {
-                              Navigator.of(ctx).pop();
-
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => JobChatScreen(
-                                    jobId: doc.id,
-                                    jobTitle:
-                                        data['title'] ?? 'Unknown Position',
-                                    shopId: data['shopId'] ?? '',
-                                    posterId:
-                                        documentSnapshot['posterId'] ?? '',
-                                    applicantId: currentUser.uid,
-                                    applicationId: userApplication['id'] ?? '',
-                                  ),
-                                ),
-                              );
-                            }
-                          });
-                        }
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[800],
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: Colors.blue.withValues(alpha: 0.3),
-                            width: 1,
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextWidget(
-                                    text: data['title'] ?? 'Unknown Position',
-                                    fontSize: 16,
-                                    color: Colors.white,
-                                    isBold: true,
-                                  ),
-                                ),
-                                const Icon(
-                                  Icons.chat,
-                                  color: primary,
-                                  size: 20,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            TextWidget(
-                              text: data['address'] ?? 'Unknown Location',
-                              fontSize: 14,
-                              color: Colors.white70,
-                            ),
-                            const SizedBox(height: 8),
-                            ...userApplications.map((app) {
-                              final appData = app as Map<String, dynamic>;
-                              final status =
-                                  appData['status'] as String? ?? 'pending';
-                              final appliedAt =
-                                  appData['appliedAt'] as Timestamp?;
-                              final dateStr = appliedAt != null
-                                  ? DateFormat('MMM dd, yyyy').format(appliedAt.toDate())
-                                  : 'Unknown date';
-
-                              Color statusColor = Colors.orange;
-                              String statusText = 'Pending';
-
-                              if (status == 'accepted') {
-                                statusColor = Colors.green;
-                                statusText = 'Accepted';
-                              } else if (status == 'rejected') {
-                                statusColor = Colors.red;
-                                statusText = 'Rejected';
-                              }
-
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            statusColor.withValues(alpha: 0.2),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        statusText,
-                                        style: TextStyle(
-                                          color: statusColor,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    TextWidget(
-                                      text: 'Applied on $dateStr',
-                                      fontSize: 12,
-                                      color: Colors.white60,
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }),
-                            const SizedBox(height: 4),
-                            TextWidget(
-                              text: 'Tap to chat with employer',
-                              fontSize: 12,
-                              color: primary,
-                              align: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                );
-              }),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
   }

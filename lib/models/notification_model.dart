@@ -11,6 +11,9 @@ class NotificationModel {
   final bool isRead;
   final bool isAlert; // TRUE for sound-enabled alerts, FALSE for silent notifications
   final String priority; // 'high', 'medium', 'low'
+  final Map<String, dynamic>? metadata;
+  final String recipientRole; // 'user' or 'business'
+  final DateTime? readAt;
 
   NotificationModel({
     required this.id,
@@ -23,6 +26,9 @@ class NotificationModel {
     required this.isRead,
     this.isAlert = false,
     this.priority = 'low',
+    this.metadata,
+    required this.recipientRole,
+    this.readAt,
   });
 
   // Factory constructor to create a NotificationModel from Firestore document
@@ -39,6 +45,9 @@ class NotificationModel {
       isRead: data['isRead'] ?? false,
       isAlert: data['isAlert'] ?? false,
       priority: data['priority'] ?? 'low',
+      metadata: data['metadata'] as Map<String, dynamic>?,
+      recipientRole: data['recipientRole'] ?? 'user',
+      readAt: (data['readAt'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -54,8 +63,12 @@ class NotificationModel {
       'isRead': isRead,
       'isAlert': isAlert,
       'priority': priority,
+      'metadata': metadata,
+      'recipientRole': recipientRole,
+      'readAt': readAt != null ? Timestamp.fromDate(readAt!) : null,
     };
   }
+
 
   // Create a copy with updated fields
   NotificationModel copyWith({
@@ -69,6 +82,9 @@ class NotificationModel {
     bool? isRead,
     bool? isAlert,
     String? priority,
+    Map<String, dynamic>? metadata,
+    String? recipientRole,
+    DateTime? readAt,
   }) {
     return NotificationModel(
       id: id ?? this.id,
@@ -81,6 +97,9 @@ class NotificationModel {
       isRead: isRead ?? this.isRead,
       isAlert: isAlert ?? this.isAlert,
       priority: priority ?? this.priority,
+      metadata: metadata ?? this.metadata,
+      recipientRole: recipientRole ?? this.recipientRole,
+      readAt: readAt ?? this.readAt,
     );
   }
 }

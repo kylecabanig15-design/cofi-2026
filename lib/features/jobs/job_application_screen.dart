@@ -9,6 +9,7 @@ import 'package:cofi/widgets/button_widget.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/features/home/home_screen.dart';
+import 'package:cofi/services/notification_service.dart';
 
 class JobApplicationScreen extends StatefulWidget {
   final Map<String, dynamic>? job;
@@ -247,7 +248,10 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
         }
 
         // Create application data
+        final applicationId = '${jobId}_${currentUser.uid}';
+        final appliedAtTimestamp = Timestamp.now();
         final applicationData = {
+          'id': applicationId,
           'applicantId': currentUser.uid,
           'applicantName': _nameController.text,
           'applicantEmail': _emailController.text,
@@ -255,7 +259,7 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
           'resumeUrl': downloadUrl,
           'resumeFileName': _resumeFileName,
           'coverLetter': _coverLetterController.text,
-          'appliedAt': Timestamp.now(),
+          'appliedAt': appliedAtTimestamp,
           'jobId': jobId,
           'status': 'pending',
         };
@@ -269,6 +273,28 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
             .update({
           'applications': FieldValue.arrayUnion([applicationData])
         });
+
+        // Notify the business owner
+        try {
+          final shopDoc = await FirebaseFirestore.instance
+              .collection('shops')
+              .doc(widget.shopId)
+              .get();
+          final ownerId = shopDoc.data()?['ownerId'];
+          if (ownerId != null) {
+            await NotificationService().createApplicationNotificationForBusiness(
+              ownerId,
+              applicationId,
+              _nameController.text,
+              jobId,
+              job['title'] ?? 'Job',
+              appliedAtTimestamp,
+              widget.shopId,
+            );
+          }
+        } catch (e) {
+          print('Failed to notify business owner: $e');
+        }
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

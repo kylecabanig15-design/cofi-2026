@@ -19,7 +19,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cofi/widgets/custom_toast.dart';
 import 'package:cofi/widgets/custom_dialog.dart';
 import 'package:cofi/features/settings/change_password_screen.dart';
-
+import 'package:cofi/features/business/business_profile_screen.dart';
+import 'package:cofi/features/business/widgets/job_applications_sheet.dart';
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -31,6 +32,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
   bool _isAdmin = false;
   bool _isLoadingAdmin = true;
+  String _accountType = 'user';
+  bool _applicantAlertsEnabled = true;
+
+  // Detailed Notification Preferences
+  bool _notifyChat = true;
+  bool _notifyJob = true;
+  bool _notifyReview = true;
+  bool _notifyEvent = true;
+  bool _notifyEventParticipation = true;
+  bool _notifyShop = true;
+  bool _notifyRecommendation = true;
+  bool _notifyPromotion = true;
 
 
   @override
@@ -52,6 +65,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _notificationsEnabled = data['notificationsEnabled'] ?? true;
           _isAdmin = data['isAdmin'] == true;
           _isLoadingAdmin = false;
+          _accountType = data['accountType'] as String? ?? 'user';
+          _applicantAlertsEnabled = data['applicantAlertsEnabled'] ?? true;
         });
       }
     } else {
@@ -59,6 +74,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _isLoadingAdmin = false;
       });
     }
+
+    // Load SharedPreferences toggles
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _notifyChat = prefs.getBool('notify_chat') ?? true;
+      _notifyJob = prefs.getBool('notify_job') ?? true;
+      _notifyReview = prefs.getBool('notify_review') ?? true;
+      _notifyEvent = prefs.getBool('notify_event') ?? true;
+      _notifyEventParticipation = prefs.getBool('notify_event_participation') ?? true;
+      _notifyShop = prefs.getBool('notify_shop') ?? true;
+      _notifyRecommendation = prefs.getBool('notify_recommendation') ?? true;
+      _notifyPromotion = prefs.getBool('notify_promotion') ?? true;
+    });
+  }
+
+  Future<void> _togglePref(String key, bool value, void Function(bool) updateState) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(key, value);
+    setState(() {
+      updateState(value);
+    });
+  }
+
+  Future<void> _toggleJobPref(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('notify_job', value);
+    await prefs.setBool('notify_job_application', value);
+    await prefs.setBool('notify_business_application', value);
+    setState(() {
+      _notifyJob = value;
+    });
   }
 
   Future<void> _toggleNotifications(bool value) async {
@@ -108,6 +154,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _toggleApplicantAlerts(bool value) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({'applicantAlertsEnabled': value});
+      if (mounted) {
+        setState(() {
+          _applicantAlertsEnabled = value;
+        });
+      }
+    }
+  }
+
+  Future<void> _viewShopApplications() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator(color: primary)),
+    );
+
+    try {
+      final shops = await FirebaseFirestore.instance
+          .collection('shops')
+          .where('ownerId', isEqualTo: user.uid)
+          .get();
+          
+      if (mounted) {
+        Navigator.pop(context); // close loading indicator
+      }
+
+      if (shops.docs.isNotEmpty) {
+        final shopId = shops.docs.first.id;
+        if (mounted) {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (context) => JobApplicationsBottomSheet(shopId: shopId),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No shop found for this account.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading applications: $e')),
+        );
+      }
+    }
+  }
 
 
   void _showEditProfileDialog() {
@@ -888,16 +995,114 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
 
                       const Divider(color: Colors.white12, height: 1),
+                      if (_accountType != 'business') ...[
+                        _buildSwitchTile(
+                          icon: Icons.notifications_active_outlined,
+                          title: 'Enable All Push Notifications',
+                          subtitle: 'Master switch for all alerts',
+                          value: _notificationsEnabled,
+                          onChanged: _toggleNotifications,
+                        ),
+                        const Divider(color: Colors.white12, height: 1),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  _buildSectionCard(
+                    title: 'Notification Preferences',
+                    children: [
                       _buildSwitchTile(
-                        icon: Icons
-                            .notifications_active_outlined, // Changed icon slightly to differentiate
-                        title: 'Push Notifications',
-                        subtitle: 'Receive alerts about new cafes',
-                        value: _notificationsEnabled,
-                        onChanged: _toggleNotifications,
+                        icon: Icons.chat_bubble_outline,
+                        title: 'Chats',
+                        subtitle: 'Messages from businesses or users',
+                        value: _notifyChat,
+                        onChanged: (val) => _togglePref('notify_chat', val, (v) => _notifyChat = v),
+                      ),
+                      const Divider(color: Colors.white12, height: 1),
+                      _buildSwitchTile(
+                        icon: Icons.work_outline,
+                        title: 'Job Updates',
+                        subtitle: 'Job application statuses and updates',
+                        value: _notifyJob,
+                        onChanged: _toggleJobPref,
+                      ),
+                      const Divider(color: Colors.white12, height: 1),
+                      _buildSwitchTile(
+                        icon: Icons.rate_review_outlined,
+                        title: 'Reviews',
+                        subtitle: 'New reviews and replies',
+                        value: _notifyReview,
+                        onChanged: (val) => _togglePref('notify_review', val, (v) => _notifyReview = v),
+                      ),
+                      if (_accountType != 'business') ...[
+                        const Divider(color: Colors.white12, height: 1),
+                        _buildSwitchTile(
+                          icon: Icons.event_outlined,
+                          title: 'Café Events',
+                          subtitle: 'New events from cafés in the community',
+                          value: _notifyEvent,
+                          onChanged: (val) => _togglePref('notify_event', val, (v) => _notifyEvent = v),
+                        ),
+                      ],
+                      if (_accountType == 'business') ...[
+                        const Divider(color: Colors.white12, height: 1),
+                        _buildSwitchTile(
+                          icon: Icons.group_add_outlined,
+                          title: 'Event Participation',
+                          subtitle: 'When users join your events',
+                          value: _notifyEventParticipation,
+                          onChanged: (val) => _togglePref('notify_event_participation', val, (v) => _notifyEventParticipation = v),
+                        ),
+                      ],
+                      const Divider(color: Colors.white12, height: 1),
+                      _buildSwitchTile(
+                        icon: Icons.store_outlined,
+                        title: 'Community Activity',
+                        subtitle: 'Shop updates and community news',
+                        value: _notifyShop,
+                        onChanged: (val) => _togglePref('notify_shop', val, (v) => _notifyShop = v),
+                      ),
+                      const Divider(color: Colors.white12, height: 1),
+                      _buildSwitchTile(
+                        icon: Icons.auto_awesome,
+                        title: 'Taste Twins',
+                        subtitle: 'Personalized café matches',
+                        value: _notifyRecommendation,
+                        onChanged: (val) => _togglePref('notify_recommendation', val, (v) => _notifyRecommendation = v),
+                      ),
+                      const Divider(color: Colors.white12, height: 1),
+                      _buildSwitchTile(
+                        icon: Icons.local_offer_outlined,
+                        title: 'Promotions',
+                        subtitle: 'Special offers and discounts',
+                        value: _notifyPromotion,
+                        onChanged: (val) => _togglePref('notify_promotion', val, (v) => _notifyPromotion = v),
                       ),
                     ],
                   ),
+                  if (_accountType == 'business') ...[
+                    const SizedBox(height: 16),
+                    _buildSectionCard(
+                      title: 'Business Notifications',
+                      children: [
+                        _buildSwitchTile(
+                          icon: Icons.work_outline,
+                          title: 'New Applicant Alerts',
+                          subtitle: 'Get notified when someone applies for a job',
+                          value: _applicantAlertsEnabled,
+                          onChanged: _toggleApplicantAlerts,
+                        ),
+                        const Divider(color: Colors.white12, height: 1),
+                        _buildListTile(
+                          icon: Icons.description_outlined,
+                          title: 'View Applications',
+                          subtitle: 'See all applicants for your shop',
+                          onTap: _viewShopApplications,
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 16),
 
                   // App Information Section

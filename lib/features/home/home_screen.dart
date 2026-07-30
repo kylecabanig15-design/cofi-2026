@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:cofi/widgets/in_app_notification_banner.dart';
 
 import 'dart:ui';
 import 'explore_tab.dart';
@@ -18,6 +19,7 @@ import 'package:cofi/widgets/premium_background.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cofi/features/cafe/cafe_details_screen.dart';
+import 'package:cofi/utils/backfill_notifications.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialTabIndex;
@@ -96,6 +98,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Initialize notification service and get unread count
     _notificationService.init().then((_) {
+      // Temporary backfill call
+      BackfillNotifications.runBackfill();
+      
       if (mounted) {
         setState(() {
           _unreadCount = _notificationService.getUnreadCount();
@@ -160,115 +165,117 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return PremiumBackground(
-      child: Scaffold(
-        appBar: _currentIndex == 0
-            ? AppBar(
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                automaticallyImplyLeading: false,
-                title: Image.asset(
-                  'assets/images/logo.png',
-                  height: 25,
-                ),
-                actions: [
-                  Stack(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.notifications,
-                            color: Colors.white),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const NotificationScreen(),
-                            ),
-                          ).then((_) {
-                            // Refresh unread count when returning from notification screen
-                            setState(() {
-                              _unreadCount =
-                                  _notificationService.getUnreadCount();
-                            });
-                          });
-                        },
-                      ),
-                      if (_unreadCount > 0)
-                        Positioned(
-                          right: 8,
-                          top: 8,
-                          child: Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            constraints: const BoxConstraints(
-                              minWidth: 16,
-                              minHeight: 16,
-                            ),
-                            child: Text(
-                              _unreadCount > 99
-                                  ? '99+'
-                                  : _unreadCount.toString(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+      child: InAppNotificationBannerManager(
+        child: Scaffold(
+          appBar: _currentIndex == 0
+              ? AppBar(
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  automaticallyImplyLeading: false,
+                  title: Image.asset(
+                    'assets/images/logo.png',
+                    height: 25,
+                  ),
+                  actions: [
+                    Stack(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.notifications,
+                              color: Colors.white),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const NotificationScreen(),
                               ),
-                              textAlign: TextAlign.center,
+                            ).then((_) {
+                              // Refresh unread count when returning from notification screen
+                              setState(() {
+                                _unreadCount =
+                                    _notificationService.getUnreadCount();
+                              });
+                            });
+                          },
+                        ),
+                        if (_unreadCount > 0)
+                          Positioned(
+                            right: 8,
+                            top: 8,
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 16,
+                                minHeight: 16,
+                              ),
+                              child: Text(
+                                _unreadCount > 99
+                                    ? '99+'
+                                    : _unreadCount.toString(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(width: 16),
-                ],
-              )
-            : null,
-        backgroundColor: Colors.transparent,
-        extendBody: true,
-        bottomNavigationBar: _buildBottomNavBar(),
-        body: Stack(
-          children: [
-            SafeArea(
-              bottom: false,
-              child: IndexedStack(
-                index: _currentIndex,
-                children: _tabs,
-              ),
-            ),
-            if (_currentIndex == 0)
-              Positioned(
-                bottom: MediaQuery.of(context).padding.bottom + 95,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: FloatingActionButton.extended(
-                    key: _mapBtnKey,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
+                      ],
                     ),
-                    backgroundColor: primary,
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/mapView');
-                    },
-                    label: TextButton.icon(
+                    const SizedBox(width: 16),
+                  ],
+                )
+              : null,
+          backgroundColor: Colors.transparent,
+          extendBody: true,
+          bottomNavigationBar: _buildBottomNavBar(),
+          body: Stack(
+            children: [
+              SafeArea(
+                bottom: false,
+                child: IndexedStack(
+                  index: _currentIndex,
+                  children: _tabs,
+                ),
+              ),
+              if (_currentIndex == 0)
+                Positioned(
+                  bottom: MediaQuery.of(context).padding.bottom + 95,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: FloatingActionButton.extended(
+                      key: _mapBtnKey,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      backgroundColor: primary,
                       onPressed: () {
                         Navigator.pushNamed(context, '/mapView');
                       },
-                      label: TextWidget(
-                          text: 'Nearby Cafes',
-                          fontSize: 16,
+                      label: TextButton.icon(
+                        onPressed: () {
+                          Navigator.pushNamed(context, '/mapView');
+                        },
+                        label: TextWidget(
+                            text: 'Nearby Cafes',
+                            fontSize: 16,
+                            color: white,
+                            isBold: true),
+                        icon: Icon(
+                          FontAwesomeIcons.map,
                           color: white,
-                          isBold: true),
-                      icon: Icon(
-                        FontAwesomeIcons.map,
-                        color: white,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

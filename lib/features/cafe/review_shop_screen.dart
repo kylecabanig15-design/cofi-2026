@@ -9,6 +9,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/widgets/custom_toast.dart';
 import 'package:cofi/utils/formatters.dart';
+import 'package:cofi/services/notification_service.dart';
 
 class ReviewShopScreen extends StatefulWidget {
   final String shopId;
@@ -140,7 +141,8 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
       // Subcollection write
       final shopRef =
           FirebaseFirestore.instance.collection('shops').doc(widget.shopId);
-      await shopRef.collection('reviews').add(reviewMap);
+      final docRef = await shopRef.collection('reviews').add(reviewMap);
+      final reviewId = docRef.id;
 
       // Automatically log this as a visit since reviewing implies visiting
       await shopRef.collection('visits').add({
@@ -185,6 +187,26 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
           'reviews': updatedReviews,
           'ratings': avgRating,
         }).catchError((_) {});
+
+        // Notify the business owner in real-time
+        final ownerId = data?['ownerId'];
+        if (ownerId != null && ownerId != user.uid) {
+          try {
+            await NotificationService().createReviewNotification(
+              ownerId,
+              reviewId,
+              widget.shopId,
+              widget.shopName,
+              reviewMap['authorName'] as String,
+              reviewMap['text'] as String,
+              (reviewMap['rating'] as num).toDouble(),
+              imageUrl,
+              Timestamp.now(),
+            );
+          } catch (e) {
+            debugPrint('Failed to send review notification: $e');
+          }
+        }
       }
 
       if (!mounted) return;

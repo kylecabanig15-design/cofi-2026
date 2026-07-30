@@ -10,7 +10,9 @@ import 'package:cofi/features/networking/shared_collection_screen.dart';
 import 'package:cofi/features/profile/visited_cafes_screen.dart';
 import 'package:cofi/features/profile/your_reviews_screen.dart';
 import 'package:cofi/features/profile/my_contributions_screen.dart';
+import 'package:cofi/features/jobs/job_chat_screen.dart';
 import 'package:cofi/utils/colors.dart';
+import 'package:cofi/utils/globals.dart';
 import 'package:flutter/material.dart';
 
 class UserApp extends StatelessWidget {
@@ -53,6 +55,7 @@ class UserApp extends StatelessWidget {
     }
 
     return MaterialApp(
+      navigatorKey: Globals.navigatorKey,
       title: 'Cofi',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: primary),
@@ -115,6 +118,27 @@ class UserApp extends StatelessWidget {
             return MaterialPageRoute(
               builder: (context) => const ClaimShopScreen(),
               settings: settings,
+            );
+          case '/jobChat':
+            final args = settings.arguments as Map<String, dynamic>?;
+            if (args != null) {
+              return MaterialPageRoute(
+                builder: (context) => JobChatScreen(
+                  jobId: args['jobId'] ?? '',
+                  jobTitle: args['jobTitle'] ?? 'Job',
+                  shopId: args['shopId'] ?? '',
+                  posterId: args['posterId'] ?? '',
+                  applicantId: args['applicantId'] ?? '',
+                  applicationId: args['applicationId'] ?? '',
+                ),
+              );
+            }
+            return MaterialPageRoute(
+              builder: (context) => const Scaffold(
+                body: Center(
+                  child: Text('Invalid chat arguments'),
+                ),
+              ),
             );
           default:
             return MaterialPageRoute(
