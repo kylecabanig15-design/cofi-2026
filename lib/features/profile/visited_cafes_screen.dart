@@ -31,7 +31,7 @@ class VisitedCafesScreen extends StatelessWidget {
             padding: const EdgeInsets.only(right: 16),
             child: Center(
               child: TextWidget(
-                text: '2025',
+                text: DateTime.now().year.toString(),
                 fontSize: 16,
                 color: Colors.white70,
               ),
