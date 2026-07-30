@@ -164,6 +164,13 @@ class BusinessProfileScreen extends StatelessWidget {
                        ),
 
                     const SizedBox(height: 24),
+                    TextWidget(
+                      text: 'Dashboard',
+                      fontSize: 20,
+                      color: Colors.white,
+                      isBold: true,
+                    ),
+                    const SizedBox(height: 16),
 
                     Wrap(
                       spacing: 16,
@@ -199,7 +206,8 @@ class BusinessProfileScreen extends StatelessWidget {
                                   return _buildSectionCard(
                                     title: 'Reviews',
                                     subtitle: subtitle,
-                                    bottomSpacing: 20,
+                                    icon: Icons.star_rounded,
+                                    color: Colors.orangeAccent,
                                   );
                                 },
                               ),
@@ -217,6 +225,8 @@ class BusinessProfileScreen extends StatelessWidget {
                               child: _buildSectionCard(
                                 title: 'Post an Event',
                                 subtitle: 'List my upcoming events',
+                                icon: Icons.event_available_rounded,
+                                color: Colors.purpleAccent,
                               ),
                             ),
                           ),
@@ -233,7 +243,8 @@ class BusinessProfileScreen extends StatelessWidget {
                               child: _buildSectionCard(
                                 title: 'Events',
                                 subtitle: 'Show Events',
-                                bottomSpacing: 20,
+                                icon: Icons.event_note_rounded,
+                                color: Colors.blueAccent,
                               ),
                             ),
                           ),
@@ -256,7 +267,8 @@ class BusinessProfileScreen extends StatelessWidget {
                               child: _buildSectionCard(
                                 title: 'Event Archives',
                                 subtitle: 'View past events',
-                                bottomSpacing: 20,
+                                icon: Icons.archive_rounded,
+                                color: Colors.grey,
                               ),
                             ),
                           ),
@@ -273,6 +285,8 @@ class BusinessProfileScreen extends StatelessWidget {
                               child: _buildSectionCard(
                                 title: 'Post a Job',
                                 subtitle: 'List a job - find staff fast',
+                                icon: Icons.work_rounded,
+                                color: Colors.redAccent,
                               ),
                             ),
                           ),
@@ -288,6 +302,8 @@ class BusinessProfileScreen extends StatelessWidget {
                               child: _buildSectionCard(
                                 title: 'My Jobs',
                                 subtitle: 'View my submitted jobs',
+                                icon: Icons.cases_rounded,
+                                color: Colors.tealAccent,
                               ),
                             ),
                           ),
@@ -319,7 +335,8 @@ class BusinessProfileScreen extends StatelessWidget {
                                   return _buildSectionCard(
                                     title: 'Applications',
                                     subtitle: subtitle,
-                                    bottomSpacing: 20,
+                                    icon: Icons.people_alt_rounded,
+                                    color: Colors.indigoAccent,
                                   );
                                 },
                               ),
@@ -344,7 +361,8 @@ class BusinessProfileScreen extends StatelessWidget {
                               child: _buildSectionCard(
                                 title: 'Job Archives',
                                 subtitle: 'View archived jobs',
-                                bottomSpacing: 20,
+                                icon: Icons.inventory_2_rounded,
+                                color: Colors.blueGrey,
                               ),
                             ),
                           ),
@@ -491,31 +509,70 @@ class BusinessProfileScreen extends StatelessWidget {
   Widget _buildSectionCard({
     required String title,
     required String subtitle,
-    double bottomSpacing = 0,
+    required IconData icon,
+    required Color color,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1.5,
+        ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      color.withValues(alpha: 0.4),
+                      color.withValues(alpha: 0.1),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: color.withValues(alpha: 0.5),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 26,
+                ),
+              ),
+              Icon(
+                Icons.arrow_outward_rounded,
+                color: Colors.white.withValues(alpha: 0.3),
+                size: 20,
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
           TextWidget(
             text: title,
             fontSize: 16,
             color: Colors.white,
             isBold: true,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           TextWidget(
             text: subtitle,
-            fontSize: 14,
-            color: Colors.grey[400]!,
+            fontSize: 13,
+            color: Colors.grey[400],
           ),
-          if (bottomSpacing > 0) SizedBox(height: bottomSpacing),
         ],
       ),
     );
@@ -677,7 +734,7 @@ class _JobApplicationsBottomSheetState
 
                         // Applications for this job
                         ...applications.map((application) {
-                          return _buildApplicationCard(application, jobDoc.id);
+                          return _buildApplicationCard(application as Map<String, dynamic>, jobDoc.id, applications);
                         }),
 
                         const SizedBox(height: 24),
@@ -695,7 +752,41 @@ class _JobApplicationsBottomSheetState
 
 
 
-  Widget _buildApplicationCard(Map<String, dynamic> application, String jobId) {
+  Future<void> _updateApplicationStatus(
+      String jobId, String applicantId, String newStatus, List<dynamic> currentApplications) async {
+    try {
+      final updatedApplications = currentApplications.map((app) {
+        if (app['applicantId'] == applicantId) {
+          return {
+            ...app as Map<String, dynamic>,
+            'status': newStatus,
+          };
+        }
+        return app;
+      }).toList();
+
+      await FirebaseFirestore.instance
+          .collection('shops')
+          .doc(widget.shopId)
+          .collection('jobs')
+          .doc(jobId)
+          .update({'applications': updatedApplications});
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Application $newStatus successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update status: $e')),
+        );
+      }
+    }
+  }
+
+  Widget _buildApplicationCard(Map<String, dynamic> application, String jobId, List<dynamic> allApplications) {
     final appliedAt = application['appliedAt'] as Timestamp?;
     final date = appliedAt != null
         ? DateFormat('MMM dd, yyyy').format(appliedAt.toDate())
@@ -793,6 +884,52 @@ class _JobApplicationsBottomSheetState
           const SizedBox(height: 12),
 
           // Action buttons
+          Row(
+            children: [
+              // Approve button
+              if (application['status'] != 'approved') ...[
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _updateApplicationStatus(jobId, application['applicantId'], 'approved', allApplications),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: TextWidget(
+                      text: 'Approve',
+                      fontSize: 12,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              // Reject button
+              if (application['status'] != 'rejected') ...[
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _updateApplicationStatus(jobId, application['applicantId'], 'rejected', allApplications),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: TextWidget(
+                      text: 'Reject',
+                      fontSize: 12,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               // View resume button

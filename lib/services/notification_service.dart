@@ -331,12 +331,11 @@ class NotificationService {
       final now = DateTime.now();
 
       // Convert to Timestamp for Firestore query
-      // DEFAULT: Only check last 24 hours if no previous check exists
-      // This prevents 'old' data from spamming the user on first launch
-      final oneDayAgo = now.subtract(const Duration(hours: 24));
+      // DEFAULT: Set to 'now' if no previous check exists (e.g. new account)
+      // This ensures users only receive notifications for events/cafes posted AFTER they created their account
       Timestamp lastCheckTimestamp = lastCheck != null
           ? Timestamp.fromDate(DateTime.fromMillisecondsSinceEpoch(lastCheck))
-          : Timestamp.fromDate(oneDayAgo);
+          : Timestamp.fromDate(now);
 
       // Check for new events
       await _checkForNewEvents(user.uid, lastCheckTimestamp);

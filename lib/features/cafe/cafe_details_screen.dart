@@ -979,6 +979,7 @@ class CafeDetailsScreen extends StatelessWidget {
     );
   }
 
+
   Widget _buildReviewsSection(List reviews, BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1445,8 +1446,23 @@ class CafeDetailsScreen extends StatelessWidget {
 
                 if (accountType != 'business') return const SizedBox.shrink();
 
-                return Column(
-                  children: [
+                return FutureBuilder<List<QuerySnapshot>>(
+                  future: Future.wait([
+                    FirebaseFirestore.instance.collection('shops').where('ownerId', isEqualTo: user.uid).limit(1).get(),
+                    FirebaseFirestore.instance.collection('shop_claims').where('claimantId', isEqualTo: user.uid).where('status', isEqualTo: 'pending').limit(1).get(),
+                  ]),
+                  builder: (context, snapshots) {
+                    if (snapshots.connectionState == ConnectionState.waiting) {
+                      return const SizedBox.shrink();
+                    }
+                    
+                    final hasOwnedShop = snapshots.hasData && snapshots.data!.isNotEmpty && snapshots.data![0].docs.isNotEmpty;
+                    final hasPendingClaim = snapshots.hasData && snapshots.data!.length > 1 && snapshots.data![1].docs.isNotEmpty;
+                    final hasClaimedShop = hasOwnedShop || hasPendingClaim;
+                    if (hasClaimedShop) return const SizedBox.shrink();
+
+                    return Column(
+                      children: [
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -1482,6 +1498,8 @@ class CafeDetailsScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                   ],
+                    );
+                  },
                 );
               },
             ),
@@ -1498,22 +1516,31 @@ class CafeDetailsScreen extends StatelessWidget {
               );
             },
             style: ElevatedButton.styleFrom(
-              maximumSize: Size(350, 50),
-              minimumSize: Size(350, 50),
+              maximumSize: const Size(350, 50),
+              minimumSize: const Size(350, 50),
               backgroundColor: Colors.transparent,
-              side: BorderSide(color: Colors.white),
+              side: const BorderSide(color: Colors.white),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(30),
               ),
             ),
-            child: TextWidget(
+            child: const TextWidget(
               text: 'Show all reviews',
               fontSize: 16,
               color: Colors.white,
             ),
           ),
           const SizedBox(height: 16),
-          Row(
+          FutureBuilder<DocumentSnapshot>(
+            future: FirebaseAuth.instance.currentUser != null 
+                ? FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser!.uid).get()
+                : Future.value(null),
+            builder: (context, snapshot) {
+              final accountType = snapshot.data?.data() != null 
+                  ? (snapshot.data!.data() as Map<String, dynamic>)['accountType'] 
+                  : 'user';
+              if (accountType == 'business') return const SizedBox.shrink();
+              return Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               ElevatedButton(
@@ -1589,7 +1616,9 @@ class CafeDetailsScreen extends StatelessWidget {
                   ],
                 ),
               ),
-            ],
+              ],
+            );
+          },
           ),
         ],
       ),

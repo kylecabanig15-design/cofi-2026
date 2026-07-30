@@ -157,7 +157,7 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
         'address': shopAddress,
         'startDate': _startDate,
         'endDate': _endDate,
-        'status': widget.isEditing ? null : 'pending',
+        'status': widget.isEditing ? null : 'active',
         'shopId': widget.shopId,
         'shopName': shopName,
         'city': city,
@@ -199,8 +199,7 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
             .set(updateData, SetOptions(merge: true));
 
         if (mounted) {
-          Navigator.pop(context); // Close modal
-          Navigator.pop(context); // Close job details screen to refresh
+          Navigator.pop(context, updateData); // Close modal and return updated data
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Job updated successfully.')),
           );
@@ -337,13 +336,14 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
                         const SizedBox(height: 20),
 
                         // Qualifications
-                        _buildField('Qualifications', _requiredController),
+                        _buildField('Qualifications', _requiredController,
+                            isMultiline: true),
 
                         const SizedBox(height: 20),
 
                         // Description
                         _buildField('Description', _descriptionController,
-                            isDescription: true),
+                            isMultiline: true),
 
                         const SizedBox(height: 20),
 
@@ -402,7 +402,7 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
   }
 
   Widget _buildField(String label, TextEditingController controller,
-      {bool isDescription = false}) {
+      {bool isMultiline = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -420,14 +420,16 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
           ),
           child: TextField(
             controller: controller,
-            maxLines: isDescription ? 4 : 1,
+            minLines: isMultiline ? 4 : 1,
+            maxLines: isMultiline ? null : 1,
+            keyboardType: isMultiline ? TextInputType.multiline : TextInputType.text,
             style: const TextStyle(
               color: Colors.grey,
               fontSize: 14,
             ),
             decoration: InputDecoration(
               border: InputBorder.none,
-              contentPadding: EdgeInsets.all(isDescription ? 16 : 12),
+              contentPadding: EdgeInsets.all(isMultiline ? 16 : 12),
               hintStyle: const TextStyle(
                 color: Colors.grey,
                 fontSize: 14,

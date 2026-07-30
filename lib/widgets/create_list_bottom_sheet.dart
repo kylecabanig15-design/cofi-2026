@@ -37,6 +37,7 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
   // Collection type selection
   String _collectionType = 'filter'; // 'filter' or 'custom'
   List<String> _selectedShopIds = []; // For custom collections
+  bool _isPrivate = true; // Visibility toggle
 
   // Check if save button should be enabled
   bool get _isSaveButtonEnabled {
@@ -255,6 +256,43 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
               ),
               const SizedBox(height: 8),
 
+              // Visibility Toggle
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextWidget(
+                        text: 'Private Collection',
+                        fontSize: 16,
+                        color: Colors.white,
+                        isBold: true,
+                      ),
+                      const SizedBox(height: 4),
+                      TextWidget(
+                        text: _isPrivate 
+                          ? 'Only you can see this collection' 
+                          : 'Visible to everyone',
+                        fontSize: 12,
+                        color: Colors.white70,
+                      ),
+                    ],
+                  ),
+                  Switch(
+                    value: _isPrivate,
+                    onChanged: (value) {
+                      setState(() {
+                        _isPrivate = value;
+                      });
+                    },
+                    activeColor: primary,
+                    activeTrackColor: primary.withOpacity(0.5),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
               // Show different content based on collection type
               if (_collectionType == 'filter') ...[
                 // Filters: Tags
@@ -384,7 +422,7 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
                                 'createdAt': now,
                                 'updatedAt': now,
                                 'type': 'custom',
-                                'isPrivate': true, // Default to private
+                                'isPrivate': _isPrivate,
                               });
 
                               // Add selected shops to the items subcollection
@@ -406,7 +444,7 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
                                 'createdAt': now,
                                 'updatedAt': now,
                                 'type': 'filter',
-                                'isPrivate': true, // Default to private
+                                'isPrivate': _isPrivate,
                                 if (selectedTags.isNotEmpty)
                                   'filters': {
                                     'tags': selectedTags,

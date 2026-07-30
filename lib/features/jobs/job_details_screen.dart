@@ -22,11 +22,14 @@ class JobDetailsScreen extends StatefulWidget {
 
 class _JobDetailsScreenState extends State<JobDetailsScreen> {
   bool _isJobCreator = false;
+  bool _isBusinessAccount = false;
   bool _isLoading = true;
+  Map<String, dynamic>? _jobData;
 
   @override
   void initState() {
     super.initState();
+    _jobData = widget.job != null ? Map<String, dynamic>.from(widget.job!) : null;
     _checkUserType();
   }
 
@@ -44,8 +47,12 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       final jobCreatedBy = widget.job?['createdBy'] as String?;
       final isCreator = jobCreatedBy == currentUser.uid;
 
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
+      final accountType = userDoc.data()?['accountType'] as String? ?? 'user';
+
       setState(() {
         _isJobCreator = isCreator;
+        _isBusinessAccount = accountType == 'business';
         _isLoading = false;
       });
     } catch (e) {
@@ -215,7 +222,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       );
     }
 
-    final j = widget.job ?? <String, dynamic>{};
+    final j = _jobData ?? <String, dynamic>{};
     final isJobClosed = j['status'] == 'closed';
 
     return Scaffold(
@@ -392,6 +399,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                           .toString(),
                       fontSize: 14,
                       color: Colors.white70,
+                      maxLines: 1000,
                     ),
                     const SizedBox(height: 24),
 
@@ -438,6 +446,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                           .toString(),
                       fontSize: 14,
                       color: Colors.white70,
+                      maxLines: 1000,
                     ),
                     const SizedBox(height: 24),
 
@@ -536,9 +545,9 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
             child: ElevatedButton.icon(
               onPressed: isPending
                   ? null
-                  : () {
+                  : () async {
                       // Open edit job bottom sheet
-                      showModalBottomSheet(
+                      final updatedJob = await showModalBottomSheet<Map<String, dynamic>?>(
                         context: context,
                         backgroundColor: Colors.transparent,
                         isScrollControlled: true,
@@ -550,6 +559,15 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                           isEditing: true,
                         ),
                       );
+
+                      if (updatedJob != null && mounted) {
+                        setState(() {
+                          _jobData = {
+                            ...?_jobData,
+                            ...updatedJob,
+                          };
+                        });
+                      }
                     },
               icon: const Icon(Icons.edit),
               label: const Text('Edit'),
@@ -599,6 +617,8 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
           color: Colors.grey,
         );
       } else {
+        if (_isBusinessAccount) return const SizedBox.shrink();
+        
         return SizedBox(
           width: double.infinity,
           child: ElevatedButton(

@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/text_widget.dart';
+import 'package:cofi/features/auth/login_screen.dart';
+import 'package:cofi/services/google_sign_in_service.dart';
 
 class BusinessScreen extends StatelessWidget {
   const BusinessScreen({super.key});
@@ -109,15 +113,30 @@ class BusinessScreen extends StatelessWidget {
               // Menu Items
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  children: [
-                    _buildMenuItem('Claim shop', Icons.chevron_right),
-                    _buildClickableMenuItem(
-                      'Post a job',
-                      Icons.chevron_right,
-                      () => Navigator.pushNamed(context, '/businessProfile'),
-                    ),
-                  ],
+                child: FutureBuilder<List<QuerySnapshot>>(
+                  future: FirebaseAuth.instance.currentUser != null
+                      ? Future.wait([
+                          FirebaseFirestore.instance.collection('shops').where('ownerId', isEqualTo: FirebaseAuth.instance.currentUser!.uid).limit(1).get(),
+                          FirebaseFirestore.instance.collection('shop_claims').where('claimantId', isEqualTo: FirebaseAuth.instance.currentUser!.uid).where('status', isEqualTo: 'pending').limit(1).get(),
+                        ])
+                      : Future.value([]),
+                  builder: (context, snapshots) {
+                    final isLoading = snapshots.connectionState == ConnectionState.waiting;
+                    final hasOwnedShop = snapshots.hasData && snapshots.data!.isNotEmpty && snapshots.data![0].docs.isNotEmpty;
+                    final hasPendingClaim = snapshots.hasData && snapshots.data!.length > 1 && snapshots.data![1].docs.isNotEmpty;
+                    final hasClaimedShop = hasOwnedShop || hasPendingClaim;
+                    return Column(
+                      children: [
+                        if (!isLoading && !hasClaimedShop)
+                          _buildMenuItem('Claim shop', Icons.chevron_right),
+                        _buildClickableMenuItem(
+                          'Post a job',
+                          Icons.chevron_right,
+                          () => Navigator.pushNamed(context, '/businessProfile'),
+                        ),
+                      ],
+                    );
+                  }
                 ),
               ),
 
@@ -225,13 +244,25 @@ class BusinessScreen extends StatelessWidget {
               const SizedBox(height: 24),
 
               // Log out
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-                child: TextWidget(
-                  text: 'Log out',
-                  fontSize: 16,
-                  color: Colors.grey[400]!,
+              GestureDetector(
+                onTap: () async {
+                  await GoogleSignInService.signOut();
+                  await FirebaseAuth.instance.signOut();
+                  if (context.mounted) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      (route) => false,
+                    );
+                  }
+                },
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                  child: TextWidget(
+                    text: 'Log out',
+                    fontSize: 16,
+                    color: Colors.grey[400]!,
+                  ),
                 ),
               ),
             ],

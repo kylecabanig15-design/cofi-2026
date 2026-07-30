@@ -306,7 +306,7 @@ class ProfileTab extends StatelessWidget {
   }
 
   Widget _buildStatRow(String stat, String title, String subtitle,
-      {bool underline = false, VoidCallback? onTap}) {
+      {bool underline = false, VoidCallback? onTap, String? tooltip}) {
     Widget content = Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -319,30 +319,46 @@ class ProfileTab extends StatelessWidget {
             isBold: true,
           ),
           const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              underline
-                  ? TextWidget(
-                      text: title,
-                      fontSize: 18,
-                      color: Colors.white,
-                      isBold: true,
-                    )
-                  : TextWidget(
-                      text: title,
-                      fontSize: 18,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-              if (subtitle.isNotEmpty)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 TextWidget(
-                  text: subtitle,
-                  fontSize: 14,
-                  color: Colors.white54,
+                  text: title,
+                  fontSize: 18,
+                  color: Colors.white,
+                  isBold: true,
                 ),
-            ],
+                if (subtitle.isNotEmpty)
+                  TextWidget(
+                    text: subtitle,
+                    fontSize: 14,
+                    color: Colors.white54,
+                  ),
+              ],
+            ),
           ),
+          if (tooltip != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Tooltip(
+                message: tooltip,
+                triggerMode: TooltipTriggerMode.tap,
+                showDuration: const Duration(seconds: 3),
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.all(12),
+                textStyle: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: BoxDecoration(
+                  color: Colors.grey[800],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.info_outline,
+                  size: 20,
+                  color: Colors.grey[500],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -418,8 +434,12 @@ class ProfileTab extends StatelessWidget {
             // No shop yet, show empty state
             return Container(
               decoration: BoxDecoration(
-                color: Colors.grey[900],
+                color: Colors.white.withValues(alpha: 0.03),
                 borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  width: 1,
+                ),
               ),
               padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
               child: Column(
@@ -431,28 +451,37 @@ class ProfileTab extends StatelessWidget {
                     color: Colors.white,
                     isBold: true,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 32),
                   Center(
                     child: Column(
                       children: [
-                        Icon(
-                          Icons.business,
-                          size: 48,
-                          color: Colors.grey[600],
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.analytics_outlined,
+                            size: 48,
+                            color: Colors.grey[500],
+                          ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 16),
                         TextWidget(
-                          text: 'No shop data available',
+                          text: 'No analytics yet',
                           fontSize: 16,
-                          color: Colors.grey[400],
+                          color: Colors.white,
+                          isBold: true,
                         ),
                         const SizedBox(height: 8),
                         TextWidget(
-                          text: 'Submit or claim a shop to see analytics',
+                          text: 'Submit or claim a shop to unlock powerful insights and customer data.',
                           fontSize: 14,
-                          color: Colors.grey[600],
+                          color: Colors.grey[500],
                           align: TextAlign.center,
                         ),
+                        const SizedBox(height: 8),
                       ],
                     ),
                   ),
@@ -466,10 +495,14 @@ class ProfileTab extends StatelessWidget {
 
           return Container(
             decoration: BoxDecoration(
-              color: Colors.grey[900],
+              color: Colors.white.withValues(alpha: 0.03),
               borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.1),
+                width: 1,
+              ),
             ),
-            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -512,6 +545,7 @@ class ProfileTab extends StatelessWidget {
                                         .toStringAsFixed(1)
                                     : '0.0',
                                 color: Colors.amber,
+                                tooltip: 'Average star rating from all customer reviews',
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -521,6 +555,7 @@ class ProfileTab extends StatelessWidget {
                                 label: 'Total Ratings',
                                 value: reviews.length.toString(),
                                 color: Colors.blue,
+                                tooltip: 'Total number of reviews submitted by customers',
                               ),
                             ),
                           ],
@@ -543,6 +578,7 @@ class ProfileTab extends StatelessWidget {
                                     label: 'Customer Visits',
                                     value: visitCount.toString(),
                                     color: Colors.green,
+                                    tooltip: 'Total number of recorded customer visits',
                                   );
                                 },
                               ),
@@ -562,6 +598,7 @@ class ProfileTab extends StatelessWidget {
                                     label: 'Saved',
                                     value: savedCount.toString(),
                                     color: primary,
+                                    tooltip: 'Number of users who have bookmarked your shop',
                                   );
                                 },
                               ),
@@ -618,6 +655,7 @@ class ProfileTab extends StatelessWidget {
                     onTap: () {
                       Navigator.pushNamed(context, '/visitedCafes');
                     },
+                    tooltip: 'Unique cafes you visited this week',
                   ),
                   const Divider(color: Colors.white24, thickness: 1),
                   _buildStatRowStream(
@@ -627,6 +665,7 @@ class ProfileTab extends StatelessWidget {
                     onTap: () {
                       Navigator.pushNamed(context, '/visitedCafes');
                     },
+                    tooltip: 'Unique cafes you visited this month',
                   ),
                   const Divider(color: Colors.white24, thickness: 1),
                   _buildStatRowStream(
@@ -637,6 +676,7 @@ class ProfileTab extends StatelessWidget {
                     onTap: () {
                       Navigator.pushNamed(context, '/visitedCafes');
                     },
+                    tooltip: 'Unique cafes you visited this year',
                   ),
                   const Divider(color: Colors.white24, thickness: 1),
                   _buildStatRowStream(
@@ -646,6 +686,7 @@ class ProfileTab extends StatelessWidget {
                     onTap: () {
                       Navigator.pushNamed(context, '/yourReviews');
                     },
+                    tooltip: 'Total cafes you have reviewed this year',
                   ),
                 ],
               );
@@ -661,30 +702,79 @@ class ProfileTab extends StatelessWidget {
     required String label,
     required String value,
     required Color color,
+    String? tooltip,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[850],
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1.5,
+        ),
       ),
-      child: Column(
+      child: Stack(
         children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(height: 8),
-          TextWidget(
-            text: value,
-            fontSize: 24,
-            color: Colors.white,
-            isBold: true,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      color.withValues(alpha: 0.4),
+                      color.withValues(alpha: 0.1),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: color.withValues(alpha: 0.5),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(icon, color: color, size: 26),
+              ),
+              const SizedBox(height: 20),
+              TextWidget(
+                text: value,
+                fontSize: 26,
+                color: Colors.white,
+                isBold: true,
+              ),
+              const SizedBox(height: 4),
+              TextWidget(
+                text: label,
+                fontSize: 13,
+                color: Colors.grey[400],
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          TextWidget(
-            text: label,
-            fontSize: 12,
-            color: Colors.grey[400]!,
-            align: TextAlign.center,
-          ),
+          if (tooltip != null)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Tooltip(
+                message: tooltip,
+                triggerMode: TooltipTriggerMode.tap,
+                showDuration: const Duration(seconds: 3),
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.all(12),
+                textStyle: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: BoxDecoration(
+                  color: Colors.grey[800],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.info_outline,
+                  size: 20,
+                  color: Colors.grey[500],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -697,6 +787,7 @@ class ProfileTab extends StatelessWidget {
     String subtitle, {
     bool underline = false,
     VoidCallback? onTap,
+    String? tooltip,
   }) {
     return StreamBuilder<int>(
       stream: countStream,
@@ -708,6 +799,7 @@ class ProfileTab extends StatelessWidget {
           subtitle,
           underline: underline,
           onTap: onTap,
+          tooltip: tooltip,
         );
       },
     );

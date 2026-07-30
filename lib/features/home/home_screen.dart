@@ -3,6 +3,8 @@ import 'package:cofi/features/home/profile_tab.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/services/notification_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -29,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late int _currentIndex;
   final NotificationService _notificationService = NotificationService();
   int _unreadCount = 0;
+  String _accountType = 'user'; // Defaults to user
 
   // Tutorial Keys
   final GlobalKey _searchKey = GlobalKey();
@@ -42,7 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey _profileTabKey = GlobalKey();
   TutorialCoachMark? _tutorialCoachMark;
 
-  late final List<Widget> _tabs;
+  late List<Widget> _tabs;
 
   @override
   void initState() {
@@ -60,7 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       const CommunityTab(),
       // Placeholder widgets for Collections and Profile
-      const CollectionsTab(),
+      if (_accountType != 'business') const CollectionsTab(),
       ProfileTab(
         onOpenExplore: () {
           setState(() {
@@ -87,6 +90,58 @@ class _HomeScreenState extends State<HomeScreen> {
         _notificationService.checkForNewData();
       }
     });
+
+    // TEMPORARY: Fix pending jobs
+    FirebaseFirestore.instance.collection('allJobs').where('status', isEqualTo: 'pending').get().then((snapshot) {
+      for (var doc in snapshot.docs) {
+        doc.reference.update({'status': 'active'});
+        final shopId = doc.data()['shopId'];
+        if (shopId != null) {
+          FirebaseFirestore.instance.collection('shops').doc(shopId).collection('jobs').doc(doc.id).update({'status': 'active'}).catchError((_) {});
+        }
+      }
+    });
+
+    // Fetch account type
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      FirebaseFirestore.instance.collection('users').doc(user.uid).get().then((doc) {
+        if (mounted && doc.exists) {
+          final accType = doc.data()?['accountType'] as String? ?? 'user';
+          if (accType != _accountType) {
+            setState(() {
+              _accountType = accType;
+              // Rebuild tabs list to remove collections if needed
+              _tabs = [
+                ExploreTab(
+                  searchKey: _searchKey,
+                  filterKey: _filterKey,
+                  onOpenCommunity: () {
+                    setState(() {
+                      _currentIndex = 1;
+                    });
+                  },
+                ),
+                const CommunityTab(),
+                if (_accountType != 'business') const CollectionsTab(),
+                ProfileTab(
+                  onOpenExplore: () {
+                    setState(() {
+                      _currentIndex = 0;
+                    });
+                  },
+                  onOpenCommunity: () {
+                    setState(() {
+                      _currentIndex = 1;
+                    });
+                  },
+                ),
+              ];
+            });
+          }
+        }
+      });
+    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkTutorial();
@@ -261,8 +316,14 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               _buildNavItem(0, Icons.search, 'Explore', _exploreTabKey),
               _buildNavItem(1, Icons.people, 'Community', _communityTabKey),
-              _buildNavItem(2, Icons.bookmark, 'Collections', _collectionsTabKey),
-              _buildNavItem(3, Icons.person, 'Profile', _profileTabKey),
+              if (_accountType != 'business')
+                _buildNavItem(2, Icons.bookmark, 'Collections', _collectionsTabKey),
+              _buildNavItem(
+                _accountType != 'business' ? 3 : 2, 
+                Icons.person, 
+                'Profile', 
+                _profileTabKey
+              ),
             ],
           ),
         ),

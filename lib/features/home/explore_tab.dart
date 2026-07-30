@@ -420,9 +420,7 @@ class _ExploreTabState extends State<ExploreTab> {
                                       ratingText: TextWidget(
                                         text: _ratingText(
                                           d.data()['ratings'],
-                                          (d.data()['reviews'] is List
-                                              ? (d.data()['reviews'] as List).length
-                                              : 0),
+                                          d.data()['reviews'],
                                         ),
                                         fontSize: 13,
                                         color: Colors.white,
@@ -543,7 +541,7 @@ class _ExploreTabState extends State<ExploreTab> {
                     city: _getAddressAsString(filtered[i].data()['address']),
                     hours: _hoursFromSchedule(
                         _getScheduleAsMap(filtered[i].data()['schedule'])),
-                    ratingText: TextWidget(text: _ratingText(filtered[i].data()['ratings'], (filtered[i].data()['reviews'] is List ? (filtered[i].data()['reviews'] as List).length : 0)), fontSize: 13, color: Colors.white),
+                    ratingText: TextWidget(text: _ratingText(filtered[i].data()['ratings'], filtered[i].data()['reviews']), fontSize: 13, color: Colors.white),
                     isBookmarked: _bookmarks.contains(filtered[i].id),
                     icon: FontAwesomeIcons.coffee,
                     onBookmark: () => _toggleBookmark(
@@ -891,8 +889,26 @@ class _ExploreTabState extends State<ExploreTab> {
     );
   }
 
-  String _ratingText(dynamic ratings, dynamic ratingCount) {
-    return ExploreUtils.ratingText(ratings, ratingCount);
+  String _ratingText(dynamic ratings, dynamic reviewsData) {
+    num r = (ratings is num) ? ratings : 0;
+    int c = 0;
+    
+    if (reviewsData is List) {
+      c = reviewsData.length;
+      if (r == 0 && c > 0) {
+        double total = 0;
+        for (var rev in reviewsData) {
+          if (rev is Map && rev['rating'] is num) {
+            total += (rev['rating'] as num).toDouble();
+          }
+        }
+        r = total / c;
+      }
+    } else if (reviewsData is num) {
+      c = reviewsData.toInt();
+    }
+    
+    return ExploreUtils.ratingText(r, c);
   }
 
   String _hoursFromSchedule(Map<String, dynamic> schedule) {

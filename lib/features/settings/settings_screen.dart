@@ -562,6 +562,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
       debugPrint('Error cleaning up comments: $e');
     }
 
+    // 6a. User Events
+    try {
+      final events = await firestore.collectionGroup('events').where('userId', isEqualTo: uid).get();
+      if (events.docs.isNotEmpty) {
+        final batch = firestore.batch();
+        for (var doc in events.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      }
+    } catch (e) {
+      debugPrint('Error cleaning up events: $e');
+    }
+
+    // 6b. User Visits
+    try {
+      final visits = await firestore.collectionGroup('visits').where('userId', isEqualTo: uid).get();
+      if (visits.docs.isNotEmpty) {
+        final batch = firestore.batch();
+        for (var doc in visits.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      }
+    } catch (e) {
+      debugPrint('Error cleaning up visits: $e');
+    }
+
     // 7. Community Shops (Added by user)
     try {
       final shopsAdded = await firestore.collection('shops').where('posterId', isEqualTo: uid).get();

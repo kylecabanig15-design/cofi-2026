@@ -1178,7 +1178,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
       if (sd is String && sd.isNotEmpty) dt = DateTime.tryParse(sd);
     }
     if (dt == null) return 'Date not set';
-    return DateFormat('MMMM dd, yyyy').format(dt);
+    return DateFormat('MMMM d, yyyy').format(dt);
   }
 
   String _formatEventDate1(Map<String, dynamic> e) {
@@ -1195,7 +1195,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
       if (sd is String && sd.isNotEmpty) dt = DateTime.tryParse(sd);
     }
     if (dt == null) return 'Date not set';
-    return DateFormat('MMMM dd, yyyy').format(dt);
+    return DateFormat('MMMM d, yyyy').format(dt);
   }
 
   String _formatEventTime(dynamic dateTime) {
@@ -1208,9 +1208,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
       dt = dateTime;
     }
     if (dt == null) return 'Time not set';
-    final hour = dt.hour.toString().padLeft(2, '0');
-    final minute = dt.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
+    return DateFormat('h:mm a').format(dt);
   }
 
   double _getLatitude(Map<String, dynamic> e) {

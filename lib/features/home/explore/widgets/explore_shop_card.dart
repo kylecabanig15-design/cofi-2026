@@ -335,7 +335,7 @@ class ExploreShopCard extends StatelessWidget {
                         color: Colors.white70,
                       ),
                       const SizedBox(width: 10),
-                      const FaIcon(FontAwesomeIcons.solidStar,
+                      const Icon(Icons.star,
                           color: Colors.amber, size: 16),
                        const SizedBox(width: 5),
                       ratingText,

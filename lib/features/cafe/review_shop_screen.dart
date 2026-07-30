@@ -146,20 +146,51 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
       final shopRef =
           FirebaseFirestore.instance.collection('shops').doc(widget.shopId);
       await shopRef.collection('reviews').add(reviewMap);
-      // Optional: mirror in embedded array for client-side rendering
-      await shopRef.update({
-        'reviews': FieldValue.arrayUnion([
-          {
-            'authorName': reviewMap['authorName'],
-            'authorPhotoUrl': reviewMap['authorPhotoUrl'],
-            'rating': reviewMap['rating'],
-            'text': reviewMap['text'],
-            'tags': reviewMap['tags'],
-            'createdAt': Timestamp.now(),
-            if (imageUrl != null) 'imageUrl': imageUrl,
-          }
-        ])
-      }).catchError((_) {});
+
+      // Automatically log this as a visit since reviewing implies visiting
+      await shopRef.collection('visits').add({
+        'userId': user.uid,
+        'userEmail': user.email,
+        'note': 'Review: $_rating stars',
+        'tags': _selectedTags.toList(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // Record this shopId in the user's `visited` array
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'visited': FieldValue.arrayUnion([widget.shopId])
+        }, SetOptions(merge: true));
+      } catch (_) {}
+      
+      // Fetch shop to update embedded reviews and calculate new average rating
+      final shopDoc = await shopRef.get();
+      if (shopDoc.exists) {
+        final data = shopDoc.data();
+        final currentReviews = (data?['reviews'] as List?) ?? [];
+        final newReviewEntry = {
+          'authorName': reviewMap['authorName'],
+          'authorPhotoUrl': reviewMap['authorPhotoUrl'],
+          'rating': reviewMap['rating'],
+          'text': reviewMap['text'],
+          'tags': reviewMap['tags'],
+          'createdAt': Timestamp.now(),
+          if (imageUrl != null) 'imageUrl': imageUrl,
+        };
+        final List<dynamic> updatedReviews = List.from(currentReviews)..add(newReviewEntry);
+        
+        // Calculate new average rating
+        double totalRating = 0;
+        for (var r in updatedReviews) {
+          totalRating += (r['rating'] as num?)?.toDouble() ?? 0.0;
+        }
+        final double avgRating = updatedReviews.isEmpty ? 0.0 : totalRating / updatedReviews.length;
+
+        await shopRef.update({
+          'reviews': updatedReviews,
+          'ratings': avgRating,
+        }).catchError((_) {});
+      }
 
       if (!mounted) return;
       Navigator.pop(context);
