@@ -764,7 +764,7 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
         await FirebaseFirestore.instance.collection('sharedCollections').add({
           'userId': widget.userId,
           'listId': widget.listId,
-          'title': widget.title,
+          'title': _currentTitle ?? widget.title,
           'sharedBy': sharedByName,
           'sharedAt': FieldValue.serverTimestamp(),
           'shopCount': 0,
@@ -890,7 +890,7 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
               const TextWidget(text: 'Delete Collection?', fontSize: 20, color: Colors.white, isBold: true),
               const SizedBox(height: 8),
               TextWidget(
-                text: 'Are you sure you want to delete "${widget.title}"? This action cannot be undone.',
+                text: 'Are you sure you want to delete "${_currentTitle ?? widget.title}"? This action cannot be undone.',
                 fontSize: 14,
                 color: Colors.white70,
                 align: TextAlign.center,

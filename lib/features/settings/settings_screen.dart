@@ -43,7 +43,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _notifyEventParticipation = true;
   bool _notifyShop = true;
   bool _notifyRecommendation = true;
-  bool _notifyPromotion = true;
 
 
   @override
@@ -85,7 +84,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _notifyEventParticipation = prefs.getBool('notify_event_participation') ?? true;
       _notifyShop = prefs.getBool('notify_shop') ?? true;
       _notifyRecommendation = prefs.getBool('notify_recommendation') ?? true;
-      _notifyPromotion = prefs.getBool('notify_promotion') ?? true;
     });
   }
 
@@ -234,6 +232,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       icon: Icons.logout_outlined,
       onConfirm: () async {
         try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('hasSeenExploreTutorial');
+          
           await GoogleSignInService.signOut();
           if (mounted) {
             Navigator.of(context).pushAndRemoveUntil(
@@ -531,6 +532,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // Step 5: Ensure Google Sign In is also signed out
       await GoogleSignInService.signOut();
+      
+      // Step 6: Clear tutorial preference so new users on same device see it
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('hasSeenExploreTutorial');
 
       // Close loading dialog
       if (mounted) Navigator.of(context).pop();
@@ -1071,14 +1076,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         value: _notifyRecommendation,
                         onChanged: (val) => _togglePref('notify_recommendation', val, (v) => _notifyRecommendation = v),
                       ),
-                      const Divider(color: Colors.white12, height: 1),
-                      _buildSwitchTile(
-                        icon: Icons.local_offer_outlined,
-                        title: 'Promotions',
-                        subtitle: 'Special offers and discounts',
-                        value: _notifyPromotion,
-                        onChanged: (val) => _togglePref('notify_promotion', val, (v) => _notifyPromotion = v),
-                      ),
                     ],
                   ),
                   if (_accountType == 'business') ...[
@@ -1169,60 +1166,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
 
-                  // ==========================================================
-                  // 🧪 DEFENSE DEBUG SECTION (Live Testing)
-                  // ==========================================================
-                  _buildSectionCard(
-                    title: 'Defense Verification',
-                    titleColor: Colors.amber,
-                    borderColor: Colors.amber.withOpacity(0.3),
-                    children: [
-                      _buildListTile(
-                        icon: Icons.notifications_none,
-                        title: 'Test Rec (Score: 0.6)',
-                        subtitle: 'Expected: Silent Notification',
-                        onTap: () async {
-                          await NotificationService().createRecommendationNotification(
-                            'test_shop_1',
-                            'Modern Brew (Test)',
-                            0.6,
-                            null,
-                          );
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Sent 0.6 Recommendation (No Sound)')),
-                            );
-                          }
-                        },
-                      ),
-                      const Divider(color: Colors.white12, height: 1),
-                      _buildListTile(
-                        icon: Icons.notifications_active,
-                        title: 'Test Alert (Score: 0.8)',
-                        subtitle: 'Expected: Auditory Perfect Match',
-                        titleColor: Colors.amber,
-                        onTap: () async {
-                          await NotificationService().createRecommendationNotification(
-                            'test_shop_2',
-                            'Elite Coffee (Test)',
-                            0.8,
-                            null,
-                          );
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Sent 0.8 Perfect Match (Sound Triggered)'),
-                                backgroundColor: Colors.amber,
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
                 ],
               ],
             ),

@@ -98,9 +98,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Initialize notification service and get unread count
     _notificationService.init().then((_) {
-      // Temporary backfill call
-      BackfillNotifications.runBackfill();
-      
       if (mounted) {
         setState(() {
           _unreadCount = _notificationService.getUnreadCount();
@@ -410,7 +407,12 @@ class _HomeScreenState extends State<HomeScreen> {
         waitCount++;
       }
       if (mounted) {
-        _showTutorial();
+        if (_firstCafeKey.currentContext != null) {
+          _showTutorial();
+        } else {
+          // If the first cafe is still not rendered, skip showing the tutorial for now.
+          // It will retry next time the user visits the home screen since we haven't marked it as seen.
+        }
       }
     }
   }
@@ -455,22 +457,34 @@ class _HomeScreenState extends State<HomeScreen> {
     )..show(context: context);
   }
 
-  /// Bounce-scroll the cafe list down then back to a mid-screen position.
+  /// Bounce-scroll the cafe list down then back to perfectly center the first cafe.
   void _scrollBounceForCafeFocus() {
     if (!_exploreScrollController.hasClients) return;
-    // Scroll down to 400 to show context, then snap back to 220 (mid-screen)
+    
+    // First scroll down a bit to show movement
     _exploreScrollController
         .animateTo(
-          400,
+          _exploreScrollController.offset + 200,
           duration: const Duration(milliseconds: 350),
           curve: Curves.easeOut,
         )
         .then((_) {
-      _exploreScrollController.animateTo(
-        220,
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeInOut,
-      );
+      // Then perfectly center the first cafe card dynamically
+      if (_firstCafeKey.currentContext != null) {
+        Scrollable.ensureVisible(
+          _firstCafeKey.currentContext!,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+          alignment: 0.5, // 0.5 centers the widget vertically in the viewport
+        );
+      } else {
+        // Fallback just in case
+        _exploreScrollController.animateTo(
+          400,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      }
     });
   }
 

@@ -63,9 +63,16 @@ class _CollectionsTabState extends State<CollectionsTab> {
       backgroundColor: Colors.transparent,
       body: SafeArea(
         bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.only(bottom: 120),
-          children: [
+        child: RefreshIndicator(
+          color: primary,
+          backgroundColor: Colors.black87,
+          onRefresh: () async {
+            setState(() {});
+            await Future.delayed(const Duration(milliseconds: 800));
+          },
+          child: ListView(
+            padding: const EdgeInsets.only(bottom: 120),
+            children: [
             const SizedBox(height: 32),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -517,6 +524,7 @@ class _CollectionsTabState extends State<CollectionsTab> {
               );
             }),
           ],
+        ),
         ),
       ),
     );

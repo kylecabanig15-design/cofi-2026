@@ -103,8 +103,6 @@ class ExploreTabState extends State<ExploreTab> {
   // Map of shopId -> recommendation score computed from similar users (cosine-based)
   Map<String, double> _shopRecommendationScores = {};
   final _box = GetStorage();
-  static const String _recCacheKey = 'shop_recommendations';
-  static const String _recTimeKey = 'shop_rec_timestamp';
 
   // Consolidated Grouped Filters
   final Set<String> _selectedFilters = {};
@@ -345,34 +343,44 @@ class ExploreTabState extends State<ExploreTab> {
                         if (_query.isNotEmpty && i == 0)
                           return const SizedBox.shrink();
 
-                        return FilterChip(
-                          label: TextWidget(
-                            text: filterChips[i],
-                            fontSize: 14,
-                            color: Colors.white,
-                            isBold: true,
-                          ),
-                          backgroundColor: _selectedChip == i
-                              ? Colors.white12
-                              : const Color(0xFF222222),
-                          selected: _selectedChip == i,
-                          selectedColor: primary,
-                          checkmarkColor: white,
-                          onSelected: (_) {
-                            setState(() {
-                              _selectedChip = i;
-                              _updateShopsStream();
-                            });
+                        final isSelected = _selectedChip == i;
+                        return GestureDetector(
+                          onTap: () {
+                            if (!isSelected) {
+                              setState(() {
+                                _selectedChip = i;
+                                _updateShopsStream();
+                              });
+                            }
                           },
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeInOut,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: isSelected ? primary : const Color(0xFF222222),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isSelected ? primary : Colors.white12,
+                                width: 1,
+                              ),
+                              boxShadow: isSelected
+                                  ? [
+                                      BoxShadow(
+                                        color: primary.withOpacity(0.3),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 2),
+                                      )
+                                    ]
+                                  : [],
+                            ),
+                            child: TextWidget(
+                              text: filterChips[i],
+                              fontSize: 14,
+                              color: Colors.white,
+                              isBold: true,
+                            ),
                           ),
-                          side: const BorderSide(
-                            color: Colors.white12,
-                            width: 1,
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
                         );
                       },
                     ),
@@ -382,7 +390,7 @@ class ExploreTabState extends State<ExploreTab> {
                 // Tag filters
                 // _buildTagFilters(),
                 const SizedBox(height: 18),
-                if (_query.isEmpty && _selectedFilters.isEmpty) ...[
+                if (_query.isEmpty && _selectedFilters.isEmpty && _selectedChip == 0) ...[
                   _sectionTitle('Monthly Featured Cafe Shops'),
                   const SizedBox(height: 10),
                   if (userSnap != null)
@@ -528,14 +536,6 @@ class ExploreTabState extends State<ExploreTab> {
 
   Widget _buildShopsSliver(
       AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snap) {
-    if (snap.connectionState == ConnectionState.waiting) {
-      return const SliverToBoxAdapter(
-          child: Center(
-              child: Padding(
-        padding: EdgeInsets.all(16),
-        child: CircularProgressIndicator(strokeWidth: 2),
-      )));
-    }
     if (snap.hasError) {
       return const SliverToBoxAdapter(
           child: Padding(
@@ -544,17 +544,34 @@ class ExploreTabState extends State<ExploreTab> {
             style: TextStyle(color: Colors.white70)),
       ));
     }
-    final docs = snap.data?.docs ?? [];
-    // Apply filters and sorting based on chips and bottom-sheet
-    final filtered = _applyFilters(docs, _userInterests);
-    
-    // Save for programmatic access
-    // Wrap in microtask to avoid state modification during build
-    Future.microtask(() {
-      if (mounted) {
-        _currentShops = filtered;
+
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> filtered;
+
+    if (snap.connectionState == ConnectionState.waiting && snap.data == null) {
+      if (_currentShops.isNotEmpty) {
+        // Retain previous list to prevent snap/flicker while new stream loads
+        filtered = _currentShops;
+      } else {
+        return const SliverToBoxAdapter(
+            child: Center(
+                child: Padding(
+          padding: EdgeInsets.all(16),
+          child: CircularProgressIndicator(strokeWidth: 2),
+        )));
       }
-    });
+    } else {
+      final docs = snap.data?.docs ?? [];
+      // Apply filters and sorting based on chips and bottom-sheet
+      filtered = _applyFilters(docs, _userInterests);
+      
+      // Save for programmatic access
+      // Wrap in microtask to avoid state modification during build
+      Future.microtask(() {
+        if (mounted) {
+          _currentShops = filtered;
+        }
+      });
+    }
 
     if (filtered.isEmpty) {
       return const SliverToBoxAdapter(

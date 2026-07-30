@@ -385,8 +385,8 @@ class RecommendationService {
   }) async {
     if (user == null) return {};
 
-    const String recCacheKey = 'shop_recommendations';
-    const String recTimeKey = 'shop_rec_timestamp';
+    final String recCacheKey = 'shop_recommendations_${user.uid}';
+    final String recTimeKey = 'shop_rec_timestamp_${user.uid}';
 
     // 1. Check Cache first
     if (!forceRefresh) {

@@ -20,9 +20,18 @@ class ProfileTab extends StatelessWidget {
       backgroundColor: Colors.transparent,
       body: SafeArea(
         bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.only(bottom: 120),
-          children: [
+        child: StatefulBuilder(
+          builder: (context, setState) {
+            return RefreshIndicator(
+              color: primary,
+              backgroundColor: Colors.black87,
+              onRefresh: () async {
+                setState(() {});
+                await Future.delayed(const Duration(milliseconds: 800));
+              },
+              child: ListView(
+                padding: const EdgeInsets.only(bottom: 120),
+                children: [
             const SizedBox(height: 32),
             // Profile header
             Padding(
@@ -302,6 +311,9 @@ class ProfileTab extends StatelessWidget {
             ),
             const SizedBox(height: 32),
           ],
+        ),
+            );
+          },
         ),
       ),
     );
