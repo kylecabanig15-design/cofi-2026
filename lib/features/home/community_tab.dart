@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/features/events/event_details_screen.dart';
 import 'package:cofi/features/networking/all_shared_collections_screen.dart';
 import 'package:cofi/utils/colors.dart';
+import 'package:cofi/widgets/premium_event_card.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cofi/widgets/text_widget.dart';
@@ -20,12 +21,13 @@ class CommunityTab extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
+        bottom: false,
         child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 0),
+          padding: const EdgeInsets.only(bottom: 120),
           children: [
-            const SizedBox(height: 24),
+            const SizedBox(height: 8),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -56,10 +58,10 @@ class CommunityTab extends StatelessWidget {
             const SizedBox(height: 24),
             // Events Section
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: TextWidget(
                 text: 'Events',
-                fontSize: 22,
+                fontSize: 18,
                 color: Colors.white,
                 fontFamily: 'Baloo2',
                 isBold: true,
@@ -140,13 +142,23 @@ class CommunityTab extends StatelessWidget {
                   }
                 }
 
+                // Sort upcoming events by start date (closest to now first)
+                upcomingEvents.sort((a, b) {
+                  final aStart = _getStartDate(a.data());
+                  final bStart = _getStartDate(b.data());
+                  if (aStart == null && bStart == null) return 0;
+                  if (aStart == null) return 1;
+                  if (bStart == null) return -1;
+                  return aStart.compareTo(bStart);
+                });
+
                 // Prioritize ongoing events, then upcoming
                 final allEvents = [...ongoingEvents, ...upcomingEvents];
 
                 if (allEvents.isEmpty) {
                   return Container(
                     width: double.infinity,
-                    margin: const EdgeInsets.symmetric(horizontal: 24),
+                    margin: const EdgeInsets.symmetric(horizontal: 12),
                     padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
                     decoration: BoxDecoration(
                       color: const Color(0xFF1E1E1E),
@@ -180,185 +192,39 @@ class CommunityTab extends StatelessWidget {
                   );
                 }
 
-                // Build event card widget for reuse
-                Widget buildEventCard(
-                    DocumentSnapshot<Map<String, dynamic>> doc) {
-                  final eventData = doc.data() ?? {};
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => EventDetailsScreen(event: {
-                            ...eventData,
-                            'id': doc.id,
-                          }),
-                        ),
-                      );
-                    },
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(18),
-                      child: Stack(
-                        children: [
-                          SizedBox(
-                            height: 220,
-                            width: double.infinity,
-                            child: (eventData['imageUrl']?.toString().startsWith('http') == true)
-                                ? CachedNetworkImage(
-                                    imageUrl: eventData['imageUrl'],
-                                    fit: BoxFit.cover,
-                                    placeholder: (context, url) => Container(color: Colors.grey[900]),
-                                    errorWidget: (context, url, error) => Container(
-                                      color: Colors.grey[900],
-                                      child: const Icon(Icons.event, color: Colors.white24, size: 48),
-                                    ),
-                                  )
-                                : Container(color: Colors.grey[900]),
-                          ),
-                          Positioned(
-                            left: 12,
-                            bottom: 36,
-                            right: 12,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Check if event is ongoing
-                                Builder(
-                                  builder: (context) {
-                                    final startDate = eventData['startDate'];
-                                    final endDate = eventData['endDate'];
-                                    DateTime? startDateTime;
-                                    DateTime? endDateTime;
-
-                                    if (startDate is Timestamp) {
-                                      startDateTime = startDate.toDate();
-                                    } else if (startDate is String &&
-                                        startDate.isNotEmpty) {
-                                      try {
-                                        startDateTime =
-                                            DateTime.parse(startDate);
-                                      } catch (_) {}
-                                    }
-
-                                    if (endDate is Timestamp) {
-                                      endDateTime = endDate.toDate();
-                                    } else if (endDate is String &&
-                                        endDate.isNotEmpty) {
-                                      try {
-                                        endDateTime = DateTime.parse(endDate);
-                                      } catch (_) {}
-                                    }
-
-                                    final now = DateTime.now();
-                                    final isOngoing = startDateTime != null &&
-                                        startDateTime.isBefore(now) &&
-                                        (endDateTime == null ||
-                                            endDateTime.isAfter(now));
-
-                                    return Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        if (isOngoing)
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 8, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: Colors.green,
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            child: TextWidget(
-                                              text:
-                                                  'TODAY - ${_formatDateTime(startDateTime)}',
-                                              fontSize: 11,
-                                              color: Colors.white,
-                                              isBold: true,
-                                            ),
-                                          ),
-                                        if (!isOngoing)
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 8, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: Colors.amber,
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            child: TextWidget(
-                                              text: 'UPCOMING',
-                                              fontSize: 11,
-                                              color: Colors.black,
-                                              isBold: true,
-                                            ),
-                                          ),
-                                        const SizedBox(height: 8),
-                                        TextWidget(
-                                          text: (eventData['title'] ?? 'Event')
-                                              .toString(),
-                                          fontSize: 18,
-                                          color: Colors.white,
-                                          isBold: true,
-                                          maxLines: 2,
-                                        ),
-                                        const SizedBox(height: 2),
-                                        // Date range display
-                                        Builder(
-                                          builder: (context) {
-                                            String dateRange = '';
-                                            if (startDateTime != null) {
-                                              final startStr = _formatEventDate(
-                                                  startDateTime);
-                                              if (endDateTime != null) {
-                                                final endStr = _formatEventDate(
-                                                    endDateTime);
-                                                if (startStr == endStr) {
-                                                  dateRange = startStr;
-                                                } else {
-                                                  dateRange =
-                                                      '$startStr - $endStr';
-                                                }
-                                              } else {
-                                                dateRange = startStr;
-                                              }
-                                            }
-                                            return TextWidget(
-                                              text: dateRange,
-                                              fontSize: 12,
-                                              color: Colors.white70,
-                                              maxLines: 1,
-                                            );
-                                          },
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                // Show scrollable list of events
+                // Show snapping list of events matching Explore page style
                 return SizedBox(
                   height: 240,
                   child: Padding(
-                    padding: const EdgeInsets.only(left: 24),
-                    child: PageView.builder(
-                      clipBehavior: Clip.none,
-                      padEnds: false,
-                      controller: PageController(viewportFraction: 0.93),
-                      itemCount: allEvents.length,
-                      itemBuilder: (context, idx) {
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: buildEventCard(allEvents[idx]),
-                        );
+                    padding: const EdgeInsets.only(left: 12),
+                    child: ShaderMask(
+                      shaderCallback: (Rect bounds) {
+                        return LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [Colors.white, Colors.white, Colors.white.withOpacity(0.6)],
+                          stops: [0.0, 0.88, 1.0],
+                        ).createShader(bounds);
                       },
+                      blendMode: BlendMode.dstIn,
+                      child: PageView.builder(
+                        padEnds: false,
+                        controller: PageController(viewportFraction: 0.96),
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: allEvents.length,
+                        itemBuilder: (context, idx) {
+                          final doc = allEvents[idx];
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 14),
+                            child: PremiumEventCard(
+                              event: doc.data() ?? {},
+                              eventId: doc.id,
+                              width: double.infinity,
+                              height: 200,
+                            ),
+                          );
+                        },
+                      ),
                     ),
                   ),
                 );
@@ -367,13 +233,13 @@ class CommunityTab extends StatelessWidget {
             const SizedBox(height: 32),
             // Shared Collections Section
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                    TextWidget(
                     text: 'Shared Collections',
-                    fontSize: 22,
+                    fontSize: 18,
                     color: Colors.white,
                     fontFamily: 'Baloo2',
                     isBold: true,
@@ -399,7 +265,7 @@ class CommunityTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.only(left: 12),
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: FirebaseFirestore.instance
                     .collection('sharedCollections')
@@ -438,18 +304,29 @@ class CommunityTab extends StatelessWidget {
                   
                   return SizedBox(
                     height: 180,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 0),
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: displayedDocs.length,
-                      separatorBuilder: (context, index) => const SizedBox(width: 16),
-                      itemBuilder: (context, index) {
-                        final d = displayedDocs[index];
-                        final collection = d.data();
-                        return _buildSharedCollectionCard(
-                            context, collection, d.id);
+                    child: ShaderMask(
+                      shaderCallback: (Rect bounds) {
+                        return LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [Colors.white, Colors.white, Colors.white.withOpacity(0.6)],
+                          stops: [0.0, 0.88, 1.0],
+                        ).createShader(bounds);
                       },
+                      blendMode: BlendMode.dstIn,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 0),
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: displayedDocs.length,
+                        separatorBuilder: (context, index) => const SizedBox(width: 16),
+                        itemBuilder: (context, index) {
+                          final d = displayedDocs[index];
+                          final collection = d.data();
+                          return _buildSharedCollectionCard(
+                              context, collection, d.id);
+                        },
+                      ),
                     ),
                   );
                 },
@@ -458,7 +335,7 @@ class CommunityTab extends StatelessWidget {
             const SizedBox(height: 32),
             // Job Hirings Section
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: TextWidget(
                 text: 'Job Hirings',
                 fontSize: 22,
@@ -469,7 +346,7 @@ class CommunityTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: FirebaseFirestore.instance
                     .collectionGroup('jobs')
@@ -990,7 +867,7 @@ class CommunityTab extends StatelessWidget {
             const SizedBox(height: 16),
             // Title
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Text(
                 title,
                 textAlign: TextAlign.center,
@@ -1101,13 +978,16 @@ class CommunityTab extends StatelessWidget {
     }
   }
 
-  String _formatDateTime(DateTime dateTime) {
-    final hour = dateTime.hour.toString().padLeft(2, '0');
-    final minute = dateTime.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
-  }
-
-  String _formatEventDate(DateTime dateTime) {
-    return DateFormat('MMM dd, yyyy').format(dateTime);
+  DateTime? _getStartDate(Map<String, dynamic>? data) {
+    if (data == null) return null;
+    final startDate = data['startDate'];
+    if (startDate is Timestamp) return startDate.toDate();
+    if (startDate is String && startDate.isNotEmpty) {
+      try {
+        return DateTime.parse(startDate);
+      } catch (_) {}
+    }
+    return null;
   }
 }
+

@@ -62,11 +62,13 @@ class _CollectionsTabState extends State<CollectionsTab> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
+        bottom: false,
         child: ListView(
+          padding: const EdgeInsets.only(bottom: 120),
           children: [
             const SizedBox(height: 32),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -112,7 +114,10 @@ class _CollectionsTabState extends State<CollectionsTab> {
               ),
             ),
             const SizedBox(height: 18),
-            const Divider(color: Colors.white24, thickness: 1),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Divider(color: Colors.white24, thickness: 1),
+            ),
             // Favorites (dynamic)
             StreamBuilder<int>(
               stream: _favoritesCountStream,
@@ -180,9 +185,12 @@ class _CollectionsTabState extends State<CollectionsTab> {
                 );
               },
             ),
-            const Divider(color: Colors.white24, thickness: 1),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Divider(color: Colors.white24, thickness: 1),
+            ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               child: TextWidget(
                 text: 'Cafe Lists',
                 fontSize: 20,
@@ -196,7 +204,7 @@ class _CollectionsTabState extends State<CollectionsTab> {
               if (user == null) {
                 return Padding(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: TextWidget(
                     text: 'Sign in to create and view your lists',
                     fontSize: 15,
@@ -224,7 +232,7 @@ class _CollectionsTabState extends State<CollectionsTab> {
                   if (docs.isEmpty) {
                     return Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 8),
+                          horizontal: 12, vertical: 8),
                       child: TextWidget(
                         text: 'No lists yet',
                         fontSize: 15,
@@ -525,7 +533,7 @@ class _CollectionsTabState extends State<CollectionsTab> {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Row(
           children: [
             Container(

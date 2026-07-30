@@ -1,10 +1,10 @@
+import 'dart:ui';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-class ExploreFeaturedCard extends StatelessWidget {
+class ExploreFeaturedCard extends StatefulWidget {
   final Map<String, dynamic> shopData;
   final String id;
   final String name;
@@ -14,7 +14,9 @@ class ExploreFeaturedCard extends StatelessWidget {
   final bool isBookmarked;
   final VoidCallback onTap;
   final VoidCallback onBookmark;
-  
+  final double width;
+  final double height;
+
   const ExploreFeaturedCard({
     super.key,
     required this.shopData,
@@ -26,341 +28,354 @@ class ExploreFeaturedCard extends StatelessWidget {
     required this.isBookmarked,
     required this.onTap,
     required this.onBookmark,
+    this.width = double.infinity,
+    this.height = 260,
   });
 
-  List<String> _getGalleryList(dynamic galleryData) {
-    if (galleryData is List) {
-      return galleryData.map((e) => e.toString()).toList();
-    }
+  @override
+  State<ExploreFeaturedCard> createState() => _ExploreFeaturedCardState();
+}
+
+class _ExploreFeaturedCardState extends State<ExploreFeaturedCard> {
+  late PageController _pageController;
+  int _currentPage = 0;
+
+  List<String> get _gallery {
+    final g = widget.shopData['gallery'];
+    if (g is List) return g.map((e) => e.toString()).where((s) => s.startsWith('http')).toList();
+    final logo = widget.shopData['logoUrl']?.toString() ?? '';
+    if (logo.startsWith('http')) return [logo];
     return [];
   }
 
-  Widget _buildSubmissionBadge(bool isVerified, String submissionType, {bool hasRankBadge = false, bool isFeatured = false}) {
-    if (!isVerified && !isFeatured) return const SizedBox.shrink();
-    
-    final Color badgeColor = isFeatured 
-        ? primary.withOpacity(0.9) 
-        : (submissionType == 'business' 
-            ? const Color(0xFF546E7A).withOpacity(0.85) 
-            : const Color(0xFFF1C40F).withOpacity(0.85)); 
-            
-    final IconData badgeIcon = isFeatured
-        ? Icons.auto_awesome 
-        : (submissionType == 'business' ? Icons.verified : Icons.people);
-        
-    final String badgeText = isFeatured
-        ? 'FEATURED SHOP'
-        : (submissionType == 'business' ? 'Verified' : 'Community Added');
-
-    return Positioned(
-      top: hasRankBadge ? 46 : 12,
-      left: 12,
-      child: Container(
-        decoration: BoxDecoration(
-          color: badgeColor,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.25),
-              blurRadius: 6,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              badgeIcon,
-              color: Colors.white,
-              size: 13,
-            ),
-            const SizedBox(width: 5),
-            Text(
-              badgeText,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
   }
 
-  Widget _buildFeaturedGallerySlider({
-    required List<String> galleryImages,
-    required bool isBookmarked,
-    required VoidCallback onBookmark,
-    bool isVerified = false,
-    String submissionType = 'community',
-    bool isFeatured = false,
-  }) {
-    if (galleryImages.isEmpty) {
-      return Container(
-        height: 200,
-        decoration: BoxDecoration(
-          color: Colors.grey[800],
-          borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(18), bottom: Radius.circular(18)),
-        ),
-        child: Stack(
-          children: [
-            const Center(
-              child: Icon(Icons.image, color: Colors.white38, size: 50),
-            ),
-            _buildSubmissionBadge(isVerified, submissionType, hasRankBadge: false, isFeatured: isFeatured),
-            Align(
-              alignment: Alignment.topRight,
-              child: IconButton(
-                icon: Icon(
-                  isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                  color: Colors.white,
-                ),
-                onPressed: onBookmark,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return StatefulBuilder(
-      builder: (context, setSliderState) {
-        final currentIndex = ValueNotifier<int>(0);
-        final pageController = PageController();
-        return Container(
-          height: 200,
-          decoration: BoxDecoration(
-            color: Colors.grey[800],
-            borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(18), bottom: Radius.circular(18)),
-          ),
-          child: Stack(
-            children: [
-              PageView.builder(
-                controller: pageController,
-                onPageChanged: (index) {
-                  currentIndex.value = index;
-                },
-                itemCount: galleryImages.length,
-                itemBuilder: (context, index) {
-                  return ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(18), bottom: Radius.circular(18)),
-                    child: CachedNetworkImage(
-                      imageUrl: galleryImages[index],
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      height: 200,
-                      placeholder: (context, url) => const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      errorWidget: (context, url, error) => const Center(
-                        child:
-                            Icon(Icons.image, color: Colors.white38, size: 50),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              _buildSubmissionBadge(isVerified, submissionType, hasRankBadge: false, isFeatured: isFeatured),
-              Align(
-                alignment: Alignment.topRight,
-                child: IconButton(
-                  icon: Icon(
-                    isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                    color: Colors.white,
-                  ),
-                  onPressed: onBookmark,
-                ),
-              ),
-              if (galleryImages.length > 1)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: GestureDetector(
-                      onTap: () {
-                        pageController.previousPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black38,
-                          shape: BoxShape.circle,
-                        ),
-                        padding: const EdgeInsets.all(8),
-                        child: const Icon(
-                          Icons.arrow_back_ios_new,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              if (galleryImages.length > 1)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
-                      onTap: () {
-                        pageController.nextPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black38,
-                          shape: BoxShape.circle,
-                        ),
-                        padding: const EdgeInsets.all(8),
-                        child: const Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              if (galleryImages.length > 1)
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: ValueListenableBuilder<int>(
-                      valueListenable: currentIndex,
-                      builder: (context, index, _) {
-                        return Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(
-                            galleryImages.length,
-                            (i) => Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              width: index == i ? 12 : 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color:
-                                    index == i ? Colors.white : Colors.white54,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-    );
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final gallery = _getGalleryList(shopData['gallery']);
-    final isVerified = (shopData['isVerified'] as bool?) ?? false;
-    final submissionType = (shopData['submissionType'] as String?) ?? 'community';
+    final gallery = _gallery;
+    final isVerified = (widget.shopData['isVerified'] as bool?) ?? false;
+    final submissionType = (widget.shopData['submissionType'] as String?) ?? 'community';
+    final logoUrl = widget.shopData['logoUrl']?.toString() ?? '';
 
-    return Column(
-      children: [
-        GestureDetector(
-          onTap: onTap,
-          child: _buildFeaturedGallerySlider(
-            galleryImages: gallery,
-            isBookmarked: isBookmarked,
-            onBookmark: onBookmark,
-            isVerified: isVerified,
-            submissionType: submissionType,
-            isFeatured: true, 
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: SizedBox(
+        width: widget.width,
+        height: widget.height,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: [
+              BoxShadow(
+                color: primary.withOpacity(0.18),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: Stack(
+              fit: StackFit.expand,
               children: [
-                Row(
-                  children: [
-                    TextWidget(
-                      text: hours,
-                      fontSize: 13,
-                      color: Colors.white70,
+                // ── Background image / gallery ──────────────────────────
+                if (gallery.isNotEmpty)
+                  PageView.builder(
+                    controller: _pageController,
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: gallery.length,
+                    onPageChanged: (i) => setState(() => _currentPage = i),
+                    itemBuilder: (_, i) => CachedNetworkImage(
+                      imageUrl: gallery[i],
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(color: const Color(0xFF1E1E1E)),
+                      errorWidget: (_, __, ___) => Container(
+                        color: const Color(0xFF1E1E1E),
+                        child: const Icon(Icons.local_cafe, color: Colors.white24, size: 48),
+                      ),
                     ),
-                    const SizedBox(width: 10),
-                    const Icon(Icons.star,
-                        color: Colors.amber, size: 16),
-                     const SizedBox(width: 5),
-                    ratingText,
-                  ],
-                ),
-                const SizedBox(height: 2),
-                SizedBox(
-                  width: 280,
-                  child: TextWidget(
-                    text: name,
-                    fontSize: 17,
-                    color: Colors.white,
-                    isBold: true,
-                    maxLines: 1,
+                  )
+                else
+                  Container(
+                    color: const Color(0xFF1A1A2E),
+                    child: const Center(
+                      child: Icon(Icons.local_cafe, color: Colors.white24, size: 64),
+                    ),
+                  ),
+
+                // ── Gradient overlay ────────────────────────────────────
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withOpacity(0.08),
+                        Colors.black.withOpacity(0.15),
+                        Colors.black.withOpacity(0.65),
+                        Colors.black.withOpacity(0.95),
+                      ],
+                      stops: const [0.0, 0.35, 0.65, 1.0],
+                    ),
                   ),
                 ),
-                SizedBox(
-                  width: 280,
-                  child: Text(
-                    city,
-                    style: TextStyle(
-                      fontSize: city.length > 30 ? 10.5 : 12,
-                      color: Colors.white70,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    maxLines: 1,
+
+                // ── Top row: Featured badge + bookmark ──────────────────
+                Positioned(
+                  top: 14,
+                  left: 14,
+                  right: 14,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Featured badge
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: primary.withOpacity(0.75),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.white.withOpacity(0.2), width: 0.5),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.auto_awesome, color: Colors.white, size: 12),
+                                SizedBox(width: 5),
+                                Text(
+                                  'FEATURED',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // Bookmark
+                      GestureDetector(
+                        onTap: widget.onBookmark,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.35),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.white.withOpacity(0.15), width: 0.5),
+                              ),
+                              child: Icon(
+                                widget.isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                                color: widget.isBookmarked ? Colors.amber : Colors.white,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── Removed top dots ───────────────────────────────────
+
+                // ── Bottom content ──────────────────────────────────────
+                Positioned(
+                  left: 14,
+                  right: 14,
+                  bottom: 14,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // Text info
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Hours pill
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.access_time_rounded, color: Colors.white70, size: 11),
+                                  const SizedBox(width: 4),
+                                  TextWidget(
+                                    text: widget.hours,
+                                    fontSize: 11,
+                                    color: Colors.white70,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            // Name
+                            TextWidget(
+                              text: widget.name,
+                              fontSize: 19,
+                              color: Colors.white,
+                              isBold: true,
+                              maxLines: 1,
+                            ),
+                            const SizedBox(height: 4),
+                            // City
+                            Row(
+                              children: [
+                                const Icon(Icons.location_on_rounded, color: Colors.white54, size: 12),
+                                const SizedBox(width: 3),
+                                Expanded(
+                                  child: TextWidget(
+                                    text: widget.city,
+                                    fontSize: 12,
+                                    color: Colors.white70,
+                                    maxLines: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            // Rating
+                            Row(
+                              children: [
+                                const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
+                                const SizedBox(width: 4),
+                                widget.ratingText,
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(width: 10),
+
+                      // Right column: Gallery controls & Logo avatar
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          if (gallery.length > 1)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.white.withOpacity(0.2), width: 0.5),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  GestureDetector(
+                                    onTap: () {
+                                      if (_pageController.page! > 0) {
+                                        _pageController.previousPage(
+                                          duration: const Duration(milliseconds: 300),
+                                          curve: Curves.easeInOut,
+                                        );
+                                      }
+                                    },
+                                    child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 12),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${_currentPage + 1}/${gallery.length}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.0,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: () {
+                                      if (_pageController.page! < gallery.length - 1) {
+                                        _pageController.nextPage(
+                                          duration: const Duration(milliseconds: 300),
+                                          curve: Curves.easeInOut,
+                                        );
+                                      }
+                                    },
+                                    child: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.4),
+                                  blurRadius: 8,
+                                ),
+                              ],
+                            ),
+                            child: logoUrl.startsWith('http')
+                                ? CachedNetworkImage(
+                                    imageUrl: logoUrl,
+                                    imageBuilder: (_, img) => CircleAvatar(
+                                      radius: 24,
+                                      backgroundImage: img,
+                                    ),
+                                    placeholder: (_, __) => CircleAvatar(
+                                      radius: 24,
+                                      backgroundColor: Colors.grey[800],
+                                      child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
+                                    ),
+                                    errorWidget: (_, __, ___) => CircleAvatar(
+                                      radius: 24,
+                                      backgroundColor: Colors.grey[800],
+                                      child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
+                                    ),
+                                  )
+                                : CircleAvatar(
+                                    radius: 24,
+                                    backgroundColor: Colors.grey[800],
+                                    child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            if (shopData['logoUrl'] != null && (shopData['logoUrl'] as String).startsWith('http'))
-              CachedNetworkImage(
-                imageUrl: shopData['logoUrl'],
-                imageBuilder: (context, imageProvider) => CircleAvatar(
-                  radius: 20,
-                  backgroundImage: imageProvider,
-                ),
-                placeholder: (context, url) => CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Colors.grey[800],
-                  child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
-                ),
-                errorWidget: (context, url, error) => CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Colors.grey[800],
-                  child: const Icon(Icons.local_cafe, color: Colors.white70, size: 20),
-                ),
-              )
-            else
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: Colors.grey[800],
-                child: const Icon(Icons.local_cafe,
-                    color: Colors.white70, size: 20),
-              ),
-          ],
+          ),
         ),
-      ],
+      ),
     );
   }
 }

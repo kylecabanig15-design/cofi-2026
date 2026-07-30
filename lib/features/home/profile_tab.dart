@@ -19,12 +19,14 @@ class ProfileTab extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
+        bottom: false,
         child: ListView(
+          padding: const EdgeInsets.only(bottom: 120),
           children: [
             const SizedBox(height: 32),
             // Profile header
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -116,7 +118,7 @@ class ProfileTab extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Builder(builder: (context) {
                 final user = FirebaseAuth.instance.currentUser;
                 if (user == null) {
@@ -150,7 +152,7 @@ class ProfileTab extends StatelessWidget {
               }),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Builder(builder: (context) {
                 final user = FirebaseAuth.instance.currentUser;
                 if (user == null) {
@@ -243,7 +245,7 @@ class ProfileTab extends StatelessWidget {
 
             // Find the perfect cafe
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Column(
                 children: [
                   Container(
@@ -422,7 +424,7 @@ class ProfileTab extends StatelessWidget {
   // Business Analytics Section for business users
   Widget _buildBusinessAnalyticsSection(BuildContext context, String uid) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('shops')
@@ -441,7 +443,7 @@ class ProfileTab extends StatelessWidget {
                   width: 1,
                 ),
               ),
-              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -620,7 +622,7 @@ class ProfileTab extends StatelessWidget {
   // User Stats Section for regular users
   Widget _buildUserStatsSection(BuildContext context, String uid) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.03),
@@ -880,7 +882,7 @@ class ProfileTab extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1003,7 +1005,7 @@ class ProfileTab extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: TextWidget(
             text: 'Job Applications',
             fontSize: 18,
@@ -1367,7 +1369,7 @@ class ProfileTab extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: TextWidget(
             text: 'My Business',
             fontSize: 18,

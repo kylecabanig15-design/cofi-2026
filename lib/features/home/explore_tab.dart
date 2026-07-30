@@ -310,60 +310,72 @@ class ExploreTabState extends State<ExploreTab> {
         physics: const AlwaysScrollableScrollPhysics(
             parent: BouncingScrollPhysics()),
         slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            sliver: SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+          SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                   const SizedBox(height: 16),
-                _buildSearchBar(),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: _buildSearchBar(),
+                  ),
                 const SizedBox(height: 12),
                 SizedBox(
                   height: 44,
                   width: double.infinity,
-                  child: ListView.separated(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    scrollDirection: Axis.horizontal,
-                    itemCount: filterChips.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(width: 8),
-                    itemBuilder: (context, i) {
-                      // Automatically remove "For You" chip when searching as requested
-                      if (_query.isNotEmpty && i == 0)
-                        return const SizedBox.shrink();
-
-                      return FilterChip(
-                        label: TextWidget(
-                          text: filterChips[i],
-                          fontSize: 14,
-                          color: Colors.white,
-                          isBold: true,
-                        ),
-                        backgroundColor: _selectedChip == i
-                            ? Colors.white12
-                            : const Color(0xFF222222),
-                        selected: _selectedChip == i,
-                        selectedColor: primary,
-                        checkmarkColor: white,
-                        onSelected: (_) {
-                          setState(() {
-                            _selectedChip = i;
-                            _updateShopsStream();
-                          });
-                        },
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        side: const BorderSide(
-                          color: Colors.white12,
-                          width: 1,
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
-                      );
+                  child: ShaderMask(
+                    shaderCallback: (Rect bounds) {
+                      return LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [Colors.white, Colors.white, Colors.white.withOpacity(0.6)],
+                        stops: const [0.0, 0.88, 1.0],
+                      ).createShader(bounds);
                     },
+                    blendMode: BlendMode.dstIn,
+                    child: ListView.separated(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      scrollDirection: Axis.horizontal,
+                      itemCount: filterChips.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(width: 8),
+                      itemBuilder: (context, i) {
+                        // Automatically remove "For You" chip when searching as requested
+                        if (_query.isNotEmpty && i == 0)
+                          return const SizedBox.shrink();
+
+                        return FilterChip(
+                          label: TextWidget(
+                            text: filterChips[i],
+                            fontSize: 14,
+                            color: Colors.white,
+                            isBold: true,
+                          ),
+                          backgroundColor: _selectedChip == i
+                              ? Colors.white12
+                              : const Color(0xFF222222),
+                          selected: _selectedChip == i,
+                          selectedColor: primary,
+                          checkmarkColor: white,
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedChip = i;
+                              _updateShopsStream();
+                            });
+                          },
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          side: const BorderSide(
+                            color: Colors.white12,
+                            width: 1,
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                        );
+                      },
+                    ),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -379,7 +391,7 @@ class ExploreTabState extends State<ExploreTab> {
                       builder: (context, snap) {
                         if (snap.connectionState == ConnectionState.waiting) {
                           return const SizedBox(
-                            height: 275,
+                            height: 220,
                             child: Center(
                               child: CircularProgressIndicator(strokeWidth: 2),
                             ),
@@ -394,7 +406,7 @@ class ExploreTabState extends State<ExploreTab> {
                           if (sortedSnap.connectionState ==
                               ConnectionState.waiting) {
                             return const SizedBox(
-                              height: 275,
+                              height: 220,
                                 child: Center(
                                   child:
                                       CircularProgressIndicator(strokeWidth: 2),
@@ -410,17 +422,28 @@ class ExploreTabState extends State<ExploreTab> {
                               );
                             }
                             return SizedBox(
-                              height: 275,
-                              child: ListView.separated(
+                              height: 240,
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 12),
+                                child: ShaderMask(
+                                  shaderCallback: (Rect bounds) {
+                                    return LinearGradient(
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                      colors: [Colors.white, Colors.white, Colors.white.withOpacity(0.6)],
+                                      stops: [0.0, 0.88, 1.0],
+                                    ).createShader(bounds);
+                                  },
+                                  blendMode: BlendMode.dstIn,
+                                  child: PageView.builder(
+                                    padEnds: false,
+                                    controller: PageController(viewportFraction: 0.96),
                                 physics: const BouncingScrollPhysics(),
-                                scrollDirection: Axis.horizontal,
                                 itemCount: sorted.length,
-                                separatorBuilder: (_, __) =>
-                                    const SizedBox(width: 12),
                                 itemBuilder: (context, idx) {
                                   final d = sorted[idx];
-                                  return SizedBox(
-                                    width: 360,
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 14),
                                     child: _buildFeaturedCard(
                                       shopData: d.data(),
                                       id: d.id,
@@ -457,9 +480,12 @@ class ExploreTabState extends State<ExploreTab> {
                                         d.id,
                                         _bookmarks.contains(d.id),
                                       ),
+                                      width: double.infinity,
                                     ),
                                   );
                                 },
+                              ),
+                              ),
                               ),
                             );
                           },
@@ -478,16 +504,18 @@ class ExploreTabState extends State<ExploreTab> {
                   _buildEventsSection(),
                   const SizedBox(height: 18),
                 ],
-                GestureDetector(
-                    onTap: () => widget.onOpenCommunity?.call(),
-                    child: _buildCheckCommunityButton()),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: GestureDetector(
+                      onTap: () => widget.onOpenCommunity?.call(),
+                      child: _buildCheckCommunityButton()),
+                ),
                 const SizedBox(height: 18),
                   _sectionTitle('Shops'),
                   const SizedBox(height: 10),
                 ],
               ),
             ),
-          ),
           // Shops stream result
           if (shopsSnap != null) ...[
             _buildShopsSliver(shopsSnap),
@@ -863,6 +891,7 @@ class ExploreTabState extends State<ExploreTab> {
     required bool isBookmarked,
     required VoidCallback onTap,
     required VoidCallback onBookmark,
+    double? width,
   }) {
     return ExploreFeaturedCard(
       shopData: shopData,
@@ -874,6 +903,8 @@ class ExploreTabState extends State<ExploreTab> {
       isBookmarked: isBookmarked,
       onTap: onTap,
       onBookmark: onBookmark,
+      width: width ?? MediaQuery.of(context).size.width * 0.89,
+      height: 200,
     );
   }
 
@@ -1151,11 +1182,12 @@ class ExploreTabState extends State<ExploreTab> {
 
   Widget _sectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: TextWidget(
         text: title,
         fontSize: 18,
         color: Colors.white,
+        fontFamily: 'Baloo2',
         isBold: true,
       ),
     );
