@@ -26,15 +26,19 @@ class ExploreTab extends StatefulWidget {
   final VoidCallback? onOpenCommunity;
   final GlobalKey? searchKey;
   final GlobalKey? filterKey;
+  final GlobalKey? firstCafeKey;
+  final ScrollController? scrollController;
+  final void Function(String shopId, Map<String, dynamic> data)? onFirstCafeTap;
   const ExploreTab(
-      {super.key, this.onOpenCommunity, this.searchKey, this.filterKey});
+      {super.key, this.onOpenCommunity, this.searchKey, this.filterKey, this.firstCafeKey, this.scrollController, this.onFirstCafeTap});
 
   @override
-  State<ExploreTab> createState() => _ExploreTabState();
+  State<ExploreTab> createState() => ExploreTabState();
 }
 
-class _ExploreTabState extends State<ExploreTab> {
+class ExploreTabState extends State<ExploreTab> {
   int _selectedChip = 0; // Default to 'For You'
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _currentShops = [];
 
   // ==========================================================================
   // COSINE SIMILARITY INDEX ALGORITHM FOR CAFÉ RECOMMENDATIONS
@@ -224,6 +228,16 @@ class _ExploreTabState extends State<ExploreTab> {
     super.dispose();
   }
 
+  /// Programmatically open the first cafe in the list
+  void openFirstCafe() {
+    if (_currentShops.isNotEmpty) {
+      final firstCafe = _currentShops.first;
+      if (widget.onFirstCafeTap != null) {
+        widget.onFirstCafeTap!(firstCafe.id, firstCafe.data());
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final filterChips = [
@@ -292,6 +306,7 @@ class _ExploreTabState extends State<ExploreTab> {
       color: primary,
       backgroundColor: Colors.black87,
       child: CustomScrollView(
+        controller: widget.scrollController,
         physics: const AlwaysScrollableScrollPhysics(
             parent: BouncingScrollPhysics()),
         slivers: [
@@ -504,6 +519,15 @@ class _ExploreTabState extends State<ExploreTab> {
     final docs = snap.data?.docs ?? [];
     // Apply filters and sorting based on chips and bottom-sheet
     final filtered = _applyFilters(docs, _userInterests);
+    
+    // Save for programmatic access
+    // Wrap in microtask to avoid state modification during build
+    Future.microtask(() {
+      if (mounted) {
+        _currentShops = filtered;
+      }
+    });
+
     if (filtered.isEmpty) {
       return const SliverToBoxAdapter(
           child: Padding(
@@ -522,16 +546,21 @@ class _ExploreTabState extends State<ExploreTab> {
             return Column(
               children: [
                 GestureDetector(
+                  key: i == 0 ? widget.firstCafeKey : null,
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => CafeDetailsScreen(
-                          shopId: filtered[i].id,
-                          shop: filtered[i].data(),
+                    if (i == 0 && widget.onFirstCafeTap != null) {
+                      widget.onFirstCafeTap!(filtered[i].id, filtered[i].data());
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => CafeDetailsScreen(
+                            shopId: filtered[i].id,
+                            shop: filtered[i].data(),
+                          ),
                         ),
-                      ),
-                    );
+                      );
+                    }
                   },
                   child: _buildShopCard(
                     logo: ((filtered[i].data()['logoUrl'] ?? '') as String?) ??

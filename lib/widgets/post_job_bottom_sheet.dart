@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cofi/widgets/text_widget.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class PostJobBottomSheet extends StatefulWidget {
   const PostJobBottomSheet({

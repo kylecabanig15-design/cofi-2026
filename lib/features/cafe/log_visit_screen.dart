@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/utils/formatters.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class LogVisitScreen extends StatefulWidget {
   final String shopId;
@@ -48,8 +49,7 @@ class _LogVisitScreenState extends State<LogVisitScreen> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please sign in to log a visit.')));
+        CustomToast.showInfo(context, 'Please sign in to log a visit.');
         return;
       }
       final data = {
@@ -76,12 +76,10 @@ class _LogVisitScreenState extends State<LogVisitScreen> {
 
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Visit logged')));
+      CustomToast.showSuccess(context, 'Visit logged successfully!');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Failed: $e')));
+      CustomToast.showError(context, 'Failed: $e');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

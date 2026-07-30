@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/widgets/text_widget.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 import 'package:cofi/utils/formatters.dart';
 
 class ReviewShopScreen extends StatefulWidget {
@@ -61,9 +62,7 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to pick image: $e')),
-      );
+      CustomToast.showError(context, 'Failed to pick image: $e');
     }
   }
 
@@ -86,9 +85,7 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
 
       return downloadUrl;
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to upload image: $e')),
-      );
+      CustomToast.showError(context, 'Failed to upload image: $e');
       return null;
     } finally {
       setState(() {
@@ -100,16 +97,14 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
   Future<void> _submit() async {
     if (_submitting) return;
     if (_rating == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a rating.')));
+      CustomToast.showInfo(context, 'Please select a rating.');
       return;
     }
     setState(() => _submitting = true);
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Please sign in to submit a review.')));
+        CustomToast.showInfo(context, 'Please sign in to submit a review.');
         return;
       }
 
@@ -195,12 +190,10 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
       if (!mounted) return;
       Navigator.pop(context);
       Navigator.pop(context);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Review submitted')));
+      CustomToast.showSuccess(context, 'Review submitted successfully!');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Failed: $e')));
+      CustomToast.showError(context, 'Failed: $e');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

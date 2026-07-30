@@ -623,70 +623,84 @@ class ProfileTab extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.grey[900],
+          color: Colors.white.withValues(alpha: 0.03),
           borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.1),
+            width: 1,
+          ),
         ),
-        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             TextWidget(
-              text: '2025 Stats',
+              text: '${DateTime.now().year} Activity',
               fontSize: 20,
               color: Colors.white,
               isBold: true,
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 20),
             Builder(builder: (context) {
               final now = DateTime.now();
               final startOfToday = DateTime(now.year, now.month, now.day);
               final startOfWeek = startOfToday
-                  .subtract(Duration(days: startOfToday.weekday - 1)); // Monday
+                  .subtract(Duration(days: startOfToday.weekday - 1));
               final startOfMonth = DateTime(now.year, now.month, 1);
               final startOfYear = DateTime(now.year, 1, 1);
 
               return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildStatRowStream(
-                    _streamVisitCount(start: startOfWeek, end: now),
-                    'Shops Visited',
-                    'This week',
-                    onTap: () {
-                      Navigator.pushNamed(context, '/visitedCafes');
-                    },
-                    tooltip: 'Unique cafes you visited this week',
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatItemStream(
+                          _streamVisitCount(start: startOfWeek, end: now),
+                          icon: Icons.calendar_view_week,
+                          label: 'Visited this week',
+                          color: Colors.amber,
+                          tooltip: 'Unique cafes you visited this week',
+                          onTap: () => Navigator.pushNamed(context, '/visitedCafes'),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildStatItemStream(
+                          _streamVisitCount(start: startOfMonth, end: now),
+                          icon: Icons.calendar_month,
+                          label: 'Visited this month',
+                          color: Colors.blue,
+                          tooltip: 'Unique cafes you visited this month',
+                          onTap: () => Navigator.pushNamed(context, '/visitedCafes'),
+                        ),
+                      ),
+                    ],
                   ),
-                  const Divider(color: Colors.white24, thickness: 1),
-                  _buildStatRowStream(
-                    _streamVisitCount(start: startOfMonth, end: now),
-                    'Shops Visited',
-                    'This month',
-                    onTap: () {
-                      Navigator.pushNamed(context, '/visitedCafes');
-                    },
-                    tooltip: 'Unique cafes you visited this month',
-                  ),
-                  const Divider(color: Colors.white24, thickness: 1),
-                  _buildStatRowStream(
-                    _streamVisitCount(start: startOfYear, end: now),
-                    'Shops Visited',
-                    'This year',
-                    underline: true,
-                    onTap: () {
-                      Navigator.pushNamed(context, '/visitedCafes');
-                    },
-                    tooltip: 'Unique cafes you visited this year',
-                  ),
-                  const Divider(color: Colors.white24, thickness: 1),
-                  _buildStatRowStream(
-                    _streamReviewCount(start: startOfYear, end: now),
-                    'Shops Reviewed',
-                    '',
-                    onTap: () {
-                      Navigator.pushNamed(context, '/yourReviews');
-                    },
-                    tooltip: 'Total cafes you have reviewed this year',
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatItemStream(
+                          _streamVisitCount(start: startOfYear, end: now),
+                          icon: Icons.emoji_events,
+                          label: 'Visited this year',
+                          color: Colors.green,
+                          tooltip: 'Unique cafes you visited this year',
+                          onTap: () => Navigator.pushNamed(context, '/visitedCafes'),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildStatItemStream(
+                          _streamReviewCount(start: startOfYear, end: now),
+                          icon: Icons.rate_review,
+                          label: 'Reviews written',
+                          color: primary,
+                          tooltip: 'Total cafes you have reviewed this year',
+                          onTap: () => Navigator.pushNamed(context, '/yourReviews'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               );
@@ -694,6 +708,32 @@ class ProfileTab extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildStatItemStream(
+    Stream<int> countStream, {
+    required IconData icon,
+    required String label,
+    required Color color,
+    String? tooltip,
+    VoidCallback? onTap,
+  }) {
+    return StreamBuilder<int>(
+      stream: countStream,
+      builder: (context, snapshot) {
+        final count = snapshot.data ?? 0;
+        return GestureDetector(
+          onTap: onTap,
+          child: _buildStatItem(
+            icon: icon,
+            label: label,
+            value: count.toString(),
+            color: color,
+            tooltip: tooltip,
+          ),
+        );
+      },
     );
   }
 

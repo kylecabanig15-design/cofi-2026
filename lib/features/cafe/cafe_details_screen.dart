@@ -1,4 +1,6 @@
 import 'package:intl/intl.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -83,20 +85,293 @@ class _BookmarkButton extends StatelessWidget {
   }
 }
 
-class CafeDetailsScreen extends StatelessWidget {
+class CafeDetailsScreen extends StatefulWidget {
   final String? shopId;
   final Map<String, dynamic>? shop;
+  final bool isTourMode;
+  final VoidCallback? onTourComplete;
 
-  const CafeDetailsScreen({super.key, this.shopId, this.shop});
+  const CafeDetailsScreen({super.key, this.shopId, this.shop, this.isTourMode = false, this.onTourComplete});
+
+  @override
+  State<CafeDetailsScreen> createState() => _CafeDetailsScreenState();
+}
+
+class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
+  TutorialCoachMark? _tutorialCoachMark;
+  final GlobalKey _logVisitKey = GlobalKey();
+  final GlobalKey _reviewKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkTutorial();
+  }
+
+  Future<void> _checkTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeen = prefs.getBool('hasSeenCafeDetailsTutorial') ?? false;
+    
+    if (widget.isTourMode || !hasSeen) {
+      _waitForTargetsAndShow();
+    }
+  }
+
+  void _waitForTargetsAndShow() {
+    int attempts = 0;
+    void check() {
+      if (_logVisitKey.currentContext != null && _reviewKey.currentContext != null) {
+        _showTutorial();
+      } else if (attempts < 20) {
+        attempts++;
+        Future.delayed(const Duration(milliseconds: 100), check);
+      }
+    }
+    // Small initial delay to let build frame finish
+    Future.delayed(const Duration(milliseconds: 300), check);
+  }
+
+  void _showTutorial() {
+    _tutorialCoachMark = TutorialCoachMark(
+      targets: _createTargets(),
+      colorShadow: Colors.black,
+      paddingFocus: 10,
+      opacityShadow: 0.8,
+      hideSkip: true,
+      onFinish: () async {
+        await _markTutorialSeen();
+        if (widget.isTourMode && mounted) {
+          // Wait a beat then pop back to home and trigger phase 2
+          await Future.delayed(const Duration(milliseconds: 200));
+          if (mounted) {
+            Navigator.of(context).pop();
+            widget.onTourComplete?.call();
+          }
+        }
+      },
+      onSkip: () {
+        _markTutorialSeen();
+        if (widget.isTourMode && mounted) {
+          Future.delayed(const Duration(milliseconds: 200), () {
+            if (mounted) {
+              Navigator.of(context).pop();
+              widget.onTourComplete?.call();
+            }
+          });
+        }
+        return true;
+      },
+    )..show(context: context);
+  }
+
+  Future<void> _markTutorialSeen() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('hasSeenCafeDetailsTutorial', true);
+  }
+
+  List<TargetFocus> _createTargets() {
+    return [
+      TargetFocus(
+        identify: "logVisitKey",
+        keyTarget: _logVisitKey,
+        alignSkip: Alignment.topRight,
+        enableOverlayTab: true,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) {
+              return _buildPremiumTutorialCard(
+                icon: Icons.check_circle,
+                title: "Log Your Visit",
+                description:
+                    "Been here? Log your visit to keep track of your cafe adventures and build your stats!",
+                actionText: "Tap here or Next to continue",
+                controller: controller,
+              );
+            },
+          ),
+        ],
+      ),
+      TargetFocus(
+        identify: "reviewKey",
+        keyTarget: _reviewKey,
+        alignSkip: Alignment.topRight,
+        enableOverlayTab: true,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (context, controller) {
+              return _buildPremiumTutorialCard(
+                icon: Icons.rate_review,
+                title: "Leave a Review",
+                description:
+                    "Share your experience with the community. Rate the coffee, vibe, and amenities!",
+                actionText: "Tap here to finish the tour",
+                controller: controller,
+              );
+            },
+          ),
+        ],
+      ),
+    ];
+  }
+
+  Widget _buildPremiumTutorialCard({
+    required IconData icon,
+    required String title,
+    required String description,
+    required String actionText,
+    TutorialCoachMarkController? controller,
+    bool isActionTap = false,
+  }) {
+    return GestureDetector(
+      onTap: () {
+        if (!isActionTap && controller != null) {
+          controller.next();
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFF1A1A1A).withOpacity(0.95),
+              const Color(0xFF111111).withOpacity(0.95),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: Colors.white.withOpacity(0.15), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.5),
+              blurRadius: 30,
+              spreadRadius: 5,
+              offset: const Offset(0, 10),
+            ),
+            BoxShadow(
+              color: Colors.redAccent.withOpacity(0.15),
+              blurRadius: 20,
+              spreadRadius: 0,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.redAccent, Colors.red[800]!],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.redAccent.withOpacity(0.4),
+                        blurRadius: 10,
+                        spreadRadius: 1,
+                      )
+                    ],
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Text(
+              description,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.85),
+                fontSize: 16,
+                height: 1.5,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+            if (actionText.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                      color: Colors.redAccent.withOpacity(0.3), width: 1),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.touch_app,
+                        color: Colors.redAccent, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        actionText,
+                        style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TextButton(
+                  onPressed: () {
+                    controller?.skip();
+                    _markTutorialSeen();
+                  },
+                  child: const Text('SKIP', style: TextStyle(color: Colors.white54)),
+                ),
+                if (!isActionTap)
+                  ElevatedButton(
+                    onPressed: () => controller?.next(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('NEXT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+              ],
+            )
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     // If we have a shopId, fetch the latest data from Firestore
-    if (shopId != null && shopId!.isNotEmpty) {
+    if (widget.shopId != null && widget.shopId!.isNotEmpty) {
       return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
             .collection('shops')
-            .doc(shopId)
+            .doc(widget.shopId)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -141,7 +416,7 @@ class CafeDetailsScreen extends StatelessWidget {
     }
 
     // If we don't have a shopId, use the provided shop data
-    return _buildContent(context, shop ?? const <String, dynamic>{});
+    return _buildContent(context, widget.shop ?? const <String, dynamic>{});
   }
 
   Widget _buildContent(BuildContext context, Map<String, dynamic> s) {
@@ -230,7 +505,7 @@ class CafeDetailsScreen extends StatelessWidget {
                       Positioned(
                         top: 16,
                         right: 16,
-                        child: _BookmarkButton(shopId: shopId),
+                        child: _BookmarkButton(shopId: widget.shopId),
                       ),
                     ],
                   ),
@@ -249,7 +524,7 @@ class CafeDetailsScreen extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _buildHeaderRatingWidget(shopId, ratings,
+                                  _buildHeaderRatingWidget(widget.shopId, ratings,
                                       reviews.length, ratingText, isVerified, submissionType),
                                   const SizedBox(height: 4),
                                   TextWidget(
@@ -331,11 +606,11 @@ class CafeDetailsScreen extends StatelessWidget {
                   const SizedBox(height: 32),
                   _buildMenuSection(context, name, menuPricePhotos),
                   const SizedBox(height: 32),
-                  (shopId != null && shopId!.isNotEmpty)
-                      ? _buildReviewsSummaryStream(shopId!)
+                  (widget.shopId != null && widget.shopId!.isNotEmpty)
+                      ? _buildReviewsSummaryStream(widget.shopId!)
                       : _buildReviewsSummary(reviews),
-                  (shopId != null && shopId!.isNotEmpty)
-                      ? _buildReviewsSectionStream(shopId!)
+                  (widget.shopId != null && widget.shopId!.isNotEmpty)
+                      ? _buildReviewsSectionStream(widget.shopId!)
                       : _buildReviewsSection(reviews, context),
                   // Add extra padding to ensure content isn't hidden behind fixed buttons
                   const SizedBox(height: 200),
@@ -364,7 +639,7 @@ class CafeDetailsScreen extends StatelessWidget {
     if (shopId != null && shopId.isNotEmpty) {
       final query = FirebaseFirestore.instance
           .collection('shops')
-          .doc(shopId)
+          .doc(widget.shopId)
           .collection('reviews');
       return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: query.snapshots(),
@@ -1211,7 +1486,7 @@ class CafeDetailsScreen extends StatelessWidget {
                 return FutureBuilder<DocumentSnapshot>(
                   future: FirebaseFirestore.instance
                       .collection('shops')
-                      .doc(shopId)
+                      .doc(widget.shopId)
                       .get(),
                   builder: (context, shopSnap) {
                     final shopData =
@@ -1307,7 +1582,7 @@ class CafeDetailsScreen extends StatelessWidget {
   Widget _buildReviewsSummaryStream(String shopId) {
     final query = FirebaseFirestore.instance
         .collection('shops')
-        .doc(shopId)
+        .doc(widget.shopId)
         .collection('reviews');
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: query.snapshots(),
@@ -1367,7 +1642,7 @@ class CafeDetailsScreen extends StatelessWidget {
   Widget _buildReviewsSectionStream(String shopId) {
     final query = FirebaseFirestore.instance
         .collection('shops')
-        .doc(shopId)
+        .doc(widget.shopId)
         .collection('reviews')
         .orderBy('createdAt', descending: true)
         .limit(10);
@@ -1426,7 +1701,7 @@ class CafeDetailsScreen extends StatelessWidget {
   }
 
   Widget _buildActionButtons(BuildContext context, String submissionType, String shopName) {
-    final sm = shop ?? const <String, dynamic>{};
+    final sm = widget.shop ?? const <String, dynamic>{};
     final List embeddedReviews = (sm['reviews'] as List?) ?? const [];
     final user = FirebaseAuth.instance.currentUser;
 
@@ -1473,7 +1748,7 @@ class CafeDetailsScreen extends StatelessWidget {
                               builder: (context) => const ClaimShopScreen(),
                               settings: RouteSettings(
                                 arguments: {
-                                  'preselectShopId': shopId,
+                                  'preselectShopId': widget.shopId,
                                   'preselectShopName': shopName,
                                 },
                               ),
@@ -1509,7 +1784,7 @@ class CafeDetailsScreen extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (context) => ReviewsScreen(
-                    shopId: shopId,
+                    shopId: widget.shopId,
                     fallbackReviews: embeddedReviews,
                   ),
                 ),
@@ -1544,8 +1819,9 @@ class CafeDetailsScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               ElevatedButton(
+                key: _logVisitKey,
                 onPressed: () {
-                  final sm = shop ?? const <String, dynamic>{};
+                  final sm = widget.shop ?? const <String, dynamic>{};
                   final shopName = (sm['name'] ?? '').toString();
                   final shopAddress = (sm['address'] ?? '').toString();
                   final logo = (sm['logoUrl'] ?? '').toString();
@@ -1554,7 +1830,7 @@ class CafeDetailsScreen extends StatelessWidget {
                     MaterialPageRoute(
                       builder: (context) => LogVisitScreen(
                         logo: logo,
-                        shopId: shopId ?? '',
+                        shopId: widget.shopId ?? '',
                         shopName: shopName,
                         shopAddress: shopAddress,
                       ),
@@ -1581,8 +1857,9 @@ class CafeDetailsScreen extends StatelessWidget {
                 ),
               ),
               ElevatedButton(
+                key: _reviewKey,
                 onPressed: () {
-                  final sm = shop ?? const <String, dynamic>{};
+                  final sm = widget.shop ?? const <String, dynamic>{};
                   final shopName = (sm['name'] ?? '').toString();
                   final shopAddress = (sm['address'] ?? '').toString();
                   final logo = (sm['logoUrl'] ?? '').toString();
@@ -1591,7 +1868,7 @@ class CafeDetailsScreen extends StatelessWidget {
                     MaterialPageRoute(
                       builder: (context) => WriteReviewScreen(
                         logo: logo,
-                        shopId: shopId ?? '',
+                        shopId: widget.shopId ?? '',
                         shopName: shopName,
                         shopAddress: shopAddress,
                       ),

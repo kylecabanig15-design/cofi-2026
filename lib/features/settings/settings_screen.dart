@@ -16,6 +16,9 @@ import 'package:cofi/features/auth/interest_selection_screen.dart';
 import 'package:cofi/features/admin/admin_dashboard_screen.dart';
 import 'package:cofi/features/home/home_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cofi/widgets/custom_toast.dart';
+import 'package:cofi/widgets/custom_dialog.dart';
+import 'package:cofi/features/settings/change_password_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -115,47 +118,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showLogoutDialog() {
-    showDialog(
+    CustomDialog.showConfirmation(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text(
-          'Log Out',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Are you sure you want to log out?',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              try {
-                await GoogleSignInService.signOut();
-                if (mounted) {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    (route) => false,
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Logout failed: $e')),
-                  );
-                }
-              }
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-            child: const Text('Log Out'),
-          ),
-        ],
-      ),
+      title: 'Log Out',
+      message: 'Are you sure you want to log out?',
+      confirmText: 'Log Out',
+      isDestructive: true,
+      icon: Icons.logout_outlined,
+      onConfirm: () async {
+        try {
+          await GoogleSignInService.signOut();
+          if (mounted) {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+              (route) => false,
+            );
+          }
+        } catch (e) {
+          if (mounted) CustomToast.showError(context, 'Logout failed: $e');
+        }
+      },
     );
   }
 
@@ -448,12 +430,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // Show success message and navigate to login
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Account deleted successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        CustomToast.showSuccess(context, 'Account deleted successfully');
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const LoginScreen()),
           (route) => false,
@@ -464,9 +441,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AuthErrorHandler.getFriendlyMessage(e))),
-        );
+        CustomToast.showError(context, AuthErrorHandler.getFriendlyMessage(e));
       }
     }
   }
@@ -770,6 +745,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     const Divider(color: Colors.white12, height: 1),
                     _buildListTile(
+                      icon: Icons.lock_outline,
+                      title: 'Change Password',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ChangePasswordScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    const Divider(color: Colors.white12, height: 1),
+                    _buildListTile(
                       icon: Icons.logout,
                       title: 'Log Out',
                       onTap: _showLogoutDialog,
@@ -805,18 +793,100 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         icon: Icons.tour,
                         title: 'Replay Guided Tour',
                         subtitle: 'Restart the home screen tutorial',
-                        onTap: () async {
-                          final prefs = await SharedPreferences.getInstance();
-                          await prefs.setBool('hasSeenExploreTutorial', false);
-                          if (mounted) {
-                            Navigator.pushAndRemoveUntil(
-                              context,
-                              MaterialPageRoute(builder: (_) => const HomeScreen()),
-                              (route) => false,
-                            );
-                          }
+                        onTap: () {
+                          showDialog(
+                            context: context,
+                            barrierColor: Colors.black.withOpacity(0.75),
+                            builder: (ctx) => Dialog(
+                              backgroundColor: Colors.transparent,
+                              insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+                              child: Container(
+                                padding: const EdgeInsets.all(28),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFF1A1A1A), Color(0xFF0D0D0D)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(28),
+                                  border: Border.all(color: Colors.white.withOpacity(0.12), width: 1.5),
+                                  boxShadow: [
+                                    BoxShadow(color: Colors.redAccent.withOpacity(0.2), blurRadius: 30, spreadRadius: 5),
+                                  ],
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.redAccent.withOpacity(0.15),
+                                        border: Border.all(color: Colors.redAccent.withOpacity(0.4), width: 1.5),
+                                      ),
+                                      child: const Icon(Icons.tour_rounded, color: Colors.redAccent, size: 32),
+                                    ),
+                                    const SizedBox(height: 20),
+                                    const Text(
+                                      'Replay Guided Tour?',
+                                      style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      'This will restart the full onboarding tour from the beginning. You\'ll be taken to the home screen.',
+                                      style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 14, height: 1.5),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 28),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: OutlinedButton(
+                                            onPressed: () => Navigator.of(ctx).pop(),
+                                            style: OutlinedButton.styleFrom(
+                                              side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                                              padding: const EdgeInsets.symmetric(vertical: 14),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                            ),
+                                            child: Text('Cancel', style: TextStyle(color: Colors.white.withOpacity(0.7), fontWeight: FontWeight.w600)),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: ElevatedButton(
+                                            onPressed: () async {
+                                              Navigator.of(ctx).pop();
+                                              final prefs = await SharedPreferences.getInstance();
+                                              await prefs.setBool('hasSeenExploreTutorial', false);
+                                              await prefs.setBool('hasSeenCafeDetailsTutorial', false);
+                                              if (mounted) {
+                                                Navigator.pushAndRemoveUntil(
+                                                  context,
+                                                  MaterialPageRoute(builder: (_) => const HomeScreen()),
+                                                  (route) => false,
+                                                );
+                                              }
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.redAccent,
+                                              padding: const EdgeInsets.symmetric(vertical: 14),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                              elevation: 0,
+                                            ),
+                                            child: const Text('Replay', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
                         },
                       ),
+
                       const Divider(color: Colors.white12, height: 1),
                       _buildSwitchTile(
                         icon: Icons
