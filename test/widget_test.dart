@@ -1,30 +1,23 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:cofi/main.dart';
+import 'package:cofi/root_auth_gate.dart';
 
+/// Phase 0 baseline smoke test.
+///
+/// The previous version of this file was the default Flutter counter
+/// template referencing `MyApp`, which does not exist in CoFi (the root
+/// widget is `RootAuthGate`), so the entire test suite failed to compile.
+///
+/// Pumping the real widget tree requires Firebase initialization, which is
+/// out of scope for a plain unit/widget test environment. Deeper widget and
+/// integration tests are planned for Phase 5.
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  test('RootAuthGate can be constructed', () {
+    const gate = RootAuthGate();
+    expect(gate.initializationError, isNull);
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    const gateWithError =
+        RootAuthGate(initializationError: 'init failed');
+    expect(gateWithError.initializationError, 'init failed');
   });
 }

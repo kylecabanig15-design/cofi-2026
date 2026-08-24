@@ -1,0 +1,235 @@
+rules_version = '2';
+
+// CoFi Firestore Security Rules
+// =============================
+// Replaces the previous open rules (`allow read, write: if true`).
+//
+// Design notes:
+// - Admin identity is server-enforced: `isAdmin` lives on the user's own doc
+//   but users can never write that field themselves (see /users match).
+//   Promote/demote admins via Firebase Console (Console bypasses rules).
+// - Shop ownership: `ownerId` (claimed/business) or `posterId` (community
+//   submission). Only admins may transfer ownership between accounts.
+// - Reviewers legitimately update aggregate rating fields on shop docs
+//   (review_shop_screen.dart) — allowed ONLY when no other keys change.
+// - Notification fan-out is currently client-side (acting user writes into
+//   the recipient's notifications subcollection). Create is therefore open
+//   to signed-in users; read/update/delete restricted to the recipient.
+//   This tightens automatically when fan-out moves to Cloud Functions.
+// - TRANSITIONAL: clients still write `allJobs`/`pendingJobs`
+//   (lib/services/job_sync_service.dart). Write access stays signed-in-only
+//   until that client-side sync is removed in favor of the Cloud Function,
+//   then becomes `allow write: if false`.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Helpers ----------
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    function isShopStaff(shopId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/shops/$(shopId))
+        && (
+          get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId == request.auth.uid
+          || get(/databases/$(database)/documents/shops/$(shopId)).data.posterId == request.auth.uid
+        );
+    }
+
+    // True when an update touches nothing but aggregate rating data.
+    function onlyTouches(keys) {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasDifference(keys);
+    }
+
+    // ---------- Users ----------
+    match /users/{userId} {
+      allow read: if signedIn();
+
+      allow create: if isSelf(userId)
+        && (!('isAdmin' in request.resource.data) || request.resource.data.isAdmin == false);
+
+      // Owners edit their own profile but can never touch isAdmin.
+      allow update: if isAdmin()
+        || (isSelf(userId)
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin']));
+
+      // Account self-deletion clears/anonymizes related data first.
+      allow delete: if isAdmin() || isSelf(userId);
+
+      // Notifications are written by other users' actions (fan-out),
+      // but only the recipient can ever read or manage them.
+      match /notifications/{notificationId} {
+        allow read, update, delete: if isSelf(userId);
+        allow create: if signedIn();
+      }
+    }
+
+    // ---------- Shops ----------
+    match /shops/{shopId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow delete: if isAdmin() || isShopStaff(shopId);
+
+      // Staff/admin full edit; everyone else only aggregate-rating updates.
+      allow update: if isAdmin()
+        || isShopStaff(shopId)
+        || (signedIn() && onlyTouches(['reviews', 'ratings', 'ratingsCount', 'reviewCount']));
+
+      // ----- Jobs (posted and managed by shop staff) -----
+      match /jobs/{jobId} {
+        allow read: if signedIn();
+        allow create: if signedIn(); // applicants' metadata flows refined in Phase 2
+        allow update, delete: if isAdmin() || isShopStaff(shopId);
+      }
+
+      // ----- Events -----
+      match /events/{eventId} {
+        allow read: if signedIn();
+        allow create: if isAdmin() || isShopStaff(shopId);
+        // Staff manage events; attendees may update participation counters
+        // (RSVP increments run inside transactions on these fields).
+        allow update: if isAdmin()
+          || isShopStaff(shopId)
+          || (signedIn()
+              && onlyTouches(['participants', 'participantsCount', 'participantIds',
+                              'attendees', 'rsvpCount', 'updatedAt']));
+        allow delete: if isAdmin() || isShopStaff(shopId);
+
+        // Comments: anyone signed-in may join the discussion;
+        // authors and admins may edit/remove their own words.
+        match /comments/{commentId} {
+          allow read: if signedIn();
+          allow create: if signedIn();
+          allow update, delete: if isAdmin()
+            || (signedIn() && resource.data.userId == request.auth.uid);
+        }
+      }
+
+      // ----- Visit logs (independent of reviews by design) -----
+      match /visits/{visitId} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && (!('userId' in request.resource.data)
+              || request.resource.data.userId == request.auth.uid);
+        allow update, delete: if isAdmin()
+          || (signedIn() && resource.data.userId == request.auth.uid);
+      }
+
+      // ----- Reviews -----
+      match /reviews/{reviewId} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && (!('userId' in request.resource.data)
+              || request.resource.data.userId == request.auth.uid);
+        // Authors edit their own reviews; shop staff append responses.
+        allow update: if isAdmin()
+          || (signedIn() && resource.data.userId == request.auth.uid)
+          || isShopStaff(shopId);
+        allow delete: if isAdmin()
+          || (signedIn() && resource.data.userId == request.auth.uid);
+      }
+
+      match /menuImages/{imageId} {
+        allow read, create, delete: if signedIn();
+      }
+    }
+
+    // ---------- Ownership claims ----------
+    match /shop_claims/{claimId} {
+      allow read: if signedIn() || isAdmin();
+      allow create: if signedIn();
+      // Only admins decide claims. Claimants may withdraw their own
+      // still-pending claim.
+      allow update: if isAdmin();
+      allow delete: if isAdmin()
+        || (signedIn()
+            && resource.data.get('claimantId', resource.data.get('uid', '')) == request.auth.uid
+            && resource.data.get('status', 'pending') == 'pending');
+    }
+
+    // ---------- Collections (user-created café lists) ----------
+    match /lists/{listId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin()
+        || (signedIn() && resource.data.userId == request.auth.uid);
+
+      match /items/{itemId} {
+        allow read: if signedIn();
+        allow create: if signedIn();
+        allow update, delete: if isAdmin()
+          || (signedIn()
+              && exists(/databases/$(database)/documents/lists/$(listId))
+              && get(/databases/$(database)/documents/lists/$(listId)).data.userId == request.auth.uid);
+      }
+
+      // Shared-collection participants may see/join, list owner manages.
+      match /participants/{participantId} {
+        allow read: if signedIn();
+        allow create: if signedIn();
+        allow update, delete: if isAdmin()
+          || (signedIn()
+              && exists(/databases/$(database)/documents/lists/$(listId))
+              && get(/databases/$(database)/documents/lists/$(listId)).data.userId == request.auth.uid)
+          || resource.data.get('userId', '') == request.auth.uid;
+      }
+    }
+
+    // ---------- Shared collections (community hub) ----------
+    match /sharedCollections/{shareId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update, delete: if isAdmin()
+        || (signedIn() && resource.data.sharedBy == request.auth.uid);
+    }
+
+    // ---------- Job chat ----------
+    match /job_chats/{chatId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      // Participants and admins converse; message-level ownership enforced
+      // once chat participant model is normalized in Phase 2.
+      allow update: if isAdmin() || signedIn();
+      allow delete: if isAdmin();
+      match /messages/{messageId} {
+        allow read: if signedIn();
+        allow create: if signedIn();
+        allow update, delete: if isAdmin()
+          || (signedIn() && resource.data.senderId == request.auth.uid);
+      }
+    }
+
+    match /messages/{messageId} {
+      allow read, create: if signedIn();
+      allow update, delete: if isAdmin()
+        || (signedIn() && resource.data.senderId == request.auth.uid);
+    }
+
+    // ---------- Denormalized job feeds ----------
+    // TRANSITIONAL: written by clients today, Cloud Function after Phase 2.
+    match /allJobs/{jobId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+    match /pendingJobs/{jobId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+  }
+}
