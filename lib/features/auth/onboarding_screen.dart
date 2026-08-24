@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'package:cofi/features/auth/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cofi/utils/colors.dart';
@@ -77,7 +78,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await prefs.setBool('hasSeenOnboarding', true);
     } catch (e) {
       // If there's an error, continue anyway
-      print('Error saving onboarding status: $e');
+      debugLog('Error saving onboarding status: $e');
     }
 
     // Show location permission dialog before navigating
@@ -262,7 +263,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       // Permission granted, navigate to landing screen
       _navigateToLandingScreen();
     } catch (e) {
-      print('Error requesting location permission: $e');
+      debugLog('Error requesting location permission: $e');
       _navigateToLandingScreen();
     }
   }

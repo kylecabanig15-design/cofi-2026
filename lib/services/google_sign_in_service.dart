@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -13,7 +14,7 @@ class GoogleSignInService {
 
   static Future<UserCredential?> signInWithGoogle() async {
     try {
-      print('Starting Google Sign In...');
+      debugLog('Starting Google Sign In...');
 
       // First check if user is already signed in
       try {
@@ -23,17 +24,17 @@ class GoogleSignInService {
           await _googleSignIn.disconnect();
         }
       } catch (e) {
-        print('Disconnect error during sign in (ignoring): $e');
+        debugLog('Disconnect error during sign in (ignoring): $e');
       }
 
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
-        print('User cancelled');
+        debugLog('User cancelled');
         return null;
       }
 
-      print('Got Google user: ${googleUser.email}');
+      debugLog('Got Google user: ${googleUser.email}');
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
@@ -44,13 +45,13 @@ class GoogleSignInService {
       );
 
       final userCredential = await _auth.signInWithCredential(credential);
-      print('Signed in successfully');
+      debugLog('Signed in successfully');
 
       await _createOrUpdateUser(userCredential.user!);
 
       return userCredential;
     } catch (e) {
-      print('Error: $e');
+      debugLog('Error: $e');
       rethrow;
     }
   }
@@ -77,17 +78,17 @@ class GoogleSignInService {
           'createdAt': FieldValue.serverTimestamp(),
           'lastLoginAt': FieldValue.serverTimestamp(),
         });
-        print('User document created');
+        debugLog('User document created');
       } else {
         await userDoc.update({
           'lastLoginAt': FieldValue.serverTimestamp(),
           'displayName': user.displayName,
           'photoUrl': user.photoURL,
         });
-        print('User document updated');
+        debugLog('User document updated');
       }
     } catch (e) {
-      print('Firestore error: $e');
+      debugLog('Firestore error: $e');
       rethrow;
     }
   }
@@ -101,7 +102,7 @@ class GoogleSignInService {
       }
       await _googleSignIn.signOut();
     } catch (e) {
-      print('Sign out error: $e');
+      debugLog('Sign out error: $e');
     }
   }
   static Future<void> reAuthenticateWithGoogle() async {
@@ -118,7 +119,7 @@ class GoogleSignInService {
 
       await _auth.currentUser?.reauthenticateWithCredential(credential);
     } catch (e) {
-      print('Re-authentication error: $e');
+      debugLog('Re-authentication error: $e');
       rethrow;
     }
   }

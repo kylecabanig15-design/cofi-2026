@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -177,7 +178,7 @@ class _ResponseReviewBottomSheetState extends State<ResponseReviewBottomSheet> {
         'read': false,
       });
     } catch (e) {
-      print('Error sending notification: $e');
+      debugLog('Error sending notification: $e');
     }
   }
 

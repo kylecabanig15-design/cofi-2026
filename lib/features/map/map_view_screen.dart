@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
@@ -97,9 +98,9 @@ class _MapViewScreenState extends State<MapViewScreen> {
     try {
       // Check if location services are enabled
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      print('Location service enabled: $serviceEnabled');
+      debugLog('Location service enabled: $serviceEnabled');
       if (!serviceEnabled) {
-        print('Location services are disabled.');
+        debugLog('Location services are disabled.');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Please enable Location Services')));
@@ -112,12 +113,12 @@ class _MapViewScreenState extends State<MapViewScreen> {
       }
 
       // Check if location permissions are granted
-      print('Checking location permission status...');
+      debugLog('Checking location permission status...');
       var status = await Permission.locationWhenInUse.status;
-      print('Initial status: $status');
+      debugLog('Initial status: $status');
       
       if (status.isPermanentlyDenied) {
-        print('Location permission permanently denied.');
+        debugLog('Location permission permanently denied.');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -134,9 +135,9 @@ class _MapViewScreenState extends State<MapViewScreen> {
       }
 
       if (!status.isGranted) {
-        print('Requesting location permission...');
+        debugLog('Requesting location permission...');
         status = await Permission.locationWhenInUse.request();
-        print('New status: $status');
+        debugLog('New status: $status');
         if (!status.isGranted) {
           setState(() {
             _isLoadingLocation = false;
@@ -173,7 +174,7 @@ class _MapViewScreenState extends State<MapViewScreen> {
         );
       }
     } catch (e) {
-      print('Error getting user location: $e');
+      debugLog('Error getting user location: $e');
       if (mounted) {
         setState(() {
           _isPermissionResolved = true;

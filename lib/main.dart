@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'package:cofi/firebase_options.dart';
 import 'package:cofi/root_auth_gate.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -11,11 +12,11 @@ void main() async {
   String? initializationError;
   
   try {
-    print('Initializing Firebase...');
+    debugLog('Initializing Firebase...');
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    print('Firebase initialized');
+    debugLog('Firebase initialized');
 
     try {
       FirebaseFirestore.instance.settings = const Settings(
@@ -23,17 +24,17 @@ void main() async {
         cacheSizeBytes: 100 * 1024 * 1024,
       );
     } catch (e) {
-      print('Firestore settings already initialized or recovered: $e');
+      debugLog('Firestore settings already initialized or recovered: $e');
     }
 
     await GetStorage.init();
-    print('GetStorage initialized');
+    debugLog('GetStorage initialized');
     
     await NotificationService().init();
-    print('NotificationService initialized');
+    debugLog('NotificationService initialized');
   } catch (e, stack) {
-    print('Error during initialization: $e');
-    print('Stack: $stack');
+    debugLog('Error during initialization: $e');
+    debugLog('Stack: $stack');
     initializationError = e.toString();
   }
 

@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -371,7 +372,7 @@ class RecommendationService {
 
       return similarUsers.take(5).toList();
     } catch (e) {
-      print('❌ [ALGORITHM] Error in _findSimilarUsers: $e');
+      debugLog('❌ [ALGORITHM] Error in _findSimilarUsers: $e');
       return [];
     }
   }
@@ -399,28 +400,28 @@ class RecommendationService {
 
         // Cache is valid for 24 hours
         if (diff.inHours < 24) {
-          print(
+          debugLog(
               '✅ [ALGORITHM] Loading weighted scores from CACHE (Valid for 24h)');
-          print('   Timestamp: $date');
+          debugLog('   Timestamp: $date');
           return Map<String, double>.from(cachedScores);
         }
       }
     }
 
-    print(
+    debugLog(
         '🔄 [ALGORITHM] Recalculating Cosine Similarity & Weighted Scores...');
 
     try {
       final similarUsers = await _findSimilarUsers(user);
       if (similarUsers.isEmpty) {
-        print('⚠️ [ALGORITHM] No similar users found. Logic skipped.');
+        debugLog('⚠️ [ALGORITHM] No similar users found. Logic skipped.');
         return {};
       }
 
-      print(
+      debugLog(
           '👥 [ALGORITHM] Found ${similarUsers.length} similar users for collaborative filtering.');
       for (final twin in similarUsers) {
-        print(
+        debugLog(
             '   👯 TASTE TWIN: ${twin['userName']} | Similarity: ${(twin['similarity'] as double).toStringAsFixed(2)} | Common Shops: ${twin['commonShops']}');
       }
 
@@ -482,7 +483,7 @@ class RecommendationService {
           // Normalize: weighted average
           final finalScore = (score / totalSim).clamp(0.0, 5.0);
           scores[shopId] = finalScore;
-          print(
+          debugLog(
               '✨ [ALGORITHM] Recommendation Found: ${shopDoc.data()['name']} -> Score: ${finalScore.toStringAsFixed(2)}');
         }
       }
@@ -490,11 +491,11 @@ class RecommendationService {
       // Save to Cache
       await box.write(recCacheKey, scores);
       await box.write(recTimeKey, DateTime.now().millisecondsSinceEpoch);
-      print('💾 [ALGORITHM] Scores saved to local cache.');
+      debugLog('💾 [ALGORITHM] Scores saved to local cache.');
 
       return scores;
     } catch (e) {
-      print('❌ [ALGORITHM] Error calculating scores: $e');
+      debugLog('❌ [ALGORITHM] Error calculating scores: $e');
       return {};
     }
   }

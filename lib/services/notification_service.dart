@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -74,7 +75,7 @@ class NotificationService {
               Globals.navigatorKey.currentState?.pushNamed('/jobChat', arguments: payloadData['args']);
             }
           } catch (e) {
-            print('Error parsing payload: $e');
+            debugLog('Error parsing payload: $e');
           }
         }
       },
@@ -104,7 +105,7 @@ class NotificationService {
   /// (deferred out of main() so cold start is never blocked by the OS dialog).
   Future<void> requestPermissionIfNeeded() async {
     if (await Permission.notification.isDenied) {
-      print('🔔 [NOTIFICATIONS] Requesting permission...');
+      debugLog('🔔 [NOTIFICATIONS] Requesting permission...');
       await Permission.notification.request();
     }
   }
@@ -324,7 +325,7 @@ class NotificationService {
       final currentCount = _storage.read(_unreadCountKey) ?? 0;
       _storage.write(_unreadCountKey, currentCount + 1);
     } catch (e) {
-      print('Error saving notification: $e');
+      debugLog('Error saving notification: $e');
     }
   }
 
@@ -350,7 +351,7 @@ class NotificationService {
         _storage.write(_unreadCountKey, currentCount - 1);
       }
     } catch (e) {
-      print('Error marking notification as read: $e');
+      debugLog('Error marking notification as read: $e');
     }
   }
 
@@ -385,7 +386,7 @@ class NotificationService {
       // Reset unread count
       _storage.write(_unreadCountKey, 0);
     } catch (e) {
-      print('Error marking all notifications as read: $e');
+      debugLog('Error marking all notifications as read: $e');
     }
   }
 
@@ -430,7 +431,7 @@ class NotificationService {
         }
       }
     } catch (e) {
-      print('Error deleting notification: $e');
+      debugLog('Error deleting notification: $e');
     }
   }
 
@@ -456,7 +457,7 @@ class NotificationService {
       // Reset unread count
       _storage.write(_unreadCountKey, 0);
     } catch (e) {
-      print('Error deleting all notifications: $e');
+      debugLog('Error deleting all notifications: $e');
     }
   }
 
@@ -505,7 +506,7 @@ class NotificationService {
       // Update the last check time
       _storage.write(lastCheckKey, now.millisecondsSinceEpoch);
     } catch (e) {
-      print('Error checking for new data: $e');
+      debugLog('Error checking for new data: $e');
     }
   }
 
@@ -551,7 +552,7 @@ class NotificationService {
         }
       }
     } catch (e) {
-      print('Error checking for new jobs: $e');
+      debugLog('Error checking for new jobs: $e');
     }
   }
 
@@ -620,7 +621,7 @@ class NotificationService {
         }
       }
     } catch (e) {
-      print('Error checking for new job applications: $e');
+      debugLog('Error checking for new job applications: $e');
     }
   }
 
@@ -678,7 +679,7 @@ class NotificationService {
     double recommendationScore,
     String? imageUrl,
   ) async {
-    print('🚀 [NOTIFICATIONS] Creating recommendation notification: $shopName (Score: $recommendationScore)');
+    debugLog('🚀 [NOTIFICATIONS] Creating recommendation notification: $shopName (Score: $recommendationScore)');
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
@@ -692,9 +693,9 @@ class NotificationService {
     final isAlert = recommendationScore >= _soundThreshold; // 0.7 or higher
     
     if (isAlert) {
-      print('🎯 [NOTIFICATION LOGIC] PERFECT MATCH: $recommendationScore >= 0.7');
+      debugLog('🎯 [NOTIFICATION LOGIC] PERFECT MATCH: $recommendationScore >= 0.7');
     } else {
-      print('⚖️ [NOTIFICATION LOGIC] STANDARD: $recommendationScore < 0.7');
+      debugLog('⚖️ [NOTIFICATION LOGIC] STANDARD: $recommendationScore < 0.7');
     }
     
     final priority = isAlert ? 'high' : 'medium';
@@ -738,7 +739,7 @@ class NotificationService {
     required String body,
     String? payload,
   }) async {
-    print('🔔 [NOTIFICATIONS] Showing notification: $title');
+    debugLog('🔔 [NOTIFICATIONS] Showing notification: $title');
     final androidDetails = AndroidNotificationDetails(
       'cofi_high_importance',
       'CoFi High Importance',
@@ -876,7 +877,7 @@ class NotificationService {
       await prefs.setInt(nextGenKey, nextTime);
 
     } catch (e) {
-      print('Error creating recommendation notifications: $e');
+      debugLog('Error creating recommendation notifications: $e');
     }
   }
 
@@ -906,9 +907,9 @@ class NotificationService {
       final isTasteMatch = shopTags.any((tag) => userInterests.contains(tag));
       
       if (isTasteMatch) {
-        print('🎯 [DISCOVERY LOGIC] NEW SHOP INTEREST MATCH: $shopName matches interests');
+        debugLog('🎯 [DISCOVERY LOGIC] NEW SHOP INTEREST MATCH: $shopName matches interests');
       } else {
-        print('☕ [DISCOVERY LOGIC] NEW SHOP DISCOVERY: $shopName');
+        debugLog('☕ [DISCOVERY LOGIC] NEW SHOP DISCOVERY: $shopName');
       }
 
         final createdAt = shopData['postedAt'] as Timestamp? ?? Timestamp.now();
@@ -926,7 +927,7 @@ class NotificationService {
         }
       }
     } catch (e) {
-      print('Error checking for new shops: $e');
+      debugLog('Error checking for new shops: $e');
     }
   }
 
@@ -972,7 +973,7 @@ class NotificationService {
         }
       }
     } catch (e) {
-      print('Error checking for new events: $e');
+      debugLog('Error checking for new events: $e');
     }
   }
 

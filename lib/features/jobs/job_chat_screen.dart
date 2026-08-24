@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -70,7 +71,7 @@ class _JobChatScreenState extends State<JobChatScreen> {
       // We don't decrement the local storage counter directly here, 
       // but it will be handled properly when the user checks notifications.
     } catch (e) {
-      print('Error marking chat as read: $e');
+      debugLog('Error marking chat as read: $e');
     }
   }
 
@@ -185,7 +186,7 @@ class _JobChatScreenState extends State<JobChatScreen> {
           recipientRole: recipientRole,
         );
       } catch (e) {
-        print('Error sending chat notification: $e');
+        debugLog('Error sending chat notification: $e');
       }
 
       // Scroll to bottom

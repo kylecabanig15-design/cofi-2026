@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -540,23 +541,23 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
             final accountType = userData?['accountType'] as String? ?? 'user';
             
             // DEBUG: Log the account type
-            print('🔍 [SHOP SUBMISSION] User accountType: $accountType');
+            debugLog('🔍 [SHOP SUBMISSION] User accountType: $accountType');
             
             if (accountType == 'business') {
               submissionType = 'business';
               ownerId = user.uid; // Link shop to business owner
-              print('✅ [SHOP SUBMISSION] Setting submissionType to BUSINESS');
+              debugLog('✅ [SHOP SUBMISSION] Setting submissionType to BUSINESS');
             } else {
-              print('ℹ️ [SHOP SUBMISSION] Setting submissionType to COMMUNITY (accountType was: $accountType)');
+              debugLog('ℹ️ [SHOP SUBMISSION] Setting submissionType to COMMUNITY (accountType was: $accountType)');
             }
           } catch (e) {
             // Default to community if fetch fails
-            print('❌ [SHOP SUBMISSION] Error fetching accountType: $e');
+            debugLog('❌ [SHOP SUBMISSION] Error fetching accountType: $e');
             submissionType = 'community';
           }
         }
         
-        print('📤 [SHOP SUBMISSION] Final submissionType: $submissionType');
+        debugLog('📤 [SHOP SUBMISSION] Final submissionType: $submissionType');
         
         // Create new shop
         final data = {

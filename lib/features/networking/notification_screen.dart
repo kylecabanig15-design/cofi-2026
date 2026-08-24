@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/models/notification_model.dart';
@@ -613,7 +614,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
               }
             }
           } catch (e) {
-            print('Error navigating to event: $e');
+            debugLog('Error navigating to event: $e');
           }
         }
         break;
@@ -658,7 +659,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
               }
             }
           } catch (e) {
-            print('Error navigating to job: $e');
+            debugLog('Error navigating to job: $e');
           }
         }
         break;
@@ -675,7 +676,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
               ),
             );
           } catch (e) {
-            print('Error navigating to shop: $e');
+            debugLog('Error navigating to shop: $e');
           }
         }
         break;
@@ -696,7 +697,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
               ),
             );
           } catch (e) {
-            print('Error navigating to chat: $e');
+            debugLog('Error navigating to chat: $e');
           }
         }
         break;
@@ -712,7 +713,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
               ),
             );
           } catch (e) {
-            print('Error navigating to business applications: $e');
+            debugLog('Error navigating to business applications: $e');
           }
         }
         break;
@@ -745,7 +746,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
               }
             }
           } catch (e) {
-            print('Error navigating to event participation: $e');
+            debugLog('Error navigating to event participation: $e');
           }
         }
         break;

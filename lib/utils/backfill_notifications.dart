@@ -1,9 +1,10 @@
+import 'package:cofi/utils/logger.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/services/notification_service.dart';
 
 class BackfillNotifications {
   static Future<void> runBackfill() async {
-    print('🔄 Starting notification backfill process...');
+    debugLog('🔄 Starting notification backfill process...');
     final firestore = FirebaseFirestore.instance;
     final notificationService = NotificationService();
 
@@ -31,7 +32,7 @@ class BackfillNotifications {
               final appliedAt = application['appliedAt'] as Timestamp?;
               
               if (appliedAt != null) {
-                print('Backfilling application notification: $applicationId');
+                debugLog('Backfilling application notification: $applicationId');
                 await notificationService.createApplicationNotificationForBusiness(
                   ownerId,
                   applicationId,
@@ -70,7 +71,7 @@ class BackfillNotifications {
           final createdAt = reviewData['createdAt'] as Timestamp?;
 
           if (createdAt != null) {
-            print('Backfilling review notification: $reviewId');
+            debugLog('Backfilling review notification: $reviewId');
             await notificationService.createReviewNotification(
               ownerId,
               reviewId,
@@ -100,7 +101,7 @@ class BackfillNotifications {
             final joinedAt = participantData['joinedAt'] as Timestamp?;
 
             if (joinedAt != null && participantId != ownerId) {
-              print('Backfilling event participation notification: $participantId for event $eventId');
+              debugLog('Backfilling event participation notification: $participantId for event $eventId');
               await notificationService.createEventParticipationNotification(
                 ownerId,
                 eventId,
@@ -139,7 +140,7 @@ class BackfillNotifications {
           if (timestamp != null && senderId != null) {
             final recipientId = senderId == posterId ? applicantId : posterId;
             final recipientRole = recipientId == applicantId ? 'user' : 'business';
-            print('Backfilling chat message notification: $messageId');
+            debugLog('Backfilling chat message notification: $messageId');
             await notificationService.createChatNotification(
               recipientId,
               senderName,
@@ -159,9 +160,9 @@ class BackfillNotifications {
         }
       }
 
-      print('✅ Notification backfill completed successfully.');
+      debugLog('✅ Notification backfill completed successfully.');
     } catch (e) {
-      print('❌ Error during backfill: $e');
+      debugLog('❌ Error during backfill: $e');
     }
   }
 }

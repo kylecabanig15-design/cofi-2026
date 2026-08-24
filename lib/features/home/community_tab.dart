@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -87,7 +88,7 @@ class CommunityTab extends StatelessWidget {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (snapshot.hasError) {
-                  print(snapshot.error);
+                  debugLog(snapshot.error.toString());
                   return TextWidget(
                     text: 'Failed to load events',
                     fontSize: 14,
@@ -356,7 +357,7 @@ class CommunityTab extends StatelessWidget {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (snapshot.hasError) {
-                    print(snapshot.error);
+                    debugLog(snapshot.error.toString());
                     return TextWidget(
                       text: 'Failed to load jobs',
                       fontSize: 14,

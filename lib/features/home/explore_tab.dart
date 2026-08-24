@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'dart:math' as math;
 
 import 'package:cofi/features/cafe/cafe_details_screen.dart';
@@ -201,7 +202,7 @@ class ExploreTabState extends State<ExploreTab> {
       }
     } catch (e) {
       // Handle error silently or log it
-      print('Error fetching user interests: $e');
+      debugLog('Error fetching user interests: $e');
     }
   }
 
@@ -842,14 +843,14 @@ class ExploreTabState extends State<ExploreTab> {
       });
 
       // DEBUG PRINT: Show the top 3 breakdown to verify logic
-      print('🚀 [ALGORITHM] FOR YOU RANKING BREAKDOWN:');
+      debugLog('🚀 [ALGORITHM] FOR YOU RANKING BREAKDOWN:');
       for (int i = 0; i < (list.length > 5 ? 5 : list.length); i++) {
         final d = list[i];
         final collab = _shopRecommendationScores[d.id] ?? 0.0;
         final tags = (d.data()['tags'] as List?)?.cast<String>() ?? [];
         final matches = tags.where((t) => interests.contains(t)).toList();
         final bonus = matches.length * 1.5;
-        print(
+        debugLog(
             '   #${i + 1} ${d.data()['name']} | Final Score: ${(collab + bonus).toStringAsFixed(2)} '
             '(Collab: ${collab.toStringAsFixed(2)} + Interests: ${bonus.toStringAsFixed(2)} [${matches.join(', ')}])');
       }
@@ -1191,7 +1192,7 @@ class ExploreTabState extends State<ExploreTab> {
 
       return sorted;
     } catch (e) {
-      print('Error calculating featured shop recommendations: $e');
+      debugLog('Error calculating featured shop recommendations: $e');
       // Fallback to simple sorting
       return _sortFeaturedShops(shops);
     }

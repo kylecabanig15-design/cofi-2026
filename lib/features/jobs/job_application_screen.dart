@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -85,7 +86,7 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
         _hasApplied = hasApplied;
       });
     } catch (e) {
-      print('Error checking user status: $e');
+      debugLog('Error checking user status: $e');
     }
   }
 
@@ -108,7 +109,7 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
         });
       }
     } catch (e) {
-      print('Error populating user fields: $e');
+      debugLog('Error populating user fields: $e');
     }
   }
 
@@ -293,7 +294,7 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
             );
           }
         } catch (e) {
-          print('Failed to notify business owner: $e');
+          debugLog('Failed to notify business owner: $e');
         }
 
         ScaffoldMessenger.of(context).showSnackBar(

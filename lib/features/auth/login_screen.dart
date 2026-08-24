@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'package:cofi/features/auth/account_type_selection_screen.dart';
 import 'package:cofi/services/google_sign_in_service.dart';
 import 'package:flutter/material.dart';
@@ -198,7 +199,7 @@ class _LoginScreenState extends State<LoginScreen> {
           .collection('users')
           .doc(userCredential.user!.uid)
           .update({'emailVerified': true})
-          .catchError((e) => print('Error updating email status: $e'));
+          .catchError((e) => debugLog('Error updating email status: $e'));
 
       if (!mounted) return;
       

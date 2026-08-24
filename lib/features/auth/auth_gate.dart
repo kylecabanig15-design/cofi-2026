@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -20,7 +21,7 @@ class AuthGate extends StatelessWidget {
       future: _checkOnboardingStatus(),
       builder: (context, onboardingSnapshot) {
         if (onboardingSnapshot.hasError) {
-          print('Onboarding check error: ${onboardingSnapshot.error}');
+          debugLog('Onboarding check error: ${onboardingSnapshot.error}');
           return const SplashScreen();
         }
 
@@ -35,7 +36,7 @@ class AuthGate extends StatelessWidget {
           builder: (context, snapshot) {
 
             if (snapshot.hasError) {
-              print('Auth error: ${snapshot.error}');
+              debugLog('Auth error: ${snapshot.error}');
               return Scaffold(
                 backgroundColor: Colors.black,
                 body: Center(
@@ -78,7 +79,7 @@ class AuthGate extends StatelessWidget {
               builder: (context, userSnapshot) {
 
                 if (userSnapshot.hasError) {
-                  print('User profile error: ${userSnapshot.error}');
+                  debugLog('User profile error: ${userSnapshot.error}');
                   return const SplashScreen();
                 }
 
@@ -148,7 +149,7 @@ class AuthGate extends StatelessWidget {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getBool('hasSeenOnboarding') ?? false;
     } catch (e) {
-      print('Error checking onboarding status: $e');
+      debugLog('Error checking onboarding status: $e');
       // If there's an error accessing SharedPreferences, default to false
       return false;
     }

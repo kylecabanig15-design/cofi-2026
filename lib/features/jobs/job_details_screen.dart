@@ -1,3 +1,4 @@
+import 'package:cofi/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -56,7 +57,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error checking user type: $e');
+      debugLog('Error checking user type: $e');
       setState(() {
         _isLoading = false;
       });
@@ -85,7 +86,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       }
       return widget.job?['shopName'] ?? 'Unknown Shop';
     } catch (e) {
-      print('Error fetching shop name: $e');
+      debugLog('Error fetching shop name: $e');
       return widget.job?['shopName'] ?? 'Unknown Shop';
     }
   }
@@ -111,7 +112,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       }
       return widget.job?['address'] ?? 'Address not specified';
     } catch (e) {
-      print('Error fetching shop address: $e');
+      debugLog('Error fetching shop address: $e');
       return widget.job?['address'] ?? 'Address not specified';
     }
   }
@@ -197,7 +198,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
             ),
           );
         }
-        print('Error unpublishing job: $e');
+        debugLog('Error unpublishing job: $e');
       }
     }
   }
@@ -719,7 +720,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
       return LatLng(latitude, longitude);
     } catch (e) {
-      print('Error getting shop coordinates: $e');
+      debugLog('Error getting shop coordinates: $e');
       // Default to Davao City coordinates
       return LatLng(7.0896, 125.6180);
     }
@@ -822,7 +823,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
             ),
           );
         }
-        print('Error reopening job: $e');
+        debugLog('Error reopening job: $e');
       }
     }
   }
