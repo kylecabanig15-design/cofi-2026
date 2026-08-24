@@ -21,9 +21,12 @@ class _CustomLocationScreenState extends State<CustomLocationScreen> {
   Set<Marker> _markers = {};
   bool _isLoading = true;
 
-  // Google Maps API Key (use from your config)
+  // Google Geocoding API key — injected at build time, NEVER hardcoded:
+  //   flutter run --dart-define=GOOGLE_GEOCODING_API_KEY=AIza...
+  // The previous hardcoded key must be rotated in Google Cloud Console
+  // (it lives in git history) and restricted to the Geocoding API.
   static const String _googleMapsApiKey =
-      'AIzaSyDzqOhK3i_zOQ-6fN8PqfGqM0HkLqVDrMc';
+      String.fromEnvironment('GOOGLE_GEOCODING_API_KEY');
 
   // Davao City coordinates
   static const LatLng _davaoCityCenter = LatLng(7.0731, 125.6128);
@@ -93,24 +96,30 @@ class _CustomLocationScreenState extends State<CustomLocationScreen> {
     try {
       debugPrint('Reverse geocoding: lat=$latitude, lon=$longitude');
 
-      // Try Google Geocoding API first
-      final String googleUrl =
-          'https://maps.googleapis.com/maps/api/geocode/json?latlng=$latitude,$longitude&key=$_googleMapsApiKey';
-      final googleResponse = await http.get(Uri.parse(googleUrl));
+      if (_googleMapsApiKey.isEmpty) {
+        debugPrint('GOOGLE_GEOCODING_API_KEY not set; using Nominatim only');
+      } else {
+        // Try Google Geocoding API first
+        final String googleUrl =
+            'https://maps.googleapis.com/maps/api/geocode/json?latlng=$latitude,$longitude&key=$_googleMapsApiKey';
+        final googleResponse = await http.get(Uri.parse(googleUrl));
 
-      debugPrint(
-          'Google Geocoding response status: ${googleResponse.statusCode}');
-      if (googleResponse.statusCode == 200) {
-        final json = jsonDecode(googleResponse.body);
-        final results = json['results'] as List? ?? [];
+        debugPrint(
+            'Google Geocoding response status: ${googleResponse.statusCode}');
+        if (googleResponse.statusCode == 200) {
+          final json = jsonDecode(googleResponse.body);
+          final results = json['results'] as List? ?? [];
 
-        if (results.isNotEmpty) {
-          final address = results[0]['formatted_address'] as String? ?? '';
-          debugPrint('Extracted address from Google: $address');
-          setState(() {
-            _selectedLocationName = address;
-          });
-          return;
+          if (results.isNotEmpty) {
+            final address = results[0]['formatted_address'] as String? ?? '';
+            debugPrint('Extracted address from Google: $address');
+            if (mounted) {
+              setState(() {
+                _selectedLocationName = address;
+              });
+            }
+            return;
+          }
         }
       }
 
@@ -132,9 +141,11 @@ class _CustomLocationScreenState extends State<CustomLocationScreen> {
 
         if (address.isNotEmpty) {
           debugPrint('Extracted address from Nominatim: $address');
-          setState(() {
-            _selectedLocationName = address;
-          });
+          if (mounted) {
+            setState(() {
+              _selectedLocationName = address;
+            });
+          }
         }
       } else {
         debugPrint(

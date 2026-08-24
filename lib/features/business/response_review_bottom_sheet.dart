@@ -79,7 +79,14 @@ class _ResponseReviewBottomSheetState extends State<ResponseReviewBottomSheet> {
           .doc(user.uid)
           .get();
       final userData = userDoc.data();
-      final ownerName = (userData?['name'] as String?) ?? 'Owner';
+      // Prefer the name passed in by the caller, then fall back to the user
+      // doc fields (firstName/displayName; legacy docs may have 'name').
+      final ownerName = widget.ownerName.isNotEmpty
+          ? widget.ownerName
+          : (userData?['firstName'] as String?) ??
+              (userData?['displayName'] as String?) ??
+              (userData?['name'] as String?) ??
+              'Owner';
       final ownerAvatarUrl = (userData?['avatarUrl'] as String?);
       final shopName = (userData?['shopName'] as String?);
 
@@ -92,22 +99,32 @@ class _ResponseReviewBottomSheetState extends State<ResponseReviewBottomSheet> {
             .doc(widget.reviewId)
             .get();
 
-        final responses = (reviewDoc.data()?['responses'] as List?)
-                ?.cast<Map<String, dynamic>>() ??
-            [];
+        // Defensive extraction: legacy docs may hold non-map entries
+        final rawResponses = (reviewDoc.data()?['responses'] as List?) ?? const [];
+        final responses = rawResponses
+            .whereType<Map>()
+            .map((r) => Map<String, dynamic>.from(r))
+            .toList();
         final index = responses.indexWhere((r) => r['id'] == widget.responseId);
 
-        if (index != -1) {
-          responses[index]['responseText'] = _responseCtrl.text.trim();
-          responses[index]['updatedAt'] = Timestamp.now();
-
-          await FirebaseFirestore.instance
-              .collection('shops')
-              .doc(widget.shopId)
-              .collection('reviews')
-              .doc(widget.reviewId)
-              .update({'responses': responses});
+        if (index == -1) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('Response not found. It may have been deleted.')),
+          );
+          return;
         }
+
+        responses[index]['responseText'] = _responseCtrl.text.trim();
+        responses[index]['updatedAt'] = Timestamp.now();
+
+        await FirebaseFirestore.instance
+            .collection('shops')
+            .doc(widget.shopId)
+            .collection('reviews')
+            .doc(widget.reviewId)
+            .update({'responses': responses});
       } else {
         // Add new response
         final responseId = FirebaseFirestore.instance.collection('_').doc().id;
@@ -164,18 +181,20 @@ class _ResponseReviewBottomSheetState extends State<ResponseReviewBottomSheet> {
       final reviewerUserId = reviewDoc.data()?['userId'] as String?;
       if (reviewerUserId == null) return;
 
-      // Create notification
+      // Create notification using the schema NotificationModel.fromFirestore
+      // reads (title/body/createdAt/isRead) so recipients see real content.
       await FirebaseFirestore.instance
           .collection('users')
           .doc(reviewerUserId)
           .collection('notifications')
           .add({
-        'type': 'reply_to_review',
-        'shopId': widget.shopId,
-        'shopName': shopName ?? 'Café Owner',
-        'message': 'Your review has been replied to',
-        'timestamp': Timestamp.now(),
-        'read': false,
+        'title': '💬 ${shopName ?? 'A café'} replied to your review',
+        'body': 'Your review has been replied to',
+        'type': 'review_reply',
+        'relatedId': widget.shopId,
+        'createdAt': Timestamp.now(),
+        'isRead': false,
+        'recipientRole': 'user',
       });
     } catch (e) {
       debugLog('Error sending notification: $e');

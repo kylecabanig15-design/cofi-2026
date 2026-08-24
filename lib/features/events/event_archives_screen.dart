@@ -127,11 +127,15 @@ class _EventArchivesScreenState extends State<EventArchivesScreen> {
     required Map<String, dynamic> event,
     required VoidCallback onDelete,
   }) {
-    final title = (event['title'] ?? 'Event') as String;
-    final address = (event['address'] ?? '') as String;
+    // Legacy docs may hold non-string values here — coerce safely instead
+    // of hard-casting, which would throw during build.
+    String asString(dynamic v, String fallback) =>
+        v is String ? v : (v?.toString() ?? fallback);
+    final title = asString(event['title'], 'Event');
+    final address = asString(event['address'], '');
     final startDateRaw = event['startDate'];
     final endDateRaw = event['endDate'];
-    final imageUrl = (event['imageUrl'] ?? '') as String;
+    final imageUrl = asString(event['imageUrl'], '');
 
     String dateRange = 'Date TBD';
 

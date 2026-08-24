@@ -955,6 +955,14 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
             .collection('events')
             .doc(eventId);
 
+        // Check the participant still exists before touching the count;
+        // a double-tap / two-device race would otherwise drive the count
+        // negative permanently.
+        final participantSnap = await transaction.get(participantRef);
+        if (!participantSnap.exists) {
+          return;
+        }
+
         // Remove participant
         transaction.delete(participantRef);
 
@@ -1190,15 +1198,17 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   }
 
   String _formatEventDate(Map<String, dynamic> e) {
-    // Try 'date' first, then 'startDate'. Accept String or Timestamp.
+    // Try 'date' first, then 'startDate'. Accept DateTime, Timestamp or String.
     DateTime? dt;
     final d = e['date'];
+    if (d is DateTime) dt = d;
     if (d is Timestamp) dt = d.toDate();
     if (d is String && d.isNotEmpty) {
       dt = DateTime.tryParse(d);
     }
     final sd = e['startDate'];
     if (dt == null) {
+      if (sd is DateTime) dt = sd;
       if (sd is Timestamp) dt = sd.toDate();
       if (sd is String && sd.isNotEmpty) dt = DateTime.tryParse(sd);
     }
@@ -1207,17 +1217,20 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   }
 
   String _formatEventDate1(Map<String, dynamic> e) {
-    // Try 'date' first, then 'startDate'. Accept String or Timestamp.
+    // Prefer 'endDate' for the End Date display; fall back to 'date' for
+    // legacy single-day events that never stored an end date.
     DateTime? dt;
-    final d = e['date'];
-    if (d is Timestamp) dt = d.toDate();
-    if (d is String && d.isNotEmpty) {
-      dt = DateTime.tryParse(d);
+    final ed = e['endDate'];
+    if (ed is DateTime) dt = ed;
+    if (ed is Timestamp) dt = ed.toDate();
+    if (ed is String && ed.isNotEmpty) {
+      dt = DateTime.tryParse(ed);
     }
-    final sd = e['endDate'];
     if (dt == null) {
-      if (sd is Timestamp) dt = sd.toDate();
-      if (sd is String && sd.isNotEmpty) dt = DateTime.tryParse(sd);
+      final d = e['date'];
+      if (d is DateTime) dt = d;
+      if (d is Timestamp) dt = d.toDate();
+      if (d is String && d.isNotEmpty) dt = DateTime.tryParse(d);
     }
     if (dt == null) return 'Date not set';
     return DateFormat('MMMM d, yyyy').format(dt);

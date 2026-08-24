@@ -107,7 +107,7 @@ class Job {
     this.address = '',
     this.startDate,
     this.endDate,
-    this.status = 'pending',
+    this.status = 'active',
     this.shopId = '',
     this.shopName = '',
     this.city = 'Davao City',
@@ -146,7 +146,7 @@ class Job {
           '',
       startDate: _parseDate(data['startDate']),
       endDate: _parseDate(data['endDate']),
-      status: data['status'] as String? ?? 'pending',
+      status: data['status'] as String? ?? 'active',
       shopId: data['shopId'] as String? ?? '',
       shopName: data['shopName'] as String? ??
           data['cafe'] as String? ??

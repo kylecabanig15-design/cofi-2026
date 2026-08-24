@@ -32,28 +32,41 @@ class EventRepository {
   static const int _communityLimit = 10;
 
   /// Bounded, server-filtered stream of future public events for the
-  /// Explore carousel.
+  /// Explore carousel. Cutoff is the start of today so events that already
+  /// began today (ongoing) still surface; finished same-day events are
+  /// removed client-side by endDate checks.
+  ///
+  /// Visibility filtering happens post-parse because status values are
+  /// mixed/legacy in existing documents. Note: the server limit may include
+  /// hidden events that are then filtered out, so fewer than [limit] items
+  /// can be returned — acceptable for now.
   Stream<List<CafeEvent>> watchUpcomingEvents() {
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
     return _firestore
         .collectionGroup('events')
-        .where('startDate',
-            isGreaterThan: Timestamp.fromDate(DateTime.now()))
+        .where('startDate', isGreaterThan: Timestamp.fromDate(startOfToday))
         .orderBy('startDate')
         .limit(_upcomingLimit)
         .snapshots()
-        .map((s) => _parseAll(s, CafeEvent.fromFirestore));
+        .map((s) => _parseAll(s, CafeEvent.fromFirestore)
+            .where(isVisibleEvent)
+            .toList());
   }
 
-  /// Latest events for the Community tab. Client code filters paused,
-  /// archived and non-active statuses because status values are mixed in
-  /// existing documents.
+  /// Latest events for the Community tab. Visibility filtering (rejected,
+  /// paused, archived, private) happens post-parse because status values
+  /// are mixed in existing documents. Server limit may include hidden
+  /// events; acceptable for now.
   Stream<List<CafeEvent>> watchRecentEvents() {
     return _firestore
         .collectionGroup('events')
         .orderBy('createdAt', descending: true)
         .limit(_communityLimit)
         .snapshots()
-        .map((s) => _parseAll(s, CafeEvent.fromFirestore));
+        .map((s) => _parseAll(s, CafeEvent.fromFirestore)
+            .where(isVisibleEvent)
+            .toList());
   }
 
   Future<CafeEvent?> getEvent(String shopId, String eventId) async {
@@ -76,9 +89,17 @@ class EventRepository {
         .doc(eventId)
         .collection('participants')
         .snapshots()
-        .map((s) => s.docs
-            .map((d) => EventParticipant.fromFirestore(d.data()))
-            .toList());
+        .map((s) {
+      final out = <EventParticipant>[];
+      for (final d in s.docs) {
+        try {
+          out.add(EventParticipant.fromFirestore(d.data()));
+        } catch (e) {
+          debugLog('Skipping unparseable participant ${d.id}: $e');
+        }
+      }
+      return out;
+    });
   }
 
   /// Joins [userId] to the event and bumps the participant counter inside a
@@ -141,6 +162,12 @@ class EventRepository {
         .doc(eventId);
 
     await _firestore.runTransaction((tx) async {
+      final existing = await tx.get(participantRef);
+      if (!existing.exists) {
+        // Already cancelled (double-tap): abort without decrementing so
+        // participantsCount can never go negative.
+        return;
+      }
       tx.delete(participantRef);
       tx.update(eventRef, {
         'participantsCount': FieldValue.increment(-1),

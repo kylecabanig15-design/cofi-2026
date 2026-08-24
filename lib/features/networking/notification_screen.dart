@@ -13,7 +13,8 @@ import 'package:cofi/features/jobs/job_chat_screen.dart';
 import 'package:cofi/features/business/business_profile_screen.dart';
 import 'package:cofi/features/business/widgets/job_applications_sheet.dart';
 import 'package:cofi/widgets/custom_toast.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import 'package:cofi/services/user_session.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -27,7 +28,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   String _selectedFilter = 'All';
   final List<String> _filters = ['All', 'Chats', 'Jobs', 'Events', 'Cafés', 'Others'];
   String _accountType = 'user';
-  bool _isLoadingRole = true;
+  UserSession? _session;
 
   String _mapTypeToFilter(String type) {
     if (type == 'chat') return 'Chats';
@@ -64,23 +65,37 @@ class _NotificationScreenState extends State<NotificationScreen> {
   @override
   void initState() {
     super.initState();
-    _loadRole();
-  }
-
-  Future<void> _loadRole() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() {
-        _accountType = prefs.getString('account_type') ?? 'user';
-        _isLoadingRole = false;
-      });
-    }
-    // Check for new data and create notifications
+    // Role is resolved synchronously here AND kept reactive below: UserSession
+    // may still be resolving the user doc on cold start, so a one-shot read
+    // pinned business owners to the 'user' feed.
+    _session = context.read<UserSession>();
+    _accountType = (_session?.isBusiness ?? false) ? 'business' : 'user';
+    _session?.addListener(_handleSessionChanged);
+    // Check for new data and create notifications, then mark all as read
+    // for the current role once the screen is up.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _notificationService.checkForNewData();
-      // Mark all notifications as read when screen opens
       _notificationService.markAllAsRead(role: _accountType);
     });
+  }
+
+  /// Fires whenever UserSession notifies (e.g. user doc finished loading and
+  /// isBusiness flips). Reloads the feed for the new role and reruns the
+  /// mark-all-read pass so business notifications don't linger unread.
+  void _handleSessionChanged() {
+    if (!mounted) return;
+    final newRole = (_session?.isBusiness ?? false) ? 'business' : 'user';
+    if (newRole == _accountType) return;
+    setState(() => _accountType = newRole);
+    // StreamBuilder in build() picks up the new stream from setState;
+    // mark-all-read must cover the newly active role as well.
+    _notificationService.markAllAsRead(role: newRole);
+  }
+
+  @override
+  void dispose() {
+    _session?.removeListener(_handleSessionChanged);
+    super.dispose();
   }
 
   @override
@@ -130,9 +145,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         children: [
           _buildFilterChips(),
           Expanded(
-            child: _isLoadingRole 
-              ? const Center(child: CircularProgressIndicator(color: Colors.white))
-              : StreamBuilder<List<NotificationModel>>(
+            child: StreamBuilder<List<NotificationModel>>(
                   stream: _notificationService.getUserNotifications(role: _accountType),
                   builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -665,6 +678,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
         break;
       case 'shop':
       case 'review':
+      case 'recommendation':
+        // createRecommendationNotification stores a shop id in relatedId,
+        // so recommendations route exactly like shops.
         if (notification.relatedId != null) {
           try {
             Navigator.push(
@@ -676,9 +692,34 @@ class _NotificationScreenState extends State<NotificationScreen> {
               ),
             );
           } catch (e) {
-            debugLog('Error navigating to shop: $e');
+            debugLog('Error navigating to ${notification.type}: $e');
           }
         }
+        break;
+      case 'job_application':
+        // Recipient is the applicant; there is no named-routeable screen
+        // that shows application details from here, so surface the status
+        // inline as a dialog instead of dead-ending.
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: Colors.grey[900],
+            title: Text(
+              notification.title,
+              style: const TextStyle(color: Colors.white),
+            ),
+            content: Text(
+              notification.body,
+              style: const TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
         break;
       case 'chat':
         if (notification.metadata != null) {

@@ -102,6 +102,58 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
   final GlobalKey _logVisitKey = GlobalKey();
   final GlobalKey _reviewKey = GlobalKey();
 
+  // Gallery slider state (hoisted out of build so stream emissions don't
+  // reset the swipe position or leak controllers).
+  PageController? _galleryPageController;
+  ValueNotifier<int>? _galleryIndex;
+  List<String>? _galleryControllerImages;
+
+  void _ensureGalleryControllers(List<String> images) {
+    final existing = _galleryControllerImages;
+    if (_galleryPageController != null &&
+        existing != null &&
+        existing.length == images.length) {
+      bool same = true;
+      for (int i = 0; i < images.length; i++) {
+        if (existing[i] != images[i]) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return;
+    }
+    _galleryPageController?.dispose();
+    _galleryIndex?.dispose();
+    _galleryPageController = PageController();
+    _galleryIndex = ValueNotifier<int>(0);
+    _galleryControllerImages = List<String>.from(images);
+  }
+
+  @override
+  void dispose() {
+    _galleryPageController?.dispose();
+    _galleryIndex?.dispose();
+    super.dispose();
+  }
+
+  // Owner-response section: fetch the shop doc once (keyed by shopId) instead
+  // of one identical FutureBuilder fetch per response card.
+  Future<DocumentSnapshot<Map<String, dynamic>>>? _ownerShopFuture;
+  String? _ownerShopFutureShopId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final shopId = widget.shopId;
+    final hasShopId = shopId != null && shopId.isNotEmpty;
+    if (_ownerShopFutureShopId != shopId) {
+      _ownerShopFutureShopId = shopId;
+      _ownerShopFuture = hasShopId
+          ? FirebaseFirestore.instance.collection('shops').doc(shopId).get()
+          : null;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -124,6 +176,7 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
     final hasSeen = prefs.getBool('hasSeenCafeDetailsTutorial_$uid') ?? 
                     prefs.getBool('hasSeenCafeDetailsTutorial') ?? false;
     
+    if (!mounted) return;
     if (widget.isTourMode || !hasSeen) {
       _waitForTargetsAndShow();
     }
@@ -132,6 +185,7 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
   void _waitForTargetsAndShow() {
     int attempts = 0;
     void check() {
+      if (!mounted) return;
       if (_logVisitKey.currentContext != null && _reviewKey.currentContext != null) {
         _showTutorial();
       } else if (attempts < 20) {
@@ -144,6 +198,7 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
   }
 
   void _showTutorial() {
+    if (!mounted) return;
     _tutorialCoachMark = TutorialCoachMark(
       targets: _createTargets(),
       colorShadow: Colors.black,
@@ -642,7 +697,7 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
               child: Container(
                 color: Colors.black,
                 padding: const EdgeInsets.only(bottom: 16),
-                child: _buildActionButtons(context, submissionType, name),
+                child: _buildActionButtons(context, submissionType, name, s),
               ),
             ),
           ],
@@ -1087,12 +1142,12 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
       );
     }
 
-    return StatefulBuilder(
-      builder: (context, setCafeGalleryState) {
-        final currentIndex = ValueNotifier<int>(0);
-        final pageController = PageController();
-        return Container(
-          height: 400,
+    _ensureGalleryControllers(images);
+    final pageController = _galleryPageController!;
+    final currentIndex = _galleryIndex!;
+
+    return Container(
+      height: 400,
           decoration: BoxDecoration(
             color: Colors.grey[800],
             borderRadius: const BorderRadius.vertical(
@@ -1215,8 +1270,6 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
             ],
           ),
         );
-      },
-    );
   }
 
   Widget _buildContactsSection(List<_ContactItem> contacts) {
@@ -1473,125 +1526,140 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
                   ),
                 ),
             // Owner's Response Section
-            if (responses != null && responses.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              TextWidget(
-                text: "Owner's Response",
-                fontSize: 14,
-                color: Colors.white,
-                isBold: true,
+            // Skipped entirely when there is no shopId — avoids doc(null) fetches.
+            if (widget.shopId != null &&
+                widget.shopId!.isNotEmpty &&
+                responses != null &&
+                responses.isNotEmpty)
+              FutureBuilder<DocumentSnapshot<Map<String, dynamic>>?>(
+                future: _ownerShopFuture,
+                builder: (context, shopSnap) {
+                  final shopData = shopSnap.data?.data();
+                  final shopName = (shopData?['name'] as String?) ?? 'Café';
+                  final shopLogoUrl = shopData?['logoUrl'] as String?;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 16),
+                      TextWidget(
+                        text: "Owner's Response",
+                        fontSize: 14,
+                        color: Colors.white,
+                        isBold: true,
+                      ),
+                      const SizedBox(height: 12),
+                      ...responses.map((response) {
+                        return _buildOwnerResponseCard(
+                          response: response,
+                          shopName: shopName,
+                          shopLogoUrl: shopLogoUrl,
+                        );
+                      }),
+                    ],
+                  );
+                },
               ),
-              const SizedBox(height: 12),
-              ...responses.map((response) {
-                final responseText =
-                    (response['responseText'] as String?) ?? '';
-                final responseCreatedAt =
-                    (response['createdAt'] as Timestamp?)?.toDate();
-
-                String responseTimeAgo = 'Just now';
-                if (responseCreatedAt != null) {
-                  final diff = DateTime.now().difference(responseCreatedAt);
-                  if (diff.inDays > 7) {
-                    responseTimeAgo = '${diff.inDays ~/ 7}w ago';
-                  } else if (diff.inDays > 0) {
-                    responseTimeAgo = '${diff.inDays}d ago';
-                  } else if (diff.inHours > 0) {
-                    responseTimeAgo = '${diff.inHours}h ago';
-                  }
-                }
-
-                return FutureBuilder<DocumentSnapshot>(
-                  future: FirebaseFirestore.instance
-                      .collection('shops')
-                      .doc(widget.shopId)
-                      .get(),
-                  builder: (context, shopSnap) {
-                    final shopData =
-                        shopSnap.data?.data() as Map<String, dynamic>? ?? {};
-                    final shopName = (shopData['name'] as String?) ?? 'Café';
-                    final shopLogoUrl = (shopData['logoUrl'] as String?);
-
-                    return Container(
-                      margin: const EdgeInsets.only(top: 12),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[850],
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: primary, width: 1),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              if (shopLogoUrl != null && shopLogoUrl.isNotEmpty)
-                                Container(
-                                  width: 32,
-                                  height: 32,
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: ClipOval(
-                                    child: CachedNetworkImage(
-                                      imageUrl: shopLogoUrl,
-                                      fit: BoxFit.cover,
-                                      placeholder: (context, url) => Container(
-                                        color: primary,
-                                      ),
-                                      errorWidget: (context, url, error) =>
-                                          Container(color: primary),
-                                    ),
-                                  ),
-                                )
-                              else
-                                Container(
-                                  width: 32,
-                                  height: 32,
-                                  decoration: const BoxDecoration(
-                                    color: primary,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Center(
-                                    child: Icon(Icons.person,
-                                        color: Colors.white, size: 16),
-                                  ),
-                                ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    TextWidget(
-                                      text: shopName,
-                                      fontSize: 13,
-                                      color: Colors.white,
-                                      isBold: true,
-                                    ),
-                                    TextWidget(
-                                      text: responseTimeAgo,
-                                      fontSize: 11,
-                                      color: Colors.white60,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          TextWidget(
-                            text: responseText,
-                            fontSize: 13,
-                            color: Colors.white70,
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              }),
-            ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildOwnerResponseCard({
+    required Map<String, dynamic> response,
+    required String shopName,
+    String? shopLogoUrl,
+  }) {
+    final responseText = (response['responseText'] as String?) ?? '';
+    final responseCreatedAt =
+        (response['createdAt'] as Timestamp?)?.toDate();
+
+    String responseTimeAgo = 'Just now';
+    if (responseCreatedAt != null) {
+      final diff = DateTime.now().difference(responseCreatedAt);
+      if (diff.inDays > 7) {
+        responseTimeAgo = '${diff.inDays ~/ 7}w ago';
+      } else if (diff.inDays > 0) {
+        responseTimeAgo = '${diff.inDays}d ago';
+      } else if (diff.inHours > 0) {
+        responseTimeAgo = '${diff.inHours}h ago';
+      }
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[850],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: primary, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (shopLogoUrl != null && shopLogoUrl.isNotEmpty)
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                  ),
+                  child: ClipOval(
+                    child: CachedNetworkImage(
+                      imageUrl: shopLogoUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        color: primary,
+                      ),
+                      errorWidget: (context, url, error) =>
+                          Container(color: primary),
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: const BoxDecoration(
+                    color: primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.person,
+                        color: Colors.white, size: 16),
+                  ),
+                ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextWidget(
+                      text: shopName,
+                      fontSize: 13,
+                      color: Colors.white,
+                      isBold: true,
+                    ),
+                    TextWidget(
+                      text: responseTimeAgo,
+                      fontSize: 11,
+                      color: Colors.white60,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextWidget(
+            text: responseText,
+            fontSize: 13,
+            color: Colors.white70,
+          ),
+        ],
       ),
     );
   }
@@ -1717,8 +1785,11 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
     );
   }
 
-  Widget _buildActionButtons(BuildContext context, String submissionType, String shopName) {
-    final sm = widget.shop ?? const <String, dynamic>{};
+  Widget _buildActionButtons(BuildContext context, String submissionType, String shopName, Map<String, dynamic> shopData) {
+    // Prefer the live streamed shop doc data; widget.shop is only an initial fallback.
+    final sm = shopData.isNotEmpty
+        ? shopData
+        : (widget.shop ?? const <String, dynamic>{});
     final List embeddedReviews = (sm['reviews'] as List?) ?? const [];
     final user = FirebaseAuth.instance.currentUser;
 
@@ -1838,7 +1909,6 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
               ElevatedButton(
                 key: _logVisitKey,
                 onPressed: () {
-                  final sm = widget.shop ?? const <String, dynamic>{};
                   final shopName = (sm['name'] ?? '').toString();
                   final shopAddress = (sm['address'] ?? '').toString();
                   final logo = (sm['logoUrl'] ?? '').toString();
@@ -1876,7 +1946,6 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
               ElevatedButton(
                 key: _reviewKey,
                 onPressed: () {
-                  final sm = widget.shop ?? const <String, dynamic>{};
                   final shopName = (sm['name'] ?? '').toString();
                   final shopAddress = (sm['address'] ?? '').toString();
                   final logo = (sm['logoUrl'] ?? '').toString();

@@ -3,6 +3,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Thrown when the Google email already has an email/password account.
+/// Surfaces a friendly message through LoginScreen's error dialog.
+class GoogleAccountExistsException implements Exception {
+  final String email;
+  GoogleAccountExistsException(this.email);
+
+  @override
+  String toString() =>
+      'An account already exists for $email using email and password. '
+      'Please log in with your email and password instead.';
+}
+
 class GoogleSignInService {
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: [
@@ -44,7 +56,21 @@ class GoogleSignInService {
         idToken: googleAuth.idToken,
       );
 
-      final userCredential = await _auth.signInWithCredential(credential);
+      final UserCredential userCredential;
+      try {
+        userCredential = await _auth.signInWithCredential(credential);
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'account-exists-with-different-credential') {
+          // The Google email already belongs to an email/password account.
+          // Linking would require prompting for that password (out of scope
+          // here), so surface a friendly, typed error instead of the raw
+          // FirebaseAuthException.
+          debugLog(
+              'account-exists-with-different-credential for ${googleUser.email}');
+          throw GoogleAccountExistsException(googleUser.email);
+        }
+        rethrow;
+      }
       debugLog('Signed in successfully');
 
       await _createOrUpdateUser(userCredential.user!);

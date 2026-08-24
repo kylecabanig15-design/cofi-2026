@@ -114,10 +114,14 @@ class _JobArchivesScreenState extends State<JobArchivesScreen> {
     required Map<String, dynamic> job,
     required VoidCallback onDelete,
   }) {
-    final title = (job['title'] ?? 'Job') as String;
-    final type = (job['type'] ?? '') as String;
-    final rate = (job['rate'] ?? 'TBD') as String;
-    final paymentType = (job['paymentType'] ?? 'Per Hour') as String;
+    // Legacy docs may hold non-string values here — coerce safely instead
+    // of hard-casting, which would throw.
+    String asString(dynamic v, String fallback) =>
+        v == null ? fallback : v.toString();
+    final title = asString(job['title'], 'Job');
+    final type = asString(job['type'], '');
+    final rate = asString(job['rate'], 'TBD');
+    final paymentType = asString(job['paymentType'], 'Per Hour');
 
     return Container(
       decoration: BoxDecoration(

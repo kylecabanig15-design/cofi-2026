@@ -67,7 +67,15 @@ class MyContributionsScreen extends StatelessWidget {
             return _buildEmptyState(context);
           }
 
-          final docs = snapshot.data!.docs;
+          // Shops claimed by someone else no longer belong to this user.
+          final docs = snapshot.data!.docs
+              .where((d) =>
+                  d.data()['ownerId'] == null || d.data()['ownerId'] == user.uid)
+              .toList();
+
+          if (docs.isEmpty) {
+            return _buildEmptyState(context);
+          }
 
           return ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

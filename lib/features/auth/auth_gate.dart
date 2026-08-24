@@ -12,13 +12,33 @@ import 'package:cofi/features/auth/community_commitment_screen.dart';
 import 'package:cofi/features/home/home_screen.dart';
 import 'package:cofi/features/admin/admin_dashboard_screen.dart';
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  // Mutable so onboarding completion can re-evaluate it via setState
+  // (a `late final` future would cache the stale result forever).
+  Future<bool>? _onboardingFuture;
+
+  // Bumped to force the profile StreamBuilder to re-subscribe (retry).
+  int _profileAttempt = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Created once so rebuilds don't flip back to the splash screen or
+    // re-trigger SharedPreferences reads on every setState.
+    _onboardingFuture = _checkOnboardingStatus();
+  }
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<bool>(
-      future: _checkOnboardingStatus(),
+      future: _onboardingFuture,
       builder: (context, onboardingSnapshot) {
         if (onboardingSnapshot.hasError) {
           debugLog('Onboarding check error: ${onboardingSnapshot.error}');
@@ -53,34 +73,58 @@ class AuthGate extends StatelessWidget {
 
             final user = snapshot.data;
             if (user == null) {
+              debugLog('[AuthGate] authState: signed out');
               // Not signed in -> check if onboarding has been seen
               if (!hasSeenOnboarding) {
-                return const OnboardingScreen();
+                return OnboardingScreen(
+                  onOnboardingComplete: _markOnboardingComplete,
+                );
               }
               return const LoginScreen();
             }
 
+            debugLog('[AuthGate] authState: signed in uid=${user.uid} '
+                'emailVerified=${user.emailVerified}');
+
             // Signed in -> check if onboarding has been seen
             if (!hasSeenOnboarding) {
-              return const OnboardingScreen();
+              debugLog('[AuthGate] -> onboarding not seen');
+              return OnboardingScreen(
+                onOnboardingComplete: _markOnboardingComplete,
+              );
             }
 
             // Check if email is verified
             if (!user.emailVerified) {
+              debugLog('[AuthGate] -> BLOCKED: emailVerified=false, '
+                  'showing LoginScreen even though user is signed in!');
               return const LoginScreen(); // Redirect to login to show verification message
             }
 
             // Check if user has completed profile setup (accountType and interests)
             return StreamBuilder<DocumentSnapshot>(
+              // Key includes the attempt counter so "Retry" re-subscribes
+              // with a fresh listener instead of staying stuck on a dead one.
+              key: ValueKey('user-doc-${user.uid}-$_profileAttempt'),
               stream: FirebaseFirestore.instance
                   .collection('users')
                   .doc(user.uid)
                   .snapshots(),
               builder: (context, userSnapshot) {
 
+                debugLog('[AuthGate] profile stream: state='
+                    '${userSnapshot.connectionState} '
+                    'hasError=${userSnapshot.hasError} '
+                    'hasData=${userSnapshot.hasData} '
+                    'exists=${userSnapshot.data?.exists}');
+
                 if (userSnapshot.hasError) {
                   debugLog('User profile error: ${userSnapshot.error}');
-                  return const SplashScreen();
+                  return _buildProfileErrorScreen(
+                    context,
+                    'Couldn\'t load your profile',
+                    '${userSnapshot.error}',
+                  );
                 }
 
                 if (userSnapshot.connectionState == ConnectionState.waiting) {
@@ -88,13 +132,21 @@ class AuthGate extends StatelessWidget {
                 }
 
                 if (!userSnapshot.hasData || userSnapshot.data == null) {
-                  return const SplashScreen();
+                  debugLog('User profile doc missing for ${user.uid}, '
+                      'fromCache: ${userSnapshot.data?.exists}');
+                  return _buildProfileErrorScreen(
+                    context,
+                    'Profile not found',
+                    'Your account profile could not be loaded. '
+                        'Please try again.',
+                  );
                 }
 
                 final userData =
                     userSnapshot.data!.data() as Map<String, dynamic>?;
 
                 if (userData == null) {
+                  debugLog('[AuthGate] profile doc exists but data() is null');
                   return const SplashScreen();
                 }
 
@@ -102,6 +154,7 @@ class AuthGate extends StatelessWidget {
 
                 // 1. Priority: Admin
                 if (isAdmin) {
+                  debugLog('[AuthGate] -> AdminDashboardScreen');
                   return const AdminDashboardScreen();
                 }
 
@@ -121,26 +174,72 @@ class AuthGate extends StatelessWidget {
 
                 // If missing accountType, go through account type selection
                 if (!hasAccountType) {
+                  debugLog('[AuthGate] -> AccountTypeSelectionScreen');
                   return const AccountTypeSelectionScreen();
                 }
 
                 // If missing commitment, go through community commitment
                 if (!hasCommitment) {
+                  debugLog('[AuthGate] -> CommunityCommitmentScreen');
                   return const CommunityCommitmentScreen();
                 }
 
                 // If missing interests, go through interests selection
                 if (!hasInterests) {
+                  debugLog('[AuthGate] -> InterestSelectionScreen');
                   return const InterestSelectionScreen();
                 }
 
                 // All checks passed -> go home
+                debugLog('[AuthGate] -> HomeScreen');
                 return const HomeScreen();
               },
             );
           },
         );
       },
+    );
+  }
+
+  void _markOnboardingComplete() {
+    setState(() {
+      _onboardingFuture = Future.value(true);
+    });
+  }
+
+  /// Shown when the profile stream fails or returns nothing, so the user
+  /// isn't stuck on a silent splash screen forever. Retry re-subscribes.
+  Widget _buildProfileErrorScreen(
+      BuildContext context, String title, String detail) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              Text(title,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(detail,
+                  style: const TextStyle(color: Colors.white70),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: () => setState(() => _profileAttempt++),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

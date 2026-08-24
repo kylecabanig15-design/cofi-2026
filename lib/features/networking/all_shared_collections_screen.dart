@@ -154,7 +154,7 @@ class AllSharedCollectionsScreen extends StatelessWidget {
                   const SizedBox(height: 4),
                   TextWidget(
                     text:
-                        '$shopCount shops • Shared by ${collection['sharedBy'] ?? 'Community'}',
+                        '$shopCount shops • Shared by ${collection['sharedByName'] ?? collection['sharedBy'] ?? 'Community'}',
                     fontSize: 13,
                     color: Colors.white70,
                   ),

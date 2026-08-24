@@ -68,7 +68,7 @@ class CafeCollection {
       description: data['description'] as String? ?? '',
       type: data['type'] as String? ?? 'filter',
       filterTags:
-          ((filters?['tags'] as List?) ?? const []).cast<String>().toList(),
+          ((filters?['tags'] as List?) ?? const []).whereType<String>().toList(),
       isPrivate: data['isPrivate'] as bool? ?? true,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
@@ -122,7 +122,7 @@ class SharedCollection {
       shopCount: data['shopCount'] as int? ?? 0,
       isPrivate: data['isPrivate'] as bool? ?? false,
       previewLogos:
-          (data['previewLogos'] as List?)?.cast<String>() ?? const [],
+          (data['previewLogos'] as List?)?.whereType<String>().toList() ?? const [],
     );
   }
 

@@ -133,11 +133,15 @@ class _JobChatScreenState extends State<JobChatScreen> {
 
     try {
       final chatId = _getChatId();
+      // The other participant in the chat
+      final recipientId =
+          currentUser.uid == widget.posterId ? widget.applicantId : widget.posterId;
       final message = {
         'text': messageText,
         'senderId': currentUser.uid,
+        'recipientId': recipientId,
         'senderName': _currentUserName ?? 'User',
-        'timestamp': Timestamp.now(),
+        'timestamp': FieldValue.serverTimestamp(),
         'isRead': false,
       };
 
@@ -159,7 +163,7 @@ class _JobChatScreenState extends State<JobChatScreen> {
         'applicantId': widget.applicantId,
         'applicationId': widget.applicationId,
         'lastMessage': messageText,
-        'lastMessageTime': Timestamp.now(),
+        'lastMessageTime': FieldValue.serverTimestamp(),
         'lastSenderId': currentUser.uid,
         'participants': [widget.posterId, widget.applicantId],
         'createdAt': FieldValue.serverTimestamp(),
@@ -167,7 +171,6 @@ class _JobChatScreenState extends State<JobChatScreen> {
       }, SetOptions(merge: true));
 
       // Notify the recipient
-      final recipientId = currentUser.uid == widget.posterId ? widget.applicantId : widget.posterId;
       final recipientRole = recipientId == widget.applicantId ? 'user' : 'business';
       try {
         await NotificationService().createChatNotification(
@@ -211,6 +214,34 @@ class _JobChatScreenState extends State<JobChatScreen> {
         );
       }
     });
+  }
+
+  /// Marks incoming unread messages as read while the chat screen is open.
+  /// Only touches the 'isRead'/'readAt' keys, matching the security rules
+  /// that allow recipients to mark their own messages read.
+  Future<void> _markIncomingMessagesRead(List<QueryDocumentSnapshot> docs) async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) return;
+
+    final batch = _firestore.batch();
+    var pending = 0;
+    for (final doc in docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      if (data['senderId'] != currentUser.uid && data['isRead'] == false) {
+        batch.update(doc.reference, {
+          'isRead': true,
+          'readAt': FieldValue.serverTimestamp(),
+        });
+        pending++;
+      }
+    }
+    if (pending > 0) {
+      try {
+        await batch.commit();
+      } catch (e) {
+        debugLog('Error marking messages read: $e');
+      }
+    }
   }
 
   @override
@@ -342,6 +373,9 @@ class _JobChatScreenState extends State<JobChatScreen> {
                 }
 
                 final messages = snapshot.data!.docs;
+
+                // While the chat is open, mark incoming messages as read
+                _markIncomingMessagesRead(messages);
 
                 // Scroll to bottom when new messages arrive
                 WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -2,7 +2,9 @@ import 'package:cofi/utils/logger.dart';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cofi/features/cafe/cafe_details_screen.dart';
 import 'package:get_storage/get_storage.dart';
+import 'package:flutter/material.dart' show MaterialPageRoute;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,7 +23,6 @@ class NotificationService {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GetStorage _storage = GetStorage();
-  static const String _unreadCountKey = 'unread_notifications_count';
   
   // ========================================================================
   // AUDITORY ALERT CONFIGURATION (Panel Requirement)
@@ -68,15 +69,39 @@ class NotificationService {
     await _localNotifications.initialize(
       const InitializationSettings(android: androidSettings, iOS: iosSettings),
       onDidReceiveNotificationResponse: (NotificationResponse response) {
-        if (response.payload != null) {
-          try {
-            final payloadData = jsonDecode(response.payload!);
-            if (payloadData['type'] == 'chat') {
-              Globals.navigatorKey.currentState?.pushNamed('/jobChat', arguments: payloadData['args']);
-            }
-          } catch (e) {
-            debugLog('Error parsing payload: $e');
+        if (response.payload == null) return;
+        try {
+          final payloadData = jsonDecode(response.payload!);
+          final navigator = Globals.navigatorKey.currentState;
+          switch (payloadData['type']) {
+            case 'chat':
+              navigator?.pushNamed('/jobChat', arguments: payloadData['args']);
+              break;
+            case 'shop':
+            case 'recommendation':
+              // relatedId holds the shop id (see createShopNotification /
+              // createRecommendationNotification).
+              final relatedId = payloadData['relatedId'];
+              if (navigator != null &&
+                  relatedId is String &&
+                  relatedId.isNotEmpty) {
+                navigator.push(MaterialPageRoute(
+                  builder: (_) => CafeDetailsScreen(shopId: relatedId),
+                ));
+              }
+              break;
+            case 'event':
+              // Payload only carries the eventId; EventDetailsScreen needs
+              // the full event map plus its parent shopId, neither of which
+              // is available in a local-notification payload. Log and no-op.
+              debugLog(
+                  'System notification tapped for event ${payloadData['relatedId']}: insufficient payload data to route');
+              break;
+            default:
+              break;
           }
+        } catch (e) {
+          debugLog('Error parsing notification payload: $e');
         }
       },
     );
@@ -117,16 +142,24 @@ class NotificationService {
     // Cancel previous subscriptions so repeated auth events never leak
     // nested Firestore listeners (pre-existing leak).
     _authSub?.cancel();
-    _notifSub?.cancel();
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
-      if (user != null) {
-        _notifSub = _firestore
-            .collection('users')
-            .doc(user.uid)
-            .collection('notifications')
-            .where('isRead', isEqualTo: false)
-            .snapshots()
-            .listen((snapshot) async {
+      // Cancel the previous user's listener at the START of every auth event
+      // so sign-outs and account switches never leave orphaned listeners
+      // pushing stale notifications for the wrong account.
+      _notifSub?.cancel();
+      _notifSub = null;
+
+      if (user == null) {
+        return;
+      }
+
+      _notifSub = _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('notifications')
+          .where('isRead', isEqualTo: false)
+          .snapshots()
+          .listen((snapshot) async {
           for (var change in snapshot.docChanges) {
             if (change.type == DocumentChangeType.added) {
               final data = change.doc.data();
@@ -151,13 +184,18 @@ class NotificationService {
 
               // Only show local push for alerts
               if (notification.isAlert) {
-                String? payload;
-                if (notification.type == 'chat' && notification.metadata != null) {
-                  payload = jsonEncode({
-                    'type': 'chat',
+                // Every system notification must carry a payload with at
+                // least {type, relatedId} so taps can route (chat also gets
+                // its full metadata args).
+                final payloadMap = <String, dynamic>{
+                  'type': notification.type,
+                  if (notification.relatedId != null)
+                    'relatedId': notification.relatedId,
+                  if (notification.type == 'chat' &&
+                      notification.metadata != null)
                     'args': notification.metadata,
-                  });
-                }
+                };
+                final payload = jsonEncode(payloadMap);
                 
                 await _showLocalNotificationWithSound(
                   title: notification.title,
@@ -168,7 +206,6 @@ class NotificationService {
             }
           }
         });
-      }
     });
   }
 
@@ -266,6 +303,7 @@ class NotificationService {
       await _showLocalNotificationWithSound(
         title: '🎯 Taste Match Discovery!',
         body: '$shopName perfectly matches your coffee interests • $formattedTime',
+        payload: jsonEncode({'type': 'shop', 'relatedId': shopId}),
       );
     }
   }
@@ -321,9 +359,10 @@ class NotificationService {
 
       await docRef.set(notification.toFirestore());
 
-      // Update unread count
-      final currentCount = _storage.read(_unreadCountKey) ?? 0;
-      _storage.write(_unreadCountKey, currentCount + 1);
+      // NOTE: no local unread-counter write here. The badge is Firestore-
+      // driven (watchUnreadCount), so the recipient's device picks up the
+      // count from the new document — incrementing on the SENDER's device
+      // only polluted sender storage and never moved the recipient's badge.
     } catch (e) {
       debugLog('Error saving notification: $e');
     }
@@ -344,12 +383,6 @@ class NotificationService {
             'isRead': true,
             'readAt': FieldValue.serverTimestamp(),
           });
-
-      // Update unread count
-      final currentCount = _storage.read(_unreadCountKey) ?? 0;
-      if (currentCount > 0) {
-        _storage.write(_unreadCountKey, currentCount - 1);
-      }
     } catch (e) {
       debugLog('Error marking notification as read: $e');
     }
@@ -361,7 +394,6 @@ class NotificationService {
     if (user == null) return;
 
     try {
-      final batch = _firestore.batch();
       final notifications = await _firestore
           .collection('users')
           .doc(user.uid)
@@ -369,35 +401,76 @@ class NotificationService {
           .where('isRead', isEqualTo: false)
           .get();
 
-      for (final doc in notifications.docs) {
+      final matching = notifications.docs.where((doc) {
         final data = doc.data();
         final docRole = data['recipientRole'] ?? 'user';
-        
-        if (docRole == role) {
+        return docRole == role;
+      }).toList();
+
+      // Firestore batches cap at 500 writes — chunk into batches of 450 and
+      // commit each sequentially.
+      const chunkSize = 450;
+      for (var i = 0; i < matching.length; i += chunkSize) {
+        final batch = _firestore.batch();
+        for (final doc in matching.skip(i).take(chunkSize)) {
           batch.update(doc.reference, {
             'isRead': true,
             'readAt': FieldValue.serverTimestamp(),
           });
         }
+        await batch.commit();
       }
-
-      await batch.commit();
-
-      // Reset unread count
-      _storage.write(_unreadCountKey, 0);
     } catch (e) {
       debugLog('Error marking all notifications as read: $e');
     }
   }
 
-  // Get unread notifications count from local storage
-  int getUnreadCount() {
-    return _storage.read(_unreadCountKey) ?? 0;
+  /// Firestore-driven unread badge count for the current user. Streams live
+  /// updates so the badge stays correct across devices without any local
+  /// counter bookkeeping. Falls back to a closed stream on error (callers
+  /// treat null/0 as "no unread").
+  ///
+  /// NOTE: cloud_firestore 6.0.3's AggregateQuery only exposes get(), not
+  /// snapshots(), so a live count aggregation stream isn't available; we
+  /// stream the filtered query and use docs.length instead.
+  Stream<int> watchUnreadCount() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const Stream.empty();
+    try {
+      return _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('notifications')
+          .where('isRead', isEqualTo: false)
+          .snapshots()
+          .map((snapshot) => snapshot.docs.length)
+          .handleError((e) {
+        debugLog('Error watching unread count: $e');
+      });
+    } catch (e) {
+      debugLog('Error setting up unread count watch: $e');
+      return const Stream.empty();
+    }
   }
 
-  // Reset unread count (call when user opens notifications screen)
-  void resetUnreadCount() {
-    _storage.write(_unreadCountKey, 0);
+  // Get unread notifications count via a one-shot Firestore count
+  // aggregation (kept for any non-streaming callers).
+  Future<int> getUnreadCount() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return 0;
+    try {
+      final snapshot = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('notifications')
+          .where('isRead', isEqualTo: false)
+          .count()
+          .get();
+      return snapshot.count ?? 0;
+    } catch (e) {
+      debugLog('Error getting unread count: $e');
+      return 0;
+    }
   }
 
   // Delete a notification
@@ -414,21 +487,12 @@ class NotificationService {
           .get();
 
       if (notificationDoc.exists) {
-        final wasUnread = notificationDoc.data()?['isRead'] == false;
-
         await _firestore
             .collection('users')
             .doc(user.uid)
             .collection('notifications')
             .doc(notificationId)
             .delete();
-
-        if (wasUnread) {
-          final currentCount = _storage.read(_unreadCountKey) ?? 0;
-          if (currentCount > 0) {
-            _storage.write(_unreadCountKey, currentCount - 1);
-          }
-        }
       }
     } catch (e) {
       debugLog('Error deleting notification: $e');
@@ -453,30 +517,52 @@ class NotificationService {
       }
 
       await batch.commit();
-      
-      // Reset unread count
-      _storage.write(_unreadCountKey, 0);
     } catch (e) {
       debugLog('Error deleting all notifications: $e');
     }
   }
 
-  // Check for new data in collections and create notifications
-  Future<void> checkForNewData() async {
+  // Minimum interval between heavy notification scans (full verified-shops
+  // scan + per-shop jobs/events subcollection queries). With ~100 shops a
+  // single run costs 200+ mostly-empty Firestore round-trips, so callers
+  // that fire this repeatedly (HomeScreen init timer, NotificationScreen
+  // open) are throttled to one heavy scan per interval. Pass [force] to
+  // override explicitly.
+  static const Duration _heavyScanMinInterval = Duration(hours: 6);
+
+  // Check for new data in collections and create notifications.
+  //
+  // [force] bypasses the 6-hour heavy-scan throttle for explicit callers.
+  // When throttled, this becomes a near no-op: the Taste Twins generator
+  // still runs because it carries its own independent throttle.
+  Future<void> checkForNewData({bool force = false}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     try {
-      // Get the last check time from storage (USER SPECIFIC)
-    final lastCheckKey = 'last_notification_check_${user.uid}';
-      final lastCheck = _storage.read(lastCheckKey);
+      // Get the last HEAVY SCAN time from storage (USER SPECIFIC)
+      final lastCheckKey = 'last_notification_check_${user.uid}';
+      final lastCheckMs = _storage.read<int>(lastCheckKey);
       final now = DateTime.now();
+      final nowMs = now.millisecondsSinceEpoch;
+
+      final bool shouldRunHeavyScan = force ||
+          lastCheckMs == null ||
+          (nowMs - lastCheckMs) >= _heavyScanMinInterval.inMilliseconds;
+
+      if (!shouldRunHeavyScan) {
+        // Throttled: skip the expensive shops scan and per-shop loops.
+        // FIRST TIME / STARTUP RECOMMENDATIONS:
+        // This ensures new accounts see recommendations even if no shops were "just posted"
+        await createRecommendationsBasedOnInterests();
+        return;
+      }
 
       // Convert to Timestamp for Firestore query
       // DEFAULT: Set to 'now' if no previous check exists (e.g. new account)
       // This ensures users only receive notifications for events/cafes posted AFTER they created their account
-      Timestamp lastCheckTimestamp = lastCheck != null
-          ? Timestamp.fromDate(DateTime.fromMillisecondsSinceEpoch(lastCheck))
+      Timestamp lastCheckTimestamp = lastCheckMs != null
+          ? Timestamp.fromMillisecondsSinceEpoch(lastCheckMs)
           : Timestamp.fromDate(now);
 
       // Check for new data with a SINGLE shared shops fetch (previously the
@@ -486,100 +572,90 @@ class NotificationService {
           .where('isVerified', isEqualTo: true)
           .get();
 
-      // Check for new jobs
-      await _checkForNewJobs(user.uid, lastCheckTimestamp, verifiedShops);
+      // One user-doc fetch shared by every stage of this run (previously
+      // fetched separately in _checkForNewShops AND the taste-twin pass).
+      final userDoc =
+          await _firestore.collection('users').doc(user.uid).get();
 
-      // Check for new job applications
-      await _checkForNewJobApplications(
+      // Jobs are fetched ONCE per shop; the same docs feed BOTH the new-job
+      // notification check and the job-application status check.
+      await _checkForNewJobsAndApplications(
           user.uid, lastCheckTimestamp, verifiedShops);
 
       // Check for new shops
-      await _checkForNewShops(user.uid, lastCheckTimestamp);
+      final userInterests =
+          (userDoc.data()?['interests'] as List? ?? []).cast<String>();
+      await _checkForNewShops(user.uid, lastCheckTimestamp,
+          userInterestsCache: userInterests);
 
       // Check for new events
       await _checkForNewEvents(user.uid, lastCheckTimestamp, verifiedShops);
 
-    // FIRST TIME / STARTUP RECOMMENDATIONS: 
+    // FIRST TIME / STARTUP RECOMMENDATIONS:
     // This ensures new accounts see recommendations even if no shops were "just posted"
-    await createRecommendationsBasedOnInterests();
+    await createRecommendationsBasedOnInterests(userDocCache: userDoc);
 
       // Update the last check time
-      _storage.write(lastCheckKey, now.millisecondsSinceEpoch);
+      _storage.write(lastCheckKey, nowMs);
     } catch (e) {
       debugLog('Error checking for new data: $e');
     }
   }
 
-  // Check for new jobs and create notifications
-  Future<void> _checkForNewJobs(String userId, Timestamp? lastCheck,
-      QuerySnapshot<Map<String, dynamic>> verifiedShops) async {
+  // Check for new jobs AND job-application status updates in a SINGLE pass.
+  //
+  // Previously _checkForNewJobs and _checkForNewJobApplications each ran an
+  // identical per-shop jobs query (2x round-trips for the same data). The
+  // jobs snapshot is now fetched once per shop and both checks evaluate the
+  // same docs, keeping each check's distinct filtering/notification logic:
+  //   - new-job notifications: type 'job' keyed by jobId
+  //   - application updates: type 'job_application' keyed by applicationId,
+  //     only for applications whose applicantId matches this user
+  Future<void> _checkForNewJobsAndApplications(String userId,
+      Timestamp? lastCheck, QuerySnapshot<Map<String, dynamic>> verifiedShops) async {
     try {
+      // Hoisted out of loops: shared refs/constants are built once, not per
+      // shop / per doc. Per-shop query objects themselves necessarily differ
+      // by shopId so they cannot be shared across iterations.
+      final userNotificationsRef =
+          _firestore.collection('users').doc(userId).collection('notifications');
+      final fallbackNow = Timestamp.now();
+
       for (final shopDoc in verifiedShops.docs) {
         final shopData = shopDoc.data();
         final isVerified = (shopData['isVerified'] as bool?) ?? false;
         if (!isVerified) continue;
 
         final shopId = shopDoc.id;
-        Query jobsQuery = FirebaseFirestore.instance
+        final jobsSnapshot = await FirebaseFirestore.instance
             .collection('shops')
             .doc(shopId)
             .collection('jobs')
-            .where('createdAt', isGreaterThan: lastCheck);
-
-        final jobsSnapshot = await jobsQuery.get();
+            .where('createdAt', isGreaterThan: lastCheck)
+            .get();
 
         for (final jobDoc in jobsSnapshot.docs) {
           final jobData = jobDoc.data() as Map<String, dynamic>?;
           if (jobData == null) continue;
           final jobId = jobDoc.id;
+
+          // ---- NEW JOB NOTIFICATION CHECK ----
           final jobTitle = jobData['title'] ?? 'New Job';
           final shopName =
               jobData['shopName'] ?? jobData['cafe'] ?? 'Coffee Shop';
 
-          final createdAt = jobData['createdAt'] as Timestamp? ?? Timestamp.now();
+          final createdAt = jobData['createdAt'] as Timestamp? ?? fallbackNow;
           // Check if notification already exists for this job
-          final existingNotification = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(userId)
-              .collection('notifications')
+          final existingJobNotification = await userNotificationsRef
               .where('type', isEqualTo: 'job')
               .where('relatedId', isEqualTo: jobId)
               .get();
 
-          if (existingNotification.docs.isEmpty) {
+          if (existingJobNotification.docs.isEmpty) {
             await createJobNotification(userId, jobId, jobTitle, shopName, createdAt);
           }
-        }
-      }
-    } catch (e) {
-      debugLog('Error checking for new jobs: $e');
-    }
-  }
 
-  // Check for new job applications and create notifications
-  Future<void> _checkForNewJobApplications(String userId, Timestamp? lastCheck,
-      QuerySnapshot<Map<String, dynamic>> verifiedShops) async {
-    try {
-      for (final shopDoc in verifiedShops.docs) {
-        final shopData = shopDoc.data();
-        final isVerified = (shopData['isVerified'] as bool?) ?? false;
-        if (!isVerified) continue;
-        
-        final shopId = shopDoc.id;
-        Query jobsQuery = FirebaseFirestore.instance
-            .collection('shops')
-            .doc(shopId)
-            .collection('jobs')
-            .where('createdAt', isGreaterThan: lastCheck);
-
-        final jobsSnapshot = await jobsQuery.get();
-
-        for (final jobDoc in jobsSnapshot.docs) {
-          final jobData = jobDoc.data() as Map<String, dynamic>?;
-          if (jobData == null) continue;
-          final jobId = jobDoc.id;
-
-          // Check if this job has applications from the current user
+          // ---- JOB APPLICATION STATUS CHECK (same docs, no re-query) ----
           if (jobData.containsKey('applications')) {
             final applications = jobData['applications'] as List<dynamic>?;
             if (applications != null) {
@@ -593,15 +669,12 @@ class NotificationService {
                   final appliedAt = application['appliedAt'] as Timestamp?;
 
                   // Check if notification already exists for this application
-                  final existingNotification = await FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(userId)
-                      .collection('notifications')
+                  final existingApplicationNotification = await userNotificationsRef
                       .where('type', isEqualTo: 'job_application')
                       .where('relatedId', isEqualTo: applicationId)
                       .get();
 
-                  if (existingNotification.docs.isEmpty) {
+                  if (existingApplicationNotification.docs.isEmpty) {
                     await createJobApplicationNotification(
                         userId,
                         applicationId,
@@ -609,10 +682,8 @@ class NotificationService {
                         status,
                         appliedAt,
                         jobId,
-                        jobData['title'] ?? 'New Job',
-                        jobData['shopName'] ??
-                            jobData['cafe'] ??
-                            'Coffee Shop');
+                        jobTitle,
+                        shopName);
                   }
                 }
               }
@@ -621,7 +692,7 @@ class NotificationService {
         }
       }
     } catch (e) {
-      debugLog('Error checking for new job applications: $e');
+      debugLog('Error checking for new jobs/applications: $e');
     }
   }
 
@@ -725,6 +796,7 @@ class NotificationService {
       await _showLocalNotificationWithSound(
         title: '🎯 Perfect Match Found!',
         body: '$shopName matches ${(recommendationScore * 100).toInt()}% of your preferences • $formattedTime',
+        payload: jsonEncode({'type': 'recommendation', 'relatedId': shopId}),
       );
     }
   }
@@ -779,8 +851,11 @@ class NotificationService {
   }
 
 
-  // Check for and create recommendation notifications based on user interests
-  Future<void> createRecommendationsBasedOnInterests() async {
+  // Check for and create recommendation notifications based on user interests.
+  // Pass [userDocCache] to reuse a user-doc snapshot already fetched during
+  // this run instead of re-reading it from Firestore.
+  Future<void> createRecommendationsBasedOnInterests(
+      {DocumentSnapshot<Map<String, dynamic>>? userDocCache}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
@@ -797,7 +872,8 @@ class NotificationService {
       }
 
       // Get user's interests and visited shops
-      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      final userDoc = userDocCache ??
+          await _firestore.collection('users').doc(user.uid).get();
       if (!userDoc.exists) return;
 
       final userData = userDoc.data();
@@ -810,11 +886,14 @@ class NotificationService {
 
       if (userInterests.isEmpty) return;
 
-      // Query shops that match user interests and haven't been visited or recommended yet
+      // Query shops that match user interests and haven't been visited or
+      // recommended yet. Firestore caps `arrayContainsAny` at 10 values, so
+      // cap the interest list (an oversized query throws and silently kills
+      // Taste-Twins generation for users with >10 interests).
       final shopsSnapshot = await _firestore
           .collection('shops')
           .where('isVerified', isEqualTo: true)
-          .where('tags', arrayContainsAny: userInterests)
+          .where('tags', arrayContainsAny: userInterests.take(10).toList())
           .limit(10)
           .get();
 
@@ -842,9 +921,11 @@ class NotificationService {
         final shopName = (shopData['name'] as String?) ?? 'Café';
         final imageUrl = (shopData['logoUrl'] as String?);
 
-        // Calculate a simple recommendation score based on rating and reviews
+        // Calculate a simple recommendation score based on rating and reviews.
+        // Shop docs store the count in `ratingCount` (reviews live in the
+        // shops/{id}/reviews subcollection, not on the doc).
         final ratings = (shopData['ratings'] as num?)?.toDouble() ?? 0.0;
-        final reviewCount = ((shopData['reviews'] as List?)?.length ?? 0);
+        final reviewCount = (shopData['ratingCount'] as num?)?.toInt() ?? 0;
         final recommendationScore =
             ratings / 5.0 * (1 + (reviewCount / 100).clamp(0, 1));
 
@@ -882,18 +963,29 @@ class NotificationService {
   }
 
   // Check for new shops and create notifications
-  Future<void> _checkForNewShops(String userId, Timestamp? lastCheck) async {
+  Future<void> _checkForNewShops(String userId, Timestamp? lastCheck,
+      {List<String>? userInterestsCache}) async {
     try {
-      // Get user interests for taste matching
-      final userDoc = await _firestore.collection('users').doc(userId).get();
-      final userInterests = (userDoc.data()?['interests'] as List? ?? []).cast<String>();
+      // Reuse the user doc fetched earlier in this run when provided
+      // (avoids a duplicate user-doc read per scan).
+      List<String> userInterests;
+      if (userInterestsCache != null) {
+        userInterests = userInterestsCache;
+      } else {
+        final userDoc = await _firestore.collection('users').doc(userId).get();
+        userInterests =
+            (userDoc.data()?['interests'] as List? ?? []).cast<String>();
+      }
 
-      Query shopsQuery = FirebaseFirestore.instance
+      final shopsSnapshot = await FirebaseFirestore.instance
           .collection('shops')
           .where('isVerified', isEqualTo: true)
-          .where('postedAt', isGreaterThan: lastCheck);
+          .where('postedAt', isGreaterThan: lastCheck)
+          .get();
 
-      final shopsSnapshot = await shopsQuery.get();
+      final fallbackNow = Timestamp.now();
+      final userNotificationsRef =
+          _firestore.collection('users').doc(userId).collection('notifications');
 
       for (final shopDoc in shopsSnapshot.docs) {
         final shopData = shopDoc.data() as Map<String, dynamic>?;
@@ -912,16 +1004,12 @@ class NotificationService {
         debugLog('☕ [DISCOVERY LOGIC] NEW SHOP DISCOVERY: $shopName');
       }
 
-        final createdAt = shopData['postedAt'] as Timestamp? ?? Timestamp.now();
+        final createdAt = shopData['postedAt'] as Timestamp? ?? fallbackNow;
         // Check if notification already exists for this shop
-        final existingNotification = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .collection('notifications')
+        final existingNotification = await userNotificationsRef
             .where('type', isEqualTo: 'shop')
             .where('relatedId', isEqualTo: shopId)
             .get();
-
         if (existingNotification.docs.isEmpty) {
           await createShopNotification(userId, shopId, shopName, imageUrl, createdAt, isAlert: isTasteMatch);
         }
@@ -932,23 +1020,24 @@ class NotificationService {
   }
 
   // Check for new events and create notifications
-  // Check for new events and create notifications
   Future<void> _checkForNewEvents(String userId, Timestamp? lastCheck,
       QuerySnapshot<Map<String, dynamic>> verifiedShops) async {
     try {
+      final fallbackNow = Timestamp.now();
+      final userNotificationsRef =
+          _firestore.collection('users').doc(userId).collection('notifications');
+
       for (final shopDoc in verifiedShops.docs) {
         final shopId = shopDoc.id;
-        final shopName = shopDoc.data()['name'] ?? 'Café';
         final shopImageUrl = shopDoc.data()['logoUrl'];
 
-        Query eventsQuery = FirebaseFirestore.instance
+        final eventsSnapshot = await FirebaseFirestore.instance
             .collection('shops')
             .doc(shopId)
             .collection('events')
             .where('status', isEqualTo: 'approved')
-            .where('createdAt', isGreaterThan: lastCheck);
-
-        final eventsSnapshot = await eventsQuery.get();
+            .where('createdAt', isGreaterThan: lastCheck)
+            .get();
 
         for (final eventDoc in eventsSnapshot.docs) {
           final eventData = eventDoc.data() as Map<String, dynamic>?;
@@ -956,13 +1045,10 @@ class NotificationService {
           final eventId = eventDoc.id;
           final eventTitle = eventData['title'] ?? 'New Event';
           final imageUrl = eventData['imageUrl'] ?? shopImageUrl;
-          final createdAt = eventData['createdAt'] as Timestamp? ?? Timestamp.now();
+          final createdAt = eventData['createdAt'] as Timestamp? ?? fallbackNow;
 
           // Check if notification already exists
-          final existingNotification = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(userId)
-              .collection('notifications')
+          final existingNotification = await userNotificationsRef
               .where('type', isEqualTo: 'event')
               .where('relatedId', isEqualTo: eventId)
               .get();

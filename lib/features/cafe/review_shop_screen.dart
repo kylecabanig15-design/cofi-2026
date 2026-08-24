@@ -89,14 +89,20 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
       CustomToast.showError(context, 'Failed to upload image: $e');
       return null;
     } finally {
-      setState(() {
-        _isUploading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
     }
   }
 
   Future<void> _submit() async {
     if (_submitting) return;
+    if (widget.shopId.isEmpty) {
+      CustomToast.showError(context, 'Cannot review without a shop.');
+      return;
+    }
     if (_rating == 0) {
       CustomToast.showInfo(context, 'Please select a rating.');
       return;
@@ -160,11 +166,18 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
         }, SetOptions(merge: true));
       } catch (_) {}
       
-      // Fetch shop to update embedded reviews and calculate new average rating
-      final shopDoc = await shopRef.get();
-      if (shopDoc.exists) {
-        final data = shopDoc.data();
-        final currentReviews = (data?['reviews'] as List?) ?? [];
+      // Update embedded reviews and average rating atomically from a
+      // transaction-fresh snapshot (prevents lost updates under concurrency).
+      // Cap the embedded array to the most recent 50 reviews to stay well
+      // under Firestore's 1MiB document limit.
+      String? ownerId;
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final snap = await tx.get(shopRef);
+        if (!snap.exists) return;
+        final data = snap.data()!;
+        ownerId = data['ownerId'] as String?;
+
+        final currentReviews = (data['reviews'] as List?) ?? [];
         final newReviewEntry = {
           'authorName': reviewMap['authorName'],
           'authorPhotoUrl': reviewMap['authorPhotoUrl'],
@@ -175,44 +188,56 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
           if (imageUrl != null) 'imageUrl': imageUrl,
         };
         final List<dynamic> updatedReviews = List.from(currentReviews)..add(newReviewEntry);
-        
+        if (updatedReviews.length > 50) {
+          updatedReviews.removeRange(0, updatedReviews.length - 50);
+        }
+
         // Calculate new average rating
         double totalRating = 0;
         for (var r in updatedReviews) {
-          totalRating += (r['rating'] as num?)?.toDouble() ?? 0.0;
+          totalRating += ((r as Map)['rating'] as num?)?.toDouble() ?? 0.0;
         }
         final double avgRating = updatedReviews.isEmpty ? 0.0 : totalRating / updatedReviews.length;
 
-        await shopRef.update({
+        tx.update(shopRef, {
           'reviews': updatedReviews,
           'ratings': avgRating,
-        }).catchError((_) {});
+        });
+      }).catchError((_) {});
 
-        // Notify the business owner in real-time
-        final ownerId = data?['ownerId'];
-        if (ownerId != null && ownerId != user.uid) {
-          try {
-            await NotificationService().createReviewNotification(
-              ownerId,
-              reviewId,
-              widget.shopId,
-              widget.shopName,
-              reviewMap['authorName'] as String,
-              reviewMap['text'] as String,
-              (reviewMap['rating'] as num).toDouble(),
-              imageUrl,
-              Timestamp.now(),
-            );
-          } catch (e) {
-            debugPrint('Failed to send review notification: $e');
-          }
+      // Notify the business owner in real-time
+      if (ownerId != null && ownerId != user.uid) {
+        try {
+          await NotificationService().createReviewNotification(
+            ownerId!,
+            reviewId,
+            widget.shopId,
+            widget.shopName,
+            reviewMap['authorName'] as String,
+            reviewMap['text'] as String,
+            (reviewMap['rating'] as num).toDouble(),
+            imageUrl,
+            Timestamp.now(),
+          );
+        } catch (e) {
+          debugPrint('Failed to send review notification: $e');
         }
       }
 
       if (!mounted) return;
+      // Capture the root navigator/messenger before popping, so the toast
+      // isn't shown from a route that's about to be removed.
+      final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
       Navigator.pop(context);
-      CustomToast.showSuccess(context, 'Review submitted successfully!');
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: const Text('Review submitted successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
     } catch (e) {
       if (!mounted) return;
       CustomToast.showError(context, 'Failed: $e');

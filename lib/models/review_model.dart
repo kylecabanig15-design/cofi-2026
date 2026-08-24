@@ -1,5 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Accepts Timestamp, ISO String, DateTime or null (→ null).
+DateTime? _parseDate(dynamic value) {
+  if (value is Timestamp) return value.toDate();
+  if (value is DateTime) return value;
+  if (value is String && value.isNotEmpty) {
+    return DateTime.tryParse(value);
+  }
+  return null;
+}
+
+/// Epoch placeholder so missing dates sort to the bottom instead of being
+/// faked as "today". No widget renders this value directly (screens read
+/// raw Firestore data), so the sentinel never surfaces in the UI.
+DateTime get _epochDate => DateTime.fromMillisecondsSinceEpoch(0);
+
 class ReviewResponse {
   final String id;
   final String ownerName;
@@ -23,7 +38,7 @@ class ReviewResponse {
       ownerName: data['ownerName'] ?? '',
       ownerAvatarUrl: data['ownerAvatarUrl'] ?? '',
       responseText: data['responseText'] ?? '',
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: _parseDate(data['createdAt']) ?? _epochDate,
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
   }
@@ -86,7 +101,7 @@ class Review {
       rating: data['rating'] ?? 0,
       tags: (data['tags'] as List?)?.cast<String>() ?? [],
       imageUrl: data['imageUrl'] as String?,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: _parseDate(data['createdAt']) ?? _epochDate,
       responses: responses,
     );
   }

@@ -92,7 +92,8 @@ class ReviewsScreen extends StatelessWidget {
 
                         return _buildReviewCard(
                           context: context,
-                          rating: m['rating'],
+                          rating:
+                              m['rating'] is num ? (m['rating'] as num).toInt() : 0,
                           name: name,
                           review: review.isNotEmpty ? review : '—',
                           tags: tags,
@@ -136,7 +137,8 @@ class ReviewsScreen extends StatelessWidget {
 
                     return _buildReviewCard(
                       context: context,
-                      rating: m['rating'],
+                      rating:
+                          m['rating'] is num ? (m['rating'] as num).toInt() : 0,
                       name: name,
                       review: review.isNotEmpty ? review : '—',
                       tags: tags,
@@ -149,6 +151,28 @@ class ReviewsScreen extends StatelessWidget {
               ],
             ),
     );
+  }
+
+  /// True when the signed-in user may manage review responses: the shop's
+  /// owner (posterId fallback matches deployed security rules semantics) or
+  /// an admin.
+  Future<bool> _isStaffOrAdmin(String? uid, String? shopId) async {
+    if (uid == null || shopId == null || shopId.isEmpty) return false;
+    try {
+      final results = await Future.wait([
+        FirebaseFirestore.instance.collection('shops').doc(shopId).get(),
+        FirebaseFirestore.instance.collection('users').doc(uid).get(),
+      ]);
+      final shopData = results[0].data();
+      final ownerId = shopData?['ownerId'] as String?;
+      final posterId = shopData?['posterId'] as String?;
+      final effectiveOwner =
+          (ownerId != null && ownerId.isNotEmpty) ? ownerId : posterId;
+      if (effectiveOwner != null && effectiveOwner == uid) return true;
+      return results[1].data()?['isAdmin'] == true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Widget _buildReviewCard({
@@ -171,7 +195,11 @@ class ReviewsScreen extends StatelessWidget {
     }
 
     final currentUser = FirebaseAuth.instance.currentUser;
-    final isOwner = currentUser != null;
+
+    return FutureBuilder<bool>(
+      future: _isStaffOrAdmin(currentUser?.uid, shopId),
+      builder: (context, staffSnap) {
+        final isOwner = staffSnap.data ?? false;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -295,7 +323,10 @@ class ReviewsScreen extends StatelessWidget {
             const SizedBox(height: 16),
 
             // Owner's Response Section
-            if (responses != null && responses.isNotEmpty) ...[
+            if (responses != null &&
+                responses.isNotEmpty &&
+                shopId != null &&
+                shopId.isNotEmpty) ...[
               const SizedBox(height: 16),
               TextWidget(
                 text: "Owner's Response",
@@ -401,9 +432,9 @@ class ReviewsScreen extends StatelessWidget {
                                         isScrollControlled: true,
                                         backgroundColor: Colors.transparent,
                                         builder: (context) =>
-                                            ResponseReviewBottomSheet(
-                                          shopId: shopId ?? '',
-                                          reviewId: reviewId ?? '',
+                                             ResponseReviewBottomSheet(
+                                           shopId: shopId,
+                                           reviewId: reviewId ?? '',
                                           reviewText: review,
                                           reviewAuthor: name,
                                           ownerName: shopName,
@@ -569,5 +600,7 @@ class ReviewsScreen extends StatelessWidget {
         ),
       ),
     );
+  },
+);
   }
 }

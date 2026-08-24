@@ -1,5 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Shared visibility rule for Community and Explore event feeds.
+///
+/// Production events are written with status 'pending' by default, so
+/// filtering must be exclusion-based (not approved-only) or every feed would
+/// be empty. An event is visible unless it was rejected, paused, archived,
+/// or marked private.
+bool isVisibleEvent(CafeEvent e) =>
+    e.status != 'rejected' && !e.isPaused && !e.isArchived && !e.isPrivate;
+
 class EventParticipant {
   final String userId;
   final String userName;
@@ -18,8 +27,19 @@ class EventParticipant {
       userId: data['userId'] as String? ?? '',
       userName: data['userName'] as String? ?? 'User',
       userPhotoUrl: data['userPhotoUrl'] as String? ?? '',
-      joinedAt: (data['joinedAt'] as Timestamp?)?.toDate(),
+      joinedAt: _parseJoinedAt(data['joinedAt']),
     );
+  }
+
+  /// Accepts Timestamp, ISO String or null so one malformed participant doc
+  /// cannot break parsing.
+  static DateTime? _parseJoinedAt(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String && value.isNotEmpty) {
+      return DateTime.tryParse(value);
+    }
+    return null;
   }
 
   Map<String, dynamic> toFirestore() => {
@@ -112,7 +132,9 @@ class CafeEvent {
           ? (data['longitude'] as num).toDouble()
           : null,
       status: data['status'] as String? ?? 'pending',
-      participantsCount: data['participantsCount'] as int? ?? 0,
+      participantsCount: data['participantsCount'] is num
+          ? (data['participantsCount'] as num).toInt()
+          : 0,
       shopId: data['shopId'] as String? ?? '',
       createdAt: _parseDate(data['createdAt']),
       updatedAt: _parseDate(data['updatedAt']),

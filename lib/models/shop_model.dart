@@ -164,18 +164,38 @@ class Shop {
     return null;
   }
 
+  /// Day keys as written by submit_shop_screen.dart: lowercase full names.
+  static const List<String> _dayKeys = [
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
+    'sunday'
+  ];
+
   bool get isOpenNow {
     final now = DateTime.now();
-    final dayKey = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][now.weekday % 7];
-    final day = schedule[dayKey] ?? schedule[now.weekday.toString()];
+    final dayKey = _dayKeys[now.weekday - 1];
+    final day = schedule[dayKey] ?? schedule[dayKey.substring(0, 3)];
     if (day == null || !day.isOpen) return false;
-    final open = DateTime.parse(
-        '${now.toIso8601String().substring(0, 10)} ${day.open.isEmpty ? "00:00" : day.open}'
-            .replaceFirst(' ', 'T'));
-    final close = DateTime.parse(
-        '${now.toIso8601String().substring(0, 10)} ${day.close.isEmpty ? "23:59" : day.close}'
-            .replaceFirst(' ', 'T'));
-    return now.isAfter(open) && now.isBefore(close);
+    int toMinutes(String hhmm) {
+      final parts = hhmm.split(':');
+      if (parts.length != 2) return 0;
+      return (int.tryParse(parts[0]) ?? 0) * 60 + (int.tryParse(parts[1]) ?? 0);
+    }
+
+    final om = toMinutes(day.open.isEmpty ? '00:00' : day.open);
+    // Empty close time means end of day.
+    final cm = toMinutes(day.close.isEmpty ? '23:59' : day.close);
+    final nm = now.hour * 60 + now.minute;
+    // Overnight hours (close < open, e.g. 18:00–01:00): the café is open
+    // when "now" is after open OR before close on the next calendar day.
+    if (cm <= om) {
+      return nm >= om || nm < cm;
+    }
+    return nm >= om && nm < cm;
   }
 
   bool get isOwnedByBusiness => ownerId != null && ownerId!.isNotEmpty;

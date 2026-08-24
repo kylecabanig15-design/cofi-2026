@@ -45,6 +45,10 @@ class _LogVisitScreenState extends State<LogVisitScreen> {
 
   Future<void> _submit() async {
     if (_submitting) return;
+    if (widget.shopId.isEmpty) {
+      CustomToast.showError(context, 'Cannot log a visit without a shop.');
+      return;
+    }
     setState(() => _submitting = true);
     try {
       final user = FirebaseAuth.instance.currentUser;

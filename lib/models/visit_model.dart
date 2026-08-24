@@ -1,5 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Accepts Timestamp, ISO String, DateTime or null (→ null).
+DateTime? _parseDate(dynamic value) {
+  if (value is Timestamp) return value.toDate();
+  if (value is DateTime) return value;
+  if (value is String && value.isNotEmpty) {
+    return DateTime.tryParse(value);
+  }
+  return null;
+}
+
 class VisitLog {
   final String id;
   final String userId;
@@ -24,8 +34,10 @@ class VisitLog {
       userEmail: data['userEmail'] as String? ?? '',
       note: data['note'] as String? ?? '',
       tags: (data['tags'] as List?)?.cast<String>() ?? const [],
-      createdAt:
-          (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: _parseDate(data['createdAt']) ??
+          // Epoch placeholder so missing dates sort to the bottom instead
+          // of being faked as "today"; never rendered directly in the UI.
+          DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
 

@@ -9,7 +9,6 @@ import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/widgets/button_widget.dart';
 import 'dart:async'; // Added for TimeoutException
-import 'package:cofi/features/auth/auth_gate.dart';
 import 'package:cofi/utils/auth_error_handler.dart';
 import 'package:cofi/widgets/premium_background.dart';
 
@@ -124,8 +123,22 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text,
       ).timeout(const Duration(seconds: 30));
 
+      debugLog('[Login] signIn succeeded uid=${userCredential.user?.uid} '
+          'emailVerified=${userCredential.user?.emailVerified}');
+
+      // Refresh the user's profile so a freshly-verified email is reflected
+      // before reading emailVerified (otherwise verified users get bounced
+      // into the verify dialog loop).
+      try {
+        await userCredential.user!.reload();
+      } catch (e) {
+        // Non-fatal: fall through with the cached verification state.
+        debugPrint('Failed to reload user after sign-in: $e');
+      }
+
       // Check if email is verified
       if (!userCredential.user!.emailVerified) {
+        debugLog('[Login] emailVerified=false after reload -> signing out');
         await FirebaseAuth.instance.signOut(); // Sign out the user
 
         if (!mounted) return;
@@ -201,10 +214,16 @@ class _LoginScreenState extends State<LoginScreen> {
           .update({'emailVerified': true})
           .catchError((e) => debugLog('Error updating email status: $e'));
 
+      // Warm up Firestore with the fresh credentials before letting AuthGate
+      // take over — right after sign-in its first read can be evaluated
+      // against stale auth, which used to leave users stuck on a blank screen.
+      await _warmUpFirestoreAccess(userCredential.user!.uid);
+
+      // No manual navigation needed - AuthGate listens to authStateChanges
+      // and swaps this screen out automatically. If LoginScreen was pushed on
+      // top of another route, just pop back so the gate can take over.
       if (!mounted) return;
-      
-      // Force navigation to home/gate to ensure UI updates
-      Navigator.of(context).pushReplacementNamed('/');
+      Navigator.of(context).popUntil((route) => route.isFirst);
 
     } on Exception catch (e) {
       if (mounted) {
@@ -227,8 +246,16 @@ class _LoginScreenState extends State<LoginScreen> {
       if (userCredential != null && mounted) {
         // Success
         await FirebaseAuth.instance.currentUser?.reload();
+
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid != null) {
+          await _warmUpFirestoreAccess(uid);
+        }
+
+        // AuthGate reacts to the auth state change on its own; just unwind
+        // any routes pushed on top of it ('/' has no named-route handler).
         if (mounted) {
-           Navigator.of(context).pushReplacementNamed('/');
+          Navigator.of(context).popUntil((route) => route.isFirst);
         }
 
       } else if (mounted && userCredential == null) {
@@ -369,6 +396,23 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+
+  /// Performs a Firestore read right after sign-in (with retries) so the
+  /// SDK's credentials are fully propagated before AuthGate's profile stream
+  /// issues its first query. Non-fatal: if all attempts fail, the gate's
+  /// retry screen will handle it.
+  Future<void> _warmUpFirestoreAccess(String uid) async {
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        debugLog('Firestore warm-up succeeded on attempt $attempt');
+        return;
+      } catch (e) {
+        debugLog('Firestore warm-up attempt $attempt failed: $e');
+        await Future.delayed(const Duration(milliseconds: 400));
+      }
+    }
   }
 
   void _showErrorDialog(BuildContext context, String title, String message) {

@@ -9,8 +9,8 @@ import 'package:cofi/widgets/app_text_form_field.dart';
 import 'package:cofi/widgets/button_widget.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/utils/colors.dart';
-import 'package:cofi/features/home/home_screen.dart';
 import 'package:cofi/services/notification_service.dart';
+import 'package:cofi/utils/app_signals.dart';
 
 class JobApplicationScreen extends StatefulWidget {
   final Map<String, dynamic>? job;
@@ -51,9 +51,15 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
     super.dispose();
   }
 
+  String? _jobId() {
+    final id = widget.job?['id'] ?? widget.job?['documentId'];
+    return (id == null || id.toString().isEmpty) ? null : id.toString();
+  }
+
   Future<void> _checkUserTypeAndApplicationStatus() async {
     final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
+    final jobId = _jobId();
+    if (currentUser == null || jobId == null) return;
 
     try {
       // Check user account type
@@ -72,7 +78,7 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
           .collection('shops')
           .doc(widget.shopId)
           .collection('jobs')
-          .doc(widget.job!['id'])
+          .doc(jobId)
           .get();
 
       final jobData = jobDoc.data();
@@ -223,10 +229,16 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
 
       try {
         final job = widget.job ?? <String, dynamic>{};
-        final jobId = job['id'] ?? job['documentId'] ?? '';
+        final jobId = _jobId();
 
-        if (jobId.isEmpty) {
-          throw Exception('Job ID not found');
+        if (jobId == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Unable to submit application: missing job ID.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
         }
 
         // Upload resume to Firebase Storage
@@ -265,15 +277,40 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
           'status': 'pending',
         };
 
-        // Update the applications array field in the job document
-        await FirebaseFirestore.instance
+        // Update the applications array field in the job document inside a
+        // transaction that re-reads applications first, so a duplicate
+        // submission from a second device/session is blocked server-side
+        // (the security rules enforce the same invariant).
+        final jobRef = FirebaseFirestore.instance
             .collection('shops')
             .doc(widget.shopId)
             .collection('jobs')
-            .doc(widget.job!['id'])
-            .update({
-          'applications': FieldValue.arrayUnion([applicationData])
+            .doc(jobId);
+
+        await FirebaseFirestore.instance.runTransaction((tx) async {
+          final snapshot = await tx.get(jobRef);
+          if (!snapshot.exists) {
+            throw Exception('Job posting not found');
+          }
+
+          final applications =
+              snapshot.data()?['applications'] as List<dynamic>? ?? [];
+          final alreadyApplied = applications.any((app) =>
+              app is Map &&
+              (app['applicantId'] ?? app['userId']) == currentUser.uid &&
+              app['status'] != 'withdrawn');
+          if (alreadyApplied) {
+            throw Exception('You have already applied for this position');
+          }
+
+          tx.update(jobRef, {
+            'applications': FieldValue.arrayUnion([applicationData])
+          });
         });
+
+        // Signal ProfileTab (and anywhere else listing applications) that
+        // its cached applications future is stale and must refetch.
+        applicationsVersion.value++;
 
         // Notify the business owner
         try {
@@ -297,6 +334,7 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
           debugLog('Failed to notify business owner: $e');
         }
 
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Application submitted successfully!'),
@@ -306,16 +344,20 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
 
         Navigator.pop(context);
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error submitting application: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error submitting application: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       } finally {
-        setState(() {
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
     }
   }
@@ -374,15 +416,11 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
                 ButtonWidget(
                   label: 'Go to Business Dashboard',
                   onPressed: () {
-                    // Navigate to home screen with profile tab (index 3) selected
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            const HomeScreen(initialTabIndex: 3),
-                      ),
-                      (route) => false,
-                    );
+                    // Unwind to the root route so AuthGate stays mounted
+                    // (it renders HomeScreen for signed-in users). Pushing a
+                    // standalone HomeScreen with (route) => false would
+                    // destroy the auth listener and break the next login.
+                    Navigator.of(context).popUntil((route) => route.isFirst);
                   },
                   width: double.infinity,
                   color: primary,

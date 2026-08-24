@@ -9,7 +9,9 @@ import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/widgets/button_widget.dart';
 
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key});
+  final VoidCallback? onOnboardingComplete;
+
+  const OnboardingScreen({super.key, this.onOnboardingComplete});
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -18,6 +20,7 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
+  bool _onboardingSaved = false;
 
   final List<OnboardingPage> _pages = [
     OnboardingPage(
@@ -76,6 +79,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('hasSeenOnboarding', true);
+      _onboardingSaved = true;
     } catch (e) {
       // If there's an error, continue anyway
       debugLog('Error saving onboarding status: $e');
@@ -369,6 +373,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _navigateToLandingScreen() {
+    if (!mounted) return;
+
+    // This screen is rendered INLINE by AuthGate (not as a pushed route),
+    // so there is nothing to pushReplacement — doing so would destroy
+    // AuthGate and its authStateChanges listener, leaving the user stuck
+    // on LoginScreen after signing in. Notify AuthGate via the callback so
+    // it re-evaluates the onboarding flag: signed-out users get LoginScreen
+    // rendered inline, and authStateChanges swaps it for HomeScreen on
+    // successful sign-in.
+    if (_onboardingSaved && widget.onOnboardingComplete != null) {
+      widget.onOnboardingComplete!();
+      return;
+    }
+
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => const LoginScreen()),

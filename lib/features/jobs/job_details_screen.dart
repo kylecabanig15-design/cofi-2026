@@ -168,15 +168,6 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
           'closedAt': Timestamp.now(),
         });
 
-        // Also update in allJobs (merge to avoid missing-doc errors)
-        await FirebaseFirestore.instance
-            .collection('allJobs')
-            .doc(jobId.toString())
-            .set({
-          'status': 'closed',
-          'closedAt': Timestamp.now(),
-        }, SetOptions(merge: true));
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -674,11 +665,6 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         'isArchived': true,
       });
 
-      // Also archive in allJobs
-      await FirebaseFirestore.instance.collection('allJobs').doc(jobId).update({
-        'isArchived': true,
-      });
-
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -792,15 +778,6 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
           'status': 'active',
           'closedAt': FieldValue.delete(),
         });
-
-        // Also update in allJobs (merge to avoid missing-doc errors)
-        await FirebaseFirestore.instance
-            .collection('allJobs')
-            .doc(jobId.toString())
-            .set({
-          'status': 'active',
-          'closedAt': FieldValue.delete(),
-        }, SetOptions(merge: true));
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

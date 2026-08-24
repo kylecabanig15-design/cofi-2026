@@ -2,6 +2,21 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:cofi/models/review_model.dart';
 import 'package:cofi/models/shop_model.dart';
+import 'package:cofi/utils/logger.dart';
+
+/// Parses docs defensively: one malformed document must never fail the
+/// whole stream.
+List<T> _parseAll<T>(QuerySnapshot<Map<String, dynamic>> s, T Function(Map<String, dynamic>, String) ctor) {
+  final out = <T>[];
+  for (final d in s.docs) {
+    try {
+      out.add(ctor(d.data(), d.id));
+    } catch (e) {
+      debugLog('Skipping unparseable doc ${d.id}: $e');
+    }
+  }
+  return out;
+}
 
 /// Read/write access for shops and their subcollections (reviews, visits).
 class ShopRepository {
@@ -30,8 +45,7 @@ class ShopRepository {
         .orderBy(orderBy, descending: true)
         .limit(limit)
         .snapshots()
-        .map((s) =>
-            s.docs.map((d) => Shop.fromFirestore(d.data(), d.id)).toList());
+        .map((s) => _parseAll(s, Shop.fromFirestore));
   }
 
   Future<Shop?> getShop(String shopId) async {
@@ -41,8 +55,15 @@ class ShopRepository {
   }
 
   Stream<Shop?> watchShop(String shopId) {
-    return shopRef(shopId).snapshots().map(
-        (d) => d.exists ? Shop.fromFirestore(d.data()!, d.id) : null);
+    return shopRef(shopId).snapshots().map((d) {
+      if (!d.exists) return null;
+      try {
+        return Shop.fromFirestore(d.data()!, d.id);
+      } catch (e) {
+        debugLog('Skipping unparseable shop ${d.id}: $e');
+        return null;
+      }
+    });
   }
 
   // ----- Reviews -----
@@ -76,7 +97,7 @@ class ShopRepository {
   }
 
   List<Review> _parseReviews(QuerySnapshot<Map<String, dynamic>> s) =>
-      s.docs.map((d) => Review.fromFirestore(d.data(), d.id)).toList();
+      _parseAll(s, Review.fromFirestore);
 
   // ----- Visit logs -----
 

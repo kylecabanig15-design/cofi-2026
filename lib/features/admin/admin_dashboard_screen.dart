@@ -1077,6 +1077,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       batch.update(firestore.collection('shops').doc(shopId), {
         'approvalStatus': 'approved',
         'isVerified': true,
+        // Business submissions are managed by their submitter; make that
+        // explicit so isShopStaff() in the security rules resolves to a real
+        // owner instead of relying on posterId.
+        if (submissionType == 'business' && posterId != null)
+          'ownerId': posterId,
         'approvedAt': FieldValue.serverTimestamp(),
         'approvedBy': FirebaseAuth.instance.currentUser?.uid,
       });
@@ -1299,17 +1304,48 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       final firestore = FirebaseFirestore.instance;
       final shopRef = firestore.collection('shops').doc(shopId);
 
-      // Deep Deletion of subcollections
-      final subcollections = ['reviews', 'jobs', 'products', 'gallery'];
-      for (var sub in subcollections) {
-        final docs = await shopRef.collection(sub).get();
-        if (docs.docs.isNotEmpty) {
-          final batch = firestore.batch();
-          for (var doc in docs.docs) {
-            batch.delete(doc.reference);
+      // Deep Deletion of subcollections.
+      // Visits/events/comments/participants are included so collectionGroup
+      // queries (visited-cafe counts, activity stats) don't surface ghost
+      // data after the shop is gone. Firestore does NOT cascade-delete
+      // subcollections, so every level must be removed explicitly.
+      Future<void> deleteQueryChunked(Query query) async {
+        const chunkSize = 450;
+        QuerySnapshot snap = await query.get();
+        while (snap.docs.isNotEmpty) {
+          for (var i = 0; i < snap.docs.length; i += chunkSize) {
+            final batch = firestore.batch();
+            for (final doc in snap.docs.skip(i).take(chunkSize)) {
+              batch.delete(doc.reference);
+            }
+            await batch.commit();
           }
-          await batch.commit();
+          // Page again in case writes raced with our snapshot.
+          snap = await query.get();
         }
+      }
+
+      // Events carry their own comments/ + participants/ subcollections.
+      final eventsSnap = await shopRef.collection('events').get();
+      for (final eventDoc in eventsSnap.docs) {
+        await deleteQueryChunked(eventDoc.reference.collection('comments'));
+        await deleteQueryChunked(
+            eventDoc.reference.collection('participants'));
+      }
+
+      final subcollections = [
+        'reviews',
+        'jobs',
+        'products',
+        'gallery',
+        'menuImages',
+        'visits',
+        'events',
+        'comments',
+        'participants'
+      ];
+      for (var sub in subcollections) {
+        await deleteQueryChunked(shopRef.collection(sub));
       }
 
       // Delete associated shop_claims
@@ -1977,10 +2013,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           if (claimSnap.exists) {
             final data = claimSnap.data()!;
             final shopId = data['shopId'] as String?;
+            final claimantId = data['claimantId'] as String?;
             if (shopId != null) {
               final shopRef = firestore.collection('shops').doc(shopId);
               final shopSnap = await shopRef.get();
-              if (shopSnap.exists) {
+              // Only dissociate when the rejected/deleted claimant actually
+              // controls the shop — never strip a legitimate owner.
+              final shopData = shopSnap.data() ?? {};
+              final ownerId = shopData['ownerId'] as String?;
+              final posterId = shopData['posterId'] as String?;
+              final isClaimantsShop = shopSnap.exists &&
+                  ((ownerId != null && ownerId == claimantId) ||
+                      ((ownerId == null || ownerId.isEmpty) &&
+                          posterId == claimantId));
+              if (isClaimantsShop) {
                 await shopRef.update({
                   'ownerId': null,
                   'posterId': null,
@@ -2170,6 +2216,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         batch.update(firestore.collection('shops').doc(shopId), {
           'approvalStatus': 'approved',
           'isVerified': true,
+          // Mirror _approveShop: explicit ownerId for business submissions.
+          if (submissionType == 'business' && posterId != null)
+            'ownerId': posterId,
           'approvedAt': FieldValue.serverTimestamp(),
           'approvedBy': currentUid,
         });
@@ -3479,6 +3528,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         txn.update(shopRef, {
           'ownerId': claimantId,
           'posterId': claimantId,
+          // Preserve the original community submitter for audit, then clear
+          // the legacy postedBy map so ownership queries stop matching the
+          // old submitter after the transfer.
+          'originalPosterId': shopSnap.data()?['posterId'],
+          'postedBy': FieldValue.delete(),
           'submissionType': 'business',
           'isVerified': true,
           'approvalStatus': 'approved',
@@ -3546,6 +3600,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   Future<void> _rejectClaim(String claimId, {String? shopId}) async {
     try {
+      // Read the claim first so we can tell whether the rejected claimant
+      // actually controls the target shop.
+      final claimSnap = await FirebaseFirestore.instance
+          .collection('shop_claims')
+          .doc(claimId)
+          .get();
+      final claimantId =
+          claimSnap.data()?['claimantId'] as String?;
+
       await FirebaseFirestore.instance
           .collection('shop_claims')
           .doc(claimId)
@@ -3555,27 +3618,42 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         'rejectedBy': FirebaseAuth.instance.currentUser?.uid,
       });
 
-      // 2. Dissociate shop if provided
+      // 2. Dissociate shop if provided — but only when the rejected
+      // claimant is the shop's current owner (or unclaimed poster).
+      // Rejecting a bogus claim must never strip a legitimate owner.
+      bool dissociated = false;
       if (shopId != null) {
         final shopRef =
             FirebaseFirestore.instance.collection('shops').doc(shopId);
         final shopSnap = await shopRef.get();
-        if (shopSnap.exists) {
-          await shopRef.update({
-            'ownerId': null,
-            'posterId': null,
-            'postedBy': null,
-            'isVerified': false,
-            'submissionType': 'community',
-            'approvalStatus': 'approved',
-          });
+        if (shopSnap.exists && claimantId != null) {
+          final shopData = shopSnap.data()!;
+          final ownerId = shopData['ownerId'] as String?;
+          final posterId = shopData['posterId'] as String?;
+          final isClaimantsShop =
+              (ownerId != null && ownerId == claimantId) ||
+                  ((ownerId == null || ownerId.isEmpty) &&
+                      posterId == claimantId);
+          if (isClaimantsShop) {
+            await shopRef.update({
+              'ownerId': null,
+              'posterId': null,
+              'postedBy': null,
+              'isVerified': false,
+              'submissionType': 'community',
+              'approvalStatus': 'approved',
+            });
+            dissociated = true;
+          }
         }
       }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Claim rejected and shop ownership reset'),
+          SnackBar(
+            content: Text(dissociated
+                ? 'Claim rejected and shop ownership reset'
+                : 'Claim rejected'),
             backgroundColor: Colors.orange,
           ),
         );

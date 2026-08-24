@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/widgets/edit_profile_dialog.dart';
-import 'package:cofi/features/auth/login_screen.dart';
 import 'package:cofi/services/google_sign_in_service.dart';
 import 'package:cofi/utils/auth_error_handler.dart';
 import 'package:cofi/services/notification_service.dart';
@@ -14,7 +13,6 @@ import 'package:cofi/features/settings/help_support_screen.dart';
 import 'package:cofi/utils/formatters.dart';
 import 'package:cofi/features/auth/interest_selection_screen.dart';
 import 'package:cofi/features/admin/admin_dashboard_screen.dart';
-import 'package:cofi/features/home/home_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cofi/widgets/custom_toast.dart';
 import 'package:cofi/widgets/custom_dialog.dart';
@@ -98,8 +96,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _toggleJobPref(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('notify_job', value);
-    await prefs.setBool('notify_job_application', value);
-    await prefs.setBool('notify_business_application', value);
     setState(() {
       _notifyJob = value;
     });
@@ -238,10 +234,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           
           await GoogleSignInService.signOut();
           if (mounted) {
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (_) => const LoginScreen()),
-              (route) => false,
-            );
+            // Unwind to the root route only. AuthGate (the home route) must
+            // stay mounted — it listens to authStateChanges and swaps to
+            // LoginScreen on its own once signOut completes.
+            Navigator.of(context).popUntil((route) => route.isFirst);
           }
         } catch (e) {
           if (mounted) CustomToast.showError(context, 'Logout failed: $e');
@@ -547,10 +543,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Show success message and navigate to login
       if (mounted) {
         CustomToast.showSuccess(context, 'Account deleted successfully');
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-          (route) => false,
-        );
+        // Auth deletion signs the user out of Firebase, so AuthGate (kept
+        // mounted at the root) swaps to LoginScreen on its own. Just unwind.
+        Navigator.of(context).popUntil((route) => route.isFirst);
       }
     } on Exception catch (e) {
       // Close initial loading dialog if it was shown
@@ -586,16 +581,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
       debugPrint('Error fetching lists for cleanup: $e');
     }
 
-    // 2. Shop Claims
+    // 2. Shop Claims (delete pending claims individually; non-pending claims
+    // are admin records that rules prevent us from deleting — skip them)
     try {
       final claims = await firestore.collection('shop_claims').where('claimantId', isEqualTo: uid).get();
-      if (claims.docs.isNotEmpty) {
-        final batch = firestore.batch();
-        for (var doc in claims.docs) {
-          batch.delete(doc.reference);
+      var deletedClaims = 0;
+      var skippedClaims = 0;
+      for (var doc in claims.docs) {
+        final status = doc.data()['status'] as String?;
+        if (status != null && status != 'pending') {
+          skippedClaims++;
+          continue;
         }
-        await batch.commit();
+        try {
+          await doc.reference.delete();
+          deletedClaims++;
+        } catch (e) {
+          skippedClaims++;
+          debugPrint('Skipping shop claim ${doc.id} during cleanup: $e');
+        }
       }
+      debugPrint('Shop claims cleanup finished: $deletedClaims deleted, $skippedClaims skipped');
     } catch (e) {
       debugPrint('Error cleaning up shop claims: $e');
     }
@@ -614,12 +620,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
       debugPrint('Error cleaning up shared collections: $e');
     }
 
-    // 4. Jobs (This often fails due to missing index)
+    // 4. Jobs (allJobs mirror now requires admin; delete what we can and
+    // continue past permission failures instead of aborting the loop)
     try {
       final jobs = await firestore.collectionGroup('jobs').where('createdBy', isEqualTo: uid).get();
+      var failedDeletes = 0;
       for (var doc in jobs.docs) {
-        await firestore.collection('allJobs').doc(doc.id).delete();
-        await doc.reference.delete();
+        try {
+          await firestore.collection('allJobs').doc(doc.id).delete();
+        } catch (e) {
+          failedDeletes++;
+          debugPrint('Skipping allJobs/${doc.id} during cleanup: $e');
+        }
+        try {
+          await doc.reference.delete();
+        } catch (e) {
+          failedDeletes++;
+          debugPrint('Skipping job ${doc.id} during cleanup: $e');
+        }
+      }
+      if (failedDeletes > 0) {
+        debugPrint('Job cleanup finished with $failedDeletes skipped document(s)');
       }
     } catch (e) {
       debugPrint('Error cleaning up jobs (Check index): $e');
@@ -977,11 +998,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                               await prefs.setBool('hasSeenExploreTutorial', false);
                                               await prefs.setBool('hasSeenCafeDetailsTutorial', false);
                                               if (mounted) {
-                                                Navigator.pushAndRemoveUntil(
-                                                  context,
-                                                  MaterialPageRoute(builder: (_) => const HomeScreen()),
-                                                  (route) => false,
-                                                );
+                                                // Keep AuthGate (root route)
+                                                // mounted; it renders
+                                                // HomeScreen for signed-in
+                                                // users.
+                                                Navigator.of(context).popUntil((route) => route.isFirst);
                                               }
                                             },
                                             style: ElevatedButton.styleFrom(

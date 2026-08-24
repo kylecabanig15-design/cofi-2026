@@ -52,8 +52,17 @@ class _SharedCollectionScreenState extends State<SharedCollectionScreen> {
       }
 
       final data = sharedDoc.data()!;
-      final userId = data['userId'] as String;
-      final listId = data['listId'] as String;
+      // Null-safe with fallbacks (legacy docs may miss fields)
+      final userId = data['userId']?.toString() ?? '';
+      final listId = data['listId']?.toString() ?? '';
+
+      if (userId.isEmpty || listId.isEmpty) {
+        setState(() {
+          _error = 'Collection not found';
+          _isLoading = false;
+        });
+        return;
+      }
 
       // Get the original list data
       final listDoc = await FirebaseFirestore.instance
@@ -139,10 +148,13 @@ class _SharedCollectionScreenState extends State<SharedCollectionScreen> {
       try {
         final ownerDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
         if (ownerDoc.exists) {
-          final ownerName = (ownerDoc.data()?['name'] as String?)?.trim();
+          final ownerName = ((ownerDoc.data()?['firstName'] as String?) ??
+                  (ownerDoc.data()?['displayName'] as String?) ??
+                  (ownerDoc.data()?['name'] as String?))
+              ?.trim();
           if (ownerName != null && ownerName.isNotEmpty) {
              setState(() {
-               _collectionData!['sharedBy'] = ownerName;
+               _collectionData!['sharedByName'] = ownerName;
              });
           }
         }
@@ -305,7 +317,7 @@ class _SharedCollectionScreenState extends State<SharedCollectionScreen> {
                             Icon(Icons.person, color: Colors.white60, size: 14),
                             const SizedBox(width: 4),
                             TextWidget(
-                              text: 'Shared by ${_collectionData!['sharedBy'] ?? 'Community'}',
+                              text: 'Shared by ${_collectionData!['sharedByName'] ?? _collectionData!['sharedBy'] ?? 'Community'}',
                               fontSize: 14,
                               color: Colors.white60,
                             ),

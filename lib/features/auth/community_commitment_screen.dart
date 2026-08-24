@@ -1,3 +1,4 @@
+import 'package:cofi/services/google_sign_in_service.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -213,6 +214,22 @@ class _CommunityCommitmentScreenState extends State<CommunityCommitmentScreen> {
     }
   }
 
+  // This screen is rendered inline as AuthGate content (bottom-most route),
+  // so Navigator.pop() pops nothing and traps the user. Declining signs out
+  // instead, which routes back to login via AuthGate's auth stream.
+  Future<void> _declineAndSignOut() async {
+    try {
+      await GoogleSignInService.signOut();
+      await FirebaseAuth.instance.signOut();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to sign out. Please try again.')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -222,7 +239,7 @@ class _CommunityCommitmentScreenState extends State<CommunityCommitmentScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: _declineAndSignOut,
         ),
       ),
       body: SafeArea(
@@ -301,11 +318,7 @@ class _CommunityCommitmentScreenState extends State<CommunityCommitmentScreen> {
                       borderRadius: BorderRadius.circular(28)),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                onPressed: _isLoading
-                    ? null
-                    : () {
-                        Navigator.pop(context);
-                      },
+                onPressed: _isLoading ? null : _declineAndSignOut,
                 child: TextWidget(
                   text: 'Decline',
                   fontSize: 17,

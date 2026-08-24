@@ -364,7 +364,12 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
 
   Future<void> _getAddressFromCoordinates(double latitude, double longitude) async {
     try {
-      const googleMapsApiKey = 'AIzaSyDzqOhK3i_zOQ-6fN8PqfGqM0HkLqVDrMc';
+      // Injected at build time — see custom_location_screen.dart.
+      const googleMapsApiKey = String.fromEnvironment('GOOGLE_GEOCODING_API_KEY');
+      if (googleMapsApiKey.isEmpty) {
+        debugLog('GOOGLE_GEOCODING_API_KEY not set; skipping geocode lookup');
+        return;
+      }
       
       // Try Google Geocoding API first
       final String googleUrl =
@@ -431,6 +436,16 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
       return;
     }
 
+    // Security rules require an authenticated poster (posterId must match
+    // the auth uid); without this guard a signed-out submit fails with an
+    // opaque cloud_firestore permission-denied error.
+    if (_currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to submit a café.')),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
     try {
       final user = _currentUser;
@@ -480,31 +495,35 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
           'updatedAt': FieldValue.serverTimestamp(),
         };
 
-        // Upload logo image if selected
+        // Logo: a new upload wins; an explicitly cleared logo must be
+        // persisted too (previously removals were silently dropped and the
+        // old logo reappeared after save).
         if (_selectedImage != null) {
           final imageUrl = await _uploadImageToFirebase(_editShopId!);
           if (imageUrl != null) {
             updateData['logoUrl'] = imageUrl;
           }
+        } else if (_existingLogoUrl != null && _existingLogoUrl!.isEmpty) {
+          updateData['logoUrl'] = '';
         }
 
-        // Upload gallery images if selected
-        if (_galleryImages.isNotEmpty) {
-          final galleryUrls =
-              await _uploadGalleryImagesToFirebase(_editShopId!);
-          if (galleryUrls.isNotEmpty) {
-            updateData['gallery'] = galleryUrls;
-          }
-        }
+        // Gallery & menu photos: merge the remaining existing URLs with the
+        // newly picked ones and ALWAYS write both fields, so deletions are
+        // actually persisted instead of being skipped when there are no new
+        // uploads.
+        final mergedGallery = [
+          ..._existingGalleryUrls,
+          if (_galleryImages.isNotEmpty)
+            ...(await _uploadGalleryImagesToFirebase(_editShopId!)),
+        ];
+        updateData['gallery'] = mergedGallery;
 
-        // Upload menu/price images if selected
-        if (_menuPriceImages.isNotEmpty) {
-          final menuPriceUrls =
-              await _uploadMenuPriceImagesToFirebase(_editShopId!);
-          if (menuPriceUrls.isNotEmpty) {
-            updateData['menuPricePhotos'] = menuPriceUrls;
-          }
-        }
+        final mergedMenuPricePhotos = [
+          ..._existingMenuPriceUrls,
+          if (_menuPriceImages.isNotEmpty)
+            ...(await _uploadMenuPriceImagesToFirebase(_editShopId!)),
+        ];
+        updateData['menuPricePhotos'] = mergedMenuPricePhotos;
 
         await FirebaseFirestore.instance
             .collection('shops')
@@ -2032,7 +2051,10 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
       if (pickedFiles.isNotEmpty) {
         final filesToAdd = pickedFiles.take(maxPickable).toList();
         setState(() {
-          _galleryImages = filesToAdd.map((file) => File(file.path)).toList();
+          // Append, matching the menu-photo picker — replacing here silently
+          // discarded previously picked images.
+          _galleryImages
+              .addAll(filesToAdd.map((file) => File(file.path)).toList());
         });
 
         if (pickedFiles.length > maxPickable) {

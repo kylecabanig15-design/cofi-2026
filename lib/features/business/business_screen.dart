@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/text_widget.dart';
-import 'package:cofi/features/auth/login_screen.dart';
 import 'package:cofi/services/google_sign_in_service.dart';
 
 class BusinessScreen extends StatelessWidget {
@@ -249,10 +248,9 @@ class BusinessScreen extends StatelessWidget {
                   await GoogleSignInService.signOut();
                   await FirebaseAuth.instance.signOut();
                   if (context.mounted) {
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (_) => const LoginScreen()),
-                      (route) => false,
-                    );
+                    // Keep AuthGate (root route) mounted — it reacts to
+                    // signOut via authStateChanges and shows LoginScreen.
+                    Navigator.of(context).popUntil((route) => route.isFirst);
                   }
                 },
                 child: Padding(
