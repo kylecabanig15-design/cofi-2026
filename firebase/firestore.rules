@@ -48,10 +48,9 @@ service cloud.firestore {
         );
     }
 
-    // True when an update touches nothing but aggregate rating data.
+    // True when an update touches nothing but the listed keys.
     function onlyTouches(keys) {
-      return !request.resource.data.diff(resource.data).affectedKeys()
-        .hasDifference(keys);
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
 
     // ---------- Users ----------
@@ -144,6 +143,19 @@ service cloud.firestore {
 
       match /menuImages/{imageId} {
         allow read, create, delete: if signedIn();
+      }
+
+      // ----- Event participants (RSVP) -----
+      // Attendees create their own participant record and may remove it
+      // (leave); staff/admin manage all.
+      match /participants/{participantId} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && (!('userId' in request.resource.data)
+              || request.resource.data.userId == request.auth.uid);
+        allow update, delete: if isAdmin()
+          || isShopStaff(shopId)
+          || (signedIn() && resource.data.userId == request.auth.uid);
       }
     }
 
