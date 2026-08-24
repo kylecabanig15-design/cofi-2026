@@ -99,11 +99,12 @@ class CafeEvent {
       about: data['about'] as String? ?? '',
       email: data['email'] as String? ?? '',
       link: data['link'] as String? ?? '',
-      imageUrls:
-          (data['imageUrls'] as List?)?.cast<String>() ??
-              [
-                if (data['imageUrl'] is String) data['imageUrl'] as String,
-              ],
+      imageUrls: [
+        ...(data['imageUrls'] as List? ?? const []).whereType<String>(),
+        if ((data['imageUrls'] as List? ?? const []).isEmpty &&
+            data['imageUrl'] is String)
+          data['imageUrl'] as String,
+      ],
       latitude: data['latitude'] is num
           ? (data['latitude'] as num).toDouble()
           : null,

@@ -40,7 +40,7 @@ class JobApplication {
       resumeFileName: data['resumeFileName'] as String? ?? '',
       coverLetter: data['coverLetter'] as String? ?? '',
       status: data['status'] as String? ?? 'pending',
-      appliedAt: (data['appliedAt'] as Timestamp?)?.toDate(),
+      appliedAt: Job._parseDate(data['appliedAt']),
       jobId: data['jobId'] as String? ?? '',
     );
   }

@@ -2,6 +2,21 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:cofi/models/event_model.dart';
 import 'package:cofi/models/job_model.dart';
+import 'package:cofi/utils/logger.dart';
+
+/// Parses docs defensively: one malformed document must never fail the
+/// whole list stream.
+List<T> _parseAll<T>(QuerySnapshot<Map<String, dynamic>> s, T Function(Map<String, dynamic>, String) ctor) {
+  final out = <T>[];
+  for (final d in s.docs) {
+    try {
+      out.add(ctor(d.data(), d.id));
+    } catch (e) {
+      debugLog('Skipping unparseable doc ${d.id}: $e');
+    }
+  }
+  return out;
+}
 
 /// Read/write access for events and their participants.
 ///
@@ -26,8 +41,7 @@ class EventRepository {
         .orderBy('startDate')
         .limit(_upcomingLimit)
         .snapshots()
-        .map((s) =>
-            s.docs.map((d) => CafeEvent.fromFirestore(d.data(), d.id)).toList());
+        .map((s) => _parseAll(s, CafeEvent.fromFirestore));
   }
 
   /// Latest events for the Community tab. Client code filters paused,
@@ -39,8 +53,7 @@ class EventRepository {
         .orderBy('createdAt', descending: true)
         .limit(_communityLimit)
         .snapshots()
-        .map((s) =>
-            s.docs.map((d) => CafeEvent.fromFirestore(d.data(), d.id)).toList());
+        .map((s) => _parseAll(s, CafeEvent.fromFirestore));
   }
 
   Future<CafeEvent?> getEvent(String shopId, String eventId) async {
@@ -153,8 +166,7 @@ class JobRepository {
         .orderBy('createdAt', descending: true)
         .limit(_communityLimit)
         .snapshots()
-        .map((s) =>
-            s.docs.map((d) => Job.fromFirestore(d.data(), d.id)).toList());
+        .map((s) => _parseAll(s, Job.fromFirestore));
   }
 
   /// One-shot fetch of all jobs containing this user's application. The
