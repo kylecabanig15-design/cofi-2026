@@ -1,8 +1,6 @@
-import 'package:cofi/features/events/event_details_screen.dart';
-import 'package:cofi/widgets/text_widget.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cofi/data/repositories/community_repository.dart';
+import 'package:cofi/models/event_model.dart';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/widgets/premium_event_card.dart';
 
 class ExploreEventsSection extends StatefulWidget {
@@ -13,27 +11,13 @@ class ExploreEventsSection extends StatefulWidget {
 }
 
 class _ExploreEventsSectionState extends State<ExploreEventsSection> {
-  late Stream<QuerySnapshot<Map<String, dynamic>>> _eventsStream;
-
-  @override
-  void initState() {
-    super.initState();
-    // Server-side filtered: only future events, bounded to 20.
-    // Previously this listened to the entire events collection group
-    // (every event of every shop) and performed writes inside build().
-    _eventsStream = FirebaseFirestore.instance
-        .collectionGroup('events')
-        .where('startDate', isGreaterThan: Timestamp.fromDate(DateTime.now()))
-        .orderBy('startDate')
-        .limit(20)
-        .snapshots();
-  }
+  final EventRepository _eventRepository = EventRepository();
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _eventsStream,
+    return StreamBuilder<List<CafeEvent>>(
+      stream: _eventRepository.watchUpcomingEvents(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
@@ -50,56 +34,9 @@ class _ExploreEventsSectionState extends State<ExploreEventsSection> {
                 style: TextStyle(color: Colors.white70)),
           );
         }
-        final docs = snapshot.data?.docs ?? [];
-
-        final upcomingEvents = docs.where((doc) {
-          final event = doc.data();
-
-          // First: Check if event has ended
-          final endDate = event['endDate'];
-          DateTime? endDateTime;
-          if (endDate is Timestamp) {
-            endDateTime = endDate.toDate();
-          } else if (endDate is String && endDate.isNotEmpty) {
-            try {
-              endDateTime = DateTime.parse(endDate);
-            } catch (_) {}
-          }
-
-          // If event has ended, don't show
-          if (endDateTime != null && endDateTime.isBefore(now)) {
-            return false;
-          }
-
-          // Second: Check if event has started
-          final startDate = event['startDate'];
-          DateTime? startDateTime;
-          if (startDate is Timestamp) {
-            startDateTime = startDate.toDate();
-          } else if (startDate is String && startDate.isNotEmpty) {
-            try {
-              startDateTime = DateTime.parse(startDate);
-            } catch (_) {}
-          }
-
-          // Only show if start date is in the future (hasn't started yet)
-          if (startDateTime != null) {
-            return startDateTime.isAfter(now);
-          }
-
-          // If no valid dates found, don't show
-          return false;
-        }).toList();
-
-        // Sort by startDate ascending (soonest first)
-        upcomingEvents.sort((a, b) {
-          DateTime? aStart = _parseDate(a.data()['startDate']);
-          DateTime? bStart = _parseDate(b.data()['startDate']);
-          if (aStart == null && bStart == null) return 0;
-          if (aStart == null) return 1;
-          if (bStart == null) return -1;
-          return aStart.compareTo(bStart);
-        });
+        final upcomingEvents = (snapshot.data ?? const <CafeEvent>[])
+            .where((e) => e.endDate == null || e.endDate!.isAfter(now))
+            .toList();
 
         if (upcomingEvents.isEmpty) {
           return Container(
@@ -148,13 +85,30 @@ class _ExploreEventsSectionState extends State<ExploreEventsSection> {
                 physics: const BouncingScrollPhysics(),
                 itemCount: upcomingEvents.length,
                 itemBuilder: (context, idx) {
-                  final event = upcomingEvents[idx].data();
-                  final eventId = upcomingEvents[idx].id;
+                  final event = upcomingEvents[idx];
                   return Padding(
                     padding: const EdgeInsets.only(right: 14),
                     child: PremiumEventCard(
-                      event: event,
-                      eventId: eventId,
+                      event: {
+                        'title': event.title,
+                        'address': event.address,
+                        'startDate': event.startDate,
+                        'endDate': event.endDate,
+                        'about': event.about,
+                        'email': event.email,
+                        'link': event.link,
+                        'imageUrls': event.imageUrls,
+                        'imageUrl':
+                            event.imageUrls.isNotEmpty ? event.imageUrls.first : null,
+                        'latitude': event.latitude,
+                        'longitude': event.longitude,
+                        'status': event.status,
+                        'participantsCount': event.participantsCount,
+                        'shopId': event.shopId,
+                        'isPaused': event.isPaused,
+                        'isArchived': event.isArchived,
+                      },
+                      eventId: event.id,
                       width: double.infinity,
                       height: 200,
                     ),
@@ -166,13 +120,5 @@ class _ExploreEventsSectionState extends State<ExploreEventsSection> {
         );
       },
     );
-  }
-
-  DateTime? _parseDate(dynamic value) {
-    if (value is Timestamp) return value.toDate();
-    if (value is String && value.isNotEmpty) {
-      try { return DateTime.parse(value); } catch (_) {}
-    }
-    return null;
   }
 }

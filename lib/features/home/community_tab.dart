@@ -1,7 +1,9 @@
 import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cofi/features/events/event_details_screen.dart';
+import 'package:cofi/data/repositories/community_repository.dart';
+import 'package:cofi/models/event_model.dart';
+import 'package:cofi/models/job_model.dart';
 import 'package:cofi/features/networking/all_shared_collections_screen.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/premium_event_card.dart';
@@ -9,11 +11,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/features/jobs/job_details_screen.dart';
-import 'package:cofi/widgets/premium_background.dart';
-import 'package:intl/intl.dart';
 import 'package:cofi/utils/formatters.dart';
 
 class CommunityTab extends StatelessWidget {
+  static final EventRepository _eventRepository = EventRepository();
+  static final JobRepository _jobRepository = JobRepository();
+
   const CommunityTab({super.key});
 
   @override
@@ -77,12 +80,8 @@ class CommunityTab extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collectionGroup('events')
-                  .orderBy('createdAt', descending: true)
-                  .limit(10)
-                  .snapshots(),
+            StreamBuilder<List<CafeEvent>>(
+              stream: _eventRepository.watchRecentEvents(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -95,44 +94,19 @@ class CommunityTab extends StatelessWidget {
                     color: Colors.redAccent,
                   );
                 }
-                final docs = snapshot.data?.docs ?? [];
+                final docs = snapshot.data ?? const <CafeEvent>[];
                 final now = DateTime.now();
 
                 // Separate ongoing and upcoming events
-                final ongoingEvents =
-                    <DocumentSnapshot<Map<String, dynamic>>>[];
-                final upcomingEvents =
-                    <DocumentSnapshot<Map<String, dynamic>>>[];
+                final ongoingEvents = <CafeEvent>[];
+                final upcomingEvents = <CafeEvent>[];
 
-                for (final d in docs) {
-                  final data = d.data();
+                for (final event in docs) {
                   // Skip paused and archived events
-                  if (data['isPaused'] == true || data['isArchived'] == true) {
-                    continue;
-                  }
+                  if (event.isPaused || event.isArchived) continue;
 
-                  DateTime? startDateTime;
-                  DateTime? endDateTime;
-
-                  // Parse start date
-                  final startDate = data['startDate'];
-                  if (startDate is Timestamp) {
-                    startDateTime = startDate.toDate();
-                  } else if (startDate is String && startDate.isNotEmpty) {
-                    try {
-                      startDateTime = DateTime.parse(startDate);
-                    } catch (_) {}
-                  }
-
-                  // Parse end date
-                  final endDate = data['endDate'];
-                  if (endDate is Timestamp) {
-                    endDateTime = endDate.toDate();
-                  } else if (endDate is String && endDate.isNotEmpty) {
-                    try {
-                      endDateTime = DateTime.parse(endDate);
-                    } catch (_) {}
-                  }
+                  final startDateTime = event.startDate;
+                  final endDateTime = event.endDate;
 
                   // Skip ended events
                   if (endDateTime != null && endDateTime.isBefore(now)) {
@@ -143,18 +117,18 @@ class CommunityTab extends StatelessWidget {
                   if (startDateTime != null &&
                       startDateTime.isBefore(now) &&
                       (endDateTime == null || endDateTime.isAfter(now))) {
-                    ongoingEvents.add(d);
+                    ongoingEvents.add(event);
                   } else if (startDateTime != null &&
                       startDateTime.isAfter(now)) {
                     // Event is upcoming (hasn't started yet)
-                    upcomingEvents.add(d);
+                    upcomingEvents.add(event);
                   }
                 }
 
                 // Sort upcoming events by start date (closest to now first)
                 upcomingEvents.sort((a, b) {
-                  final aStart = _getStartDate(a.data());
-                  final bStart = _getStartDate(b.data());
+                  final aStart = a.startDate;
+                  final bStart = b.startDate;
                   if (aStart == null && bStart == null) return 0;
                   if (aStart == null) return 1;
                   if (bStart == null) return -1;
@@ -222,12 +196,31 @@ class CommunityTab extends StatelessWidget {
                         physics: const BouncingScrollPhysics(),
                         itemCount: allEvents.length,
                         itemBuilder: (context, idx) {
-                          final doc = allEvents[idx];
+                          final event = allEvents[idx];
                           return Padding(
                             padding: const EdgeInsets.only(right: 14),
                             child: PremiumEventCard(
-                              event: doc.data() ?? {},
-                              eventId: doc.id,
+                              event: {
+                                'title': event.title,
+                                'address': event.address,
+                                'startDate': event.startDate,
+                                'endDate': event.endDate,
+                                'about': event.about,
+                                'email': event.email,
+                                'link': event.link,
+                                'imageUrls': event.imageUrls,
+                                'imageUrl': event.imageUrls.isNotEmpty
+                                    ? event.imageUrls.first
+                                    : null,
+                                'latitude': event.latitude,
+                                'longitude': event.longitude,
+                                'status': event.status,
+                                'participantsCount': event.participantsCount,
+                                'shopId': event.shopId,
+                                'isPaused': event.isPaused,
+                                'isArchived': event.isArchived,
+                              },
+                              eventId: event.id,
                               width: double.infinity,
                               height: 200,
                             ),
@@ -356,12 +349,8 @@ class CommunityTab extends StatelessWidget {
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collectionGroup('jobs')
-                    .orderBy('createdAt', descending: true)
-                    .limit(50)
-                    .snapshots(),
+              child: StreamBuilder<List<Job>>(
+                stream: _jobRepository.watchRecentJobs(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -375,26 +364,20 @@ class CommunityTab extends StatelessWidget {
                     );
                   }
 
-                  final docs = snapshot.data?.docs ?? [];
+                  final docs = snapshot.data ?? const <Job>[];
                   final currentUser = FirebaseAuth.instance.currentUser;
 
                   // Filter out jobs with no shopId, paused jobs, archived jobs, and pending/rejected jobs
-                  final filteredJobs = docs.where((d) {
-                    final job = d.data();
-                    final shopId = job['shopId'];
-                    final isPaused = job['isPaused'] as bool? ?? false;
-                    final isArchived = job['isArchived'] as bool? ?? false;
-                    final status =
-                        (job['status'] as String? ?? 'pending').toLowerCase();
+                  final filteredJobs = docs.where((job) {
+                    final status = job.status.toLowerCase();
 
                     // Only show active and closed jobs
                     final isActive = status == 'active';
                     final isClosed = status == 'closed';
 
-                    return shopId != null &&
-                        shopId.toString().isNotEmpty &&
-                        !isPaused &&
-                        !isArchived &&
+                    return job.shopId.isNotEmpty &&
+                        !job.isPaused &&
+                        !job.isArchived &&
                         (isActive || isClosed);
                   }).toList();
 
@@ -407,40 +390,34 @@ class CommunityTab extends StatelessWidget {
                   }
 
                   // Prioritize open (active) jobs, then closed jobs
-                  final activeJobs =
-                      <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-                  final closedJobs =
-                      <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+                  final activeJobs = <Job>[];
+                  final closedJobs = <Job>[];
 
-                  for (final d in filteredJobs) {
-                    final status = (d.data()['status'] as String? ?? 'pending')
-                        .toLowerCase();
-                    if (status == 'active') {
-                      activeJobs.add(d);
-                    } else if (status == 'closed') {
-                      closedJobs.add(d);
+                  for (final job in filteredJobs) {
+                    if (job.status.toLowerCase() == 'active') {
+                      activeJobs.add(job);
+                    } else if (job.status.toLowerCase() == 'closed') {
+                      closedJobs.add(job);
                     }
                   }
 
-                  final orderedJobs =
-                      <QueryDocumentSnapshot<Map<String, dynamic>>>[
+                  final orderedJobs = <Job>[
                     ...activeJobs,
                     ...closedJobs,
                   ];
 
                   return Column(
-                    children: orderedJobs.map((d) {
-                      final job = d.data();
-                      final status =
-                          (job['status'] as String? ?? 'pending').toLowerCase();
+                    children: orderedJobs.map((job) {
+                      final status = job.status.toLowerCase();
                       final isClosed = status == 'closed';
-                      final createdBy = job['createdBy'] as String?;
                       final isOwner = currentUser != null &&
-                          createdBy != null &&
-                          createdBy == currentUser.uid;
+                          job.createdBy != null &&
+                          job.createdBy == currentUser.uid;
 
                       // Only the owner can open closed jobs
                       final canOpen = !isClosed || isOwner;
+                      final jobMap = job.toFirestore()
+                        ..['id'] = job.id;
 
                       return GestureDetector(
                         onTap: canOpen
@@ -449,17 +426,14 @@ class CommunityTab extends StatelessWidget {
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) => JobDetailsScreen(
-                                      job: {
-                                        ...job,
-                                        'id': d.id,
-                                      },
-                                      shopId: d['shopId'],
+                                      job: jobMap,
+                                      shopId: job.shopId,
                                     ),
                                   ),
                                 );
                               }
                             : null,
-                        child: _buildJobRow(context, job, isClosed: isClosed),
+                        child: _buildJobRow(context, jobMap, isClosed: isClosed),
                       );
                     }).toList(),
                   );
@@ -988,18 +962,6 @@ class CommunityTab extends StatelessWidget {
     } else {
       return 'Just now';
     }
-  }
-
-  DateTime? _getStartDate(Map<String, dynamic>? data) {
-    if (data == null) return null;
-    final startDate = data['startDate'];
-    if (startDate is Timestamp) return startDate.toDate();
-    if (startDate is String && startDate.isNotEmpty) {
-      try {
-        return DateTime.parse(startDate);
-      } catch (_) {}
-    }
-    return null;
   }
 }
 

@@ -1,5 +1,7 @@
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
+import 'package:cofi/data/repositories/community_repository.dart';
+import 'package:cofi/models/job_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -10,6 +12,8 @@ import 'package:cofi/features/settings/settings_screen.dart';
 import 'package:cofi/features/business/shop_verification_sheet.dart';
 
 class ProfileTab extends StatelessWidget {
+  static final JobRepository _jobRepository = JobRepository();
+
   final VoidCallback? onOpenExplore;
   final VoidCallback? onOpenCommunity;
   const ProfileTab({super.key, this.onOpenExplore, this.onOpenCommunity});
@@ -1028,25 +1032,13 @@ class ProfileTab extends StatelessWidget {
         const SizedBox(height: 16),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          child: FutureBuilder<List<Job>>(
             // One-shot fetch instead of a permanent listener over ALL jobs.
-            // TODO(Phase 2): move applications to a user-scoped collection so
+            // TODO(Phase 3): move applications to a user-scoped collection so
             // this becomes where('applicantId', isEqualTo: uid) + limit().
-            future: FirebaseFirestore.instance
-                .collectionGroup('jobs')
-                .get(GetOptions(source: Source.serverAndCache)),
+            future: _jobRepository.fetchJobsWithApplication(uid),
             builder: (context, snapshot) {
-              // Filter documents to find those that actually contain the user's application
-              final relevantDocs = snapshot.data?.docs.where((doc) {
-                    final applications =
-                        (doc.data() as Map<String, dynamic>?)?['applications']
-                                as List<dynamic>? ??
-                            [];
-                    return applications.any((app) =>
-                        app is Map<String, dynamic> &&
-                        app['applicantId'] == uid);
-                  }).toList() ??
-                  [];
+              final relevantDocs = snapshot.data ?? const <Job>[];
 
               final hasApplications = relevantDocs.isNotEmpty;
 
@@ -1130,7 +1122,7 @@ class ProfileTab extends StatelessWidget {
   }
 
   void _showJobApplicationsDialog(
-      BuildContext context, List<DocumentSnapshot> jobDocs) {
+      BuildContext context, List<Job> jobs) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1203,18 +1195,14 @@ class ProfileTab extends StatelessWidget {
             Expanded(
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                itemCount: jobDocs.length,
+                itemCount: jobs.length,
                 separatorBuilder: (context, index) => const SizedBox(height: 16),
                 itemBuilder: (context, index) {
-                  final doc = jobDocs[index];
-                  final data = doc.data() as Map<String, dynamic>;
-                  final applications =
-                      (data['applications'] as List<dynamic>?) ?? [];
-                  final userApplications = applications
+                  final job = jobs[index];
+                  final userApplications = job.applications
                       .where((app) =>
-                          app is Map<String, dynamic> &&
-                          app['applicantId'] ==
-                              FirebaseAuth.instance.currentUser?.uid)
+                          app.applicantId ==
+                          FirebaseAuth.instance.currentUser?.uid)
                       .toList();
 
                   return GestureDetector(
@@ -1222,15 +1210,18 @@ class ProfileTab extends StatelessWidget {
                       final currentUser = FirebaseAuth.instance.currentUser;
                       if (currentUser == null) return;
 
-                      final userApplication = userApplications.firstWhere(
-                        (app) => app['applicantId'] == currentUser.uid,
-                        orElse: () => null,
-                      );
+                      JobApplication? userApplication;
+                      for (final app in userApplications) {
+                        if (app.applicantId == currentUser.uid) {
+                          userApplication = app;
+                          break;
+                        }
+                      }
 
                       if (userApplication != null) {
                         FirebaseFirestore.instance
                             .collection('shops')
-                            .doc(data['shopId'])
+                            .doc(job.shopId)
                             .get()
                             .then((DocumentSnapshot documentSnapshot) {
                           if (documentSnapshot.exists) {
@@ -1239,12 +1230,13 @@ class ProfileTab extends StatelessWidget {
                               context,
                               MaterialPageRoute(
                                 builder: (context) => JobChatScreen(
-                                  jobId: doc.id,
-                                  jobTitle: data['title'] ?? 'Unknown Position',
-                                  shopId: data['shopId'] ?? '',
+                                  jobId: job.id,
+                                  jobTitle:
+                                      job.title.isEmpty ? 'Unknown Position' : job.title,
+                                  shopId: job.shopId,
                                   posterId: documentSnapshot['posterId'] ?? '',
                                   applicantId: currentUser.uid,
-                                  applicationId: userApplication['id'] ?? '',
+                                  applicationId: userApplication!.id,
                                 ),
                               ),
                             );
@@ -1297,14 +1289,18 @@ class ProfileTab extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     TextWidget(
-                                      text: data['title'] ?? 'Unknown Position',
+                                      text: job.title.isNotEmpty
+                                          ? job.title
+                                          : 'Unknown Position',
                                       fontSize: 18,
                                       color: Colors.white,
                                       isBold: true,
                                     ),
                                     const SizedBox(height: 4),
                                     TextWidget(
-                                      text: data['address'] ?? 'Unknown Location',
+                                      text: job.address.isNotEmpty
+                                          ? job.address
+                                          : 'Unknown Location',
                                       fontSize: 14,
                                       color: Colors.white54,
                                     ),
