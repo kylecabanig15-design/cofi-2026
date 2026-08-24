@@ -103,9 +103,17 @@ class _HomeScreenState extends State<HomeScreen> {
           _unreadCount = _notificationService.getUnreadCount();
         });
 
-        // AUTOMATED DISCOVERY: Check for new recommendations on startup
-        // This ensures "Taste matches" pop up in the top right after logging in
-        _notificationService.checkForNewData();
+        // AUTOMATED DISCOVERY: Check for new recommendations on startup.
+        // Deferred until after first frame (+ short delay) so the scan never
+        // competes with the initial render of the explore feed.
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            // Also defer the OS notification-permission prompt here so cold
+            // start is never blocked by a system dialog.
+            _notificationService.requestPermissionIfNeeded();
+            _notificationService.checkForNewData();
+          }
+        });
       }
     });
 

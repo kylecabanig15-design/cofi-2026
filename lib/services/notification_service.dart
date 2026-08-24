@@ -80,12 +80,6 @@ class NotificationService {
       },
     );
 
-    // Request runtime permission for Android 13+
-    if (await Permission.notification.isDenied) {
-      print('🔔 [NOTIFICATIONS] Requesting permission...');
-      await Permission.notification.request();
-    }
-    
     // Create high importance channel for Android to ensure sound and importance are locked in
     final androidPlugin =
         _localNotifications.resolvePlatformSpecificImplementation<
@@ -106,10 +100,26 @@ class NotificationService {
     _setupNotificationListener();
   }
 
+  /// Requests the notification permission. Called AFTER first frame
+  /// (deferred out of main() so cold start is never blocked by the OS dialog).
+  Future<void> requestPermissionIfNeeded() async {
+    if (await Permission.notification.isDenied) {
+      print('🔔 [NOTIFICATIONS] Requesting permission...');
+      await Permission.notification.request();
+    }
+  }
+
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _notifSub;
+  StreamSubscription<User?>? _authSub;
+
   void _setupNotificationListener() {
-    FirebaseAuth.instance.authStateChanges().listen((user) {
+    // Cancel previous subscriptions so repeated auth events never leak
+    // nested Firestore listeners (pre-existing leak).
+    _authSub?.cancel();
+    _notifSub?.cancel();
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null) {
-        _firestore
+        _notifSub = _firestore
             .collection('users')
             .doc(user.uid)
             .collection('notifications')
@@ -468,17 +478,25 @@ class NotificationService {
           ? Timestamp.fromDate(DateTime.fromMillisecondsSinceEpoch(lastCheck))
           : Timestamp.fromDate(now);
 
+      // Check for new data with a SINGLE shared shops fetch (previously the
+      // full shops collection was downloaded once per check — 3x+ reads).
+      final verifiedShops = await _firestore
+          .collection('shops')
+          .where('isVerified', isEqualTo: true)
+          .get();
+
       // Check for new jobs
-      await _checkForNewJobs(user.uid, lastCheckTimestamp);
+      await _checkForNewJobs(user.uid, lastCheckTimestamp, verifiedShops);
 
       // Check for new job applications
-      await _checkForNewJobApplications(user.uid, lastCheckTimestamp);
+      await _checkForNewJobApplications(
+          user.uid, lastCheckTimestamp, verifiedShops);
 
       // Check for new shops
       await _checkForNewShops(user.uid, lastCheckTimestamp);
 
       // Check for new events
-      await _checkForNewEvents(user.uid, lastCheckTimestamp);
+      await _checkForNewEvents(user.uid, lastCheckTimestamp, verifiedShops);
 
     // FIRST TIME / STARTUP RECOMMENDATIONS: 
     // This ensures new accounts see recommendations even if no shops were "just posted"
@@ -492,13 +510,10 @@ class NotificationService {
   }
 
   // Check for new jobs and create notifications
-  Future<void> _checkForNewJobs(String userId, Timestamp? lastCheck) async {
+  Future<void> _checkForNewJobs(String userId, Timestamp? lastCheck,
+      QuerySnapshot<Map<String, dynamic>> verifiedShops) async {
     try {
-      // First get all shops to check their jobs subcollections
-      final shopsSnapshot =
-          await FirebaseFirestore.instance.collection('shops').get();
-
-      for (final shopDoc in shopsSnapshot.docs) {
+      for (final shopDoc in verifiedShops.docs) {
         final shopData = shopDoc.data();
         final isVerified = (shopData['isVerified'] as bool?) ?? false;
         if (!isVerified) continue;
@@ -541,14 +556,10 @@ class NotificationService {
   }
 
   // Check for new job applications and create notifications
-  Future<void> _checkForNewJobApplications(
-      String userId, Timestamp? lastCheck) async {
+  Future<void> _checkForNewJobApplications(String userId, Timestamp? lastCheck,
+      QuerySnapshot<Map<String, dynamic>> verifiedShops) async {
     try {
-      // Get all shops to check their jobs subcollections for applications
-      final shopsSnapshot =
-          await FirebaseFirestore.instance.collection('shops').get();
-
-      for (final shopDoc in shopsSnapshot.docs) {
+      for (final shopDoc in verifiedShops.docs) {
         final shopData = shopDoc.data();
         final isVerified = (shopData['isVerified'] as bool?) ?? false;
         if (!isVerified) continue;
@@ -920,11 +931,11 @@ class NotificationService {
   }
 
   // Check for new events and create notifications
-  Future<void> _checkForNewEvents(String userId, Timestamp? lastCheck) async {
+  // Check for new events and create notifications
+  Future<void> _checkForNewEvents(String userId, Timestamp? lastCheck,
+      QuerySnapshot<Map<String, dynamic>> verifiedShops) async {
     try {
-      final shopsSnapshot = await FirebaseFirestore.instance.collection('shops').where('isVerified', isEqualTo: true).get();
-
-      for (final shopDoc in shopsSnapshot.docs) {
+      for (final shopDoc in verifiedShops.docs) {
         final shopId = shopDoc.id;
         final shopName = shopDoc.data()['name'] ?? 'Café';
         final shopImageUrl = shopDoc.data()['logoUrl'];

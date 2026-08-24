@@ -202,7 +202,10 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
 
   Future<void> _pickImages() async {
     try {
-      final List<XFile> pickedFiles = await _picker.pickMultiImage();
+      final List<XFile> pickedFiles = await _picker.pickMultiImage(
+        imageQuality: 80,
+        maxWidth: 1600,
+      );
       if (pickedFiles.isNotEmpty) {
         setState(() {
           // Add new images to the list, limiting to 5 total
@@ -1200,7 +1203,10 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
 
   Future<void> _pickImages() async {
     try {
-      final List<XFile> pickedFiles = await _picker.pickMultiImage();
+      final List<XFile> pickedFiles = await _picker.pickMultiImage(
+        imageQuality: 80,
+        maxWidth: 1600,
+      );
       if (pickedFiles.isNotEmpty) {
         setState(() {
           // Calculate remaining slots
