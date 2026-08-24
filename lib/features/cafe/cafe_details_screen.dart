@@ -109,8 +109,20 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
   }
 
   Future<void> _checkTutorial() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        if (doc.exists && doc.data()?['accountType'] == 'business') {
+          return;
+        }
+      } catch (_) {}
+    }
+
     final prefs = await SharedPreferences.getInstance();
-    final hasSeen = prefs.getBool('hasSeenCafeDetailsTutorial') ?? false;
+    final uid = user?.uid ?? '';
+    final hasSeen = prefs.getBool('hasSeenCafeDetailsTutorial_$uid') ?? 
+                    prefs.getBool('hasSeenCafeDetailsTutorial') ?? false;
     
     if (widget.isTourMode || !hasSeen) {
       _waitForTargetsAndShow();
@@ -167,6 +179,11 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
   Future<void> _markTutorialSeen() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('hasSeenCafeDetailsTutorial', true);
+    
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await prefs.setBool('hasSeenCafeDetailsTutorial_${user.uid}', true);
+    }
   }
 
   List<TargetFocus> _createTargets() {

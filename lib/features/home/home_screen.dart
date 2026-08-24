@@ -398,8 +398,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _checkTutorial() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Check account type - don't show for business accounts
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (doc.exists && doc.data()?['accountType'] == 'business') {
+        return;
+      }
+    } catch (_) {}
+
     final prefs = await SharedPreferences.getInstance();
-    final hasSeen = prefs.getBool('hasSeenExploreTutorial') ?? false;
+    final hasSeen = prefs.getBool('hasSeenExploreTutorial_${user.uid}') ?? 
+                    prefs.getBool('hasSeenExploreTutorial') ?? false;
+                    
     if (!hasSeen) {
       int waitCount = 0;
       while (_firstCafeKey.currentContext == null && waitCount < 50) {
@@ -565,6 +578,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _markTutorialSeen() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('hasSeenExploreTutorial', true);
+    
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await prefs.setBool('hasSeenExploreTutorial_${user.uid}', true);
+    }
   }
 
   void _showTourCompleteDialog() {

@@ -34,3 +34,4 @@ backups/
 *.js_
 *.js.map
 *.symbol
+.env.demo

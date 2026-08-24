@@ -234,6 +234,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         try {
           final prefs = await SharedPreferences.getInstance();
           await prefs.remove('hasSeenExploreTutorial');
+          await prefs.remove('hasSeenCafeDetailsTutorial');
           
           await GoogleSignInService.signOut();
           if (mounted) {
@@ -536,6 +537,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Step 6: Clear tutorial preference so new users on same device see it
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('hasSeenExploreTutorial');
+      await prefs.remove('hasSeenCafeDetailsTutorial');
+      await prefs.remove('hasSeenExploreTutorial_${freshUser.uid}');
+      await prefs.remove('hasSeenCafeDetailsTutorial_${freshUser.uid}');
 
       // Close loading dialog
       if (mounted) Navigator.of(context).pop();
