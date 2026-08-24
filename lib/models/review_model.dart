@@ -6,6 +6,7 @@ class ReviewResponse {
   final String ownerAvatarUrl;
   final String responseText;
   final DateTime createdAt;
+  final DateTime? updatedAt;
 
   ReviewResponse({
     required this.id,
@@ -13,6 +14,7 @@ class ReviewResponse {
     required this.ownerAvatarUrl,
     required this.responseText,
     required this.createdAt,
+    this.updatedAt,
   });
 
   factory ReviewResponse.fromFirestore(Map<String, dynamic> data, String id) {
@@ -22,6 +24,7 @@ class ReviewResponse {
       ownerAvatarUrl: data['ownerAvatarUrl'] ?? '',
       responseText: data['responseText'] ?? '',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -31,6 +34,7 @@ class ReviewResponse {
       'ownerAvatarUrl': ownerAvatarUrl,
       'responseText': responseText,
       'createdAt': Timestamp.fromDate(createdAt),
+      if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
     };
   }
 }
@@ -38,8 +42,13 @@ class ReviewResponse {
 class Review {
   final String id;
   final String userId;
+
+  /// Reads authorName with fallback to legacy `name`.
   final String authorName;
+  final String? authorPhotoUrl;
   final String text;
+
+  /// Reads text with fallback to legacy `comment`.
   final int rating;
   final List<String> tags;
   final String? imageUrl;
@@ -50,6 +59,7 @@ class Review {
     required this.id,
     required this.userId,
     required this.authorName,
+    this.authorPhotoUrl,
     required this.text,
     required this.rating,
     required this.tags,
@@ -59,16 +69,20 @@ class Review {
   });
 
   factory Review.fromFirestore(Map<String, dynamic> data, String id) {
-    final responses = (data['responses'] as List?)
-            ?.map((r) => ReviewResponse.fromFirestore(
-                r as Map<String, dynamic>, r['id'] as String? ?? ''))
-            .toList() ??
-        [];
+    final responses = ((data['responses'] as List?) ?? [])
+        .whereType<Map>()
+        .map((r) => ReviewResponse.fromFirestore(
+            Map<String, dynamic>.from(r),
+            (r['id'] as String?) ?? ''))
+        .toList();
     return Review(
       id: id,
       userId: data['userId'] ?? '',
-      authorName: data['authorName'] ?? 'Anonymous',
-      text: data['text'] ?? '',
+      authorName: data['authorName'] as String? ??
+          data['name'] as String? ??
+          'Anonymous',
+      authorPhotoUrl: data['authorPhotoUrl'] as String?,
+      text: data['text'] as String? ?? data['comment'] as String? ?? '',
       rating: data['rating'] ?? 0,
       tags: (data['tags'] as List?)?.cast<String>() ?? [],
       imageUrl: data['imageUrl'] as String?,
@@ -81,6 +95,7 @@ class Review {
     return {
       'userId': userId,
       'authorName': authorName,
+      if (authorPhotoUrl != null) 'authorPhotoUrl': authorPhotoUrl,
       'text': text,
       'rating': rating,
       'tags': tags,
