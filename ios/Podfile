@@ -28,9 +28,10 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  # Static linkage: significantly faster incremental builds than dynamic
-  # frameworks (no per-pod embed/sign step). Recommended by Firebase.
-  use_frameworks! :linkage => :static
+  # NOTE: keep dynamic linkage. Static (:linkage => :static) breaks
+  # GoogleSignIn's prebuilt XCFramework, which expects a dynamic AppAuth
+  # at runtime (dyld: Library not loaded @rpath/AppAuth.framework).
+  use_frameworks!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
