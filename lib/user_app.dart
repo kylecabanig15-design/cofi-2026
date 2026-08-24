@@ -13,7 +13,9 @@ import 'package:cofi/features/profile/my_contributions_screen.dart';
 import 'package:cofi/features/jobs/job_chat_screen.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/utils/globals.dart';
+import 'package:cofi/services/user_session.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class UserApp extends StatelessWidget {
   final String? initializationError;
@@ -54,7 +56,9 @@ class UserApp extends StatelessWidget {
       );
     }
 
-    return MaterialApp(
+    return ChangeNotifierProvider(
+      create: (_) => UserSession(),
+      child: MaterialApp(
       navigatorKey: Globals.navigatorKey,
       title: 'Cofi',
       theme: ThemeData(
@@ -150,6 +154,7 @@ class UserApp extends StatelessWidget {
             );
         }
       },
+      ),
     );
   }
 }

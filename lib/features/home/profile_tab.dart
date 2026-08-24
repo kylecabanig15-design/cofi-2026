@@ -1,5 +1,7 @@
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:cofi/services/user_session.dart';
 import 'package:cofi/data/repositories/community_repository.dart';
 import 'package:cofi/models/job_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -142,25 +144,15 @@ class ProfileTab extends StatelessWidget {
                     isBold: true,
                   );
                 }
-                final userDocStream = FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(user.uid)
-                    .snapshots();
-                return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                  stream: userDocStream,
-                  builder: (context, snapshot) {
-                    final data = snapshot.data?.data();
-                    final name = (data?['name'] as String?)?.trim();
-                    final displayName = (name?.isNotEmpty == true)
-                        ? name!
-                        : (user.displayName ?? 'User');
-                    return TextWidget(
-                      text: displayName,
-                      fontSize: 32,
-                      color: Colors.white,
-                      isBold: true,
-                    );
-                  },
+                final sessionName = context.watch<UserSession>().user?.name.trim();
+                final displayName = (sessionName != null && sessionName.isNotEmpty)
+                    ? sessionName
+                    : (user.displayName ?? 'User');
+                return TextWidget(
+                  text: displayName,
+                  fontSize: 32,
+                  color: Colors.white,
+                  isBold: true,
                 );
               }),
             ),
@@ -175,26 +167,15 @@ class ProfileTab extends StatelessWidget {
                     color: Colors.white70,
                   );
                 }
-                final userDocStream = FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(user.uid)
-                    .snapshots();
-                return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                  stream: userDocStream,
-                  builder: (context, snapshot) {
-                    final data = snapshot.data?.data();
-                    final address = (data?['address'] as String?)?.trim();
-                    final text =
-                        (address == null || address.isEmpty) ? '' : address;
-                    if (text.isEmpty) {
-                      return const SizedBox.shrink();
-                    }
-                    return TextWidget(
-                      text: text,
-                      fontSize: 16,
-                      color: Colors.white70,
-                    );
-                  },
+                final sessionAddress =
+                    context.watch<UserSession>().user?.address.trim() ?? '';
+                if (sessionAddress.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                return TextWidget(
+                  text: sessionAddress,
+                  fontSize: 16,
+                  color: Colors.white70,
                 );
               }),
             ),
@@ -205,25 +186,16 @@ class ProfileTab extends StatelessWidget {
                 final user = FirebaseAuth.instance.currentUser;
                 if (user == null) return const SizedBox.shrink();
 
-                return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                  stream: FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(user.uid)
-                      .snapshots(),
-                  builder: (context, userSnapshot) {
-                    final userData = userSnapshot.data?.data();
-                    final accountType =
-                        userData?['accountType'] as String? ?? 'user';
+                final isBusiness =
+                    context.watch<UserSession>().isBusiness;
 
-                    // Business Account - Show Analytics & Stats
-                    if (accountType == 'business') {
-                      return _buildBusinessAnalyticsSection(context, user.uid);
-                    }
+                // Business Account - Show Analytics & Stats
+                if (isBusiness) {
+                  return _buildBusinessAnalyticsSection(context, user.uid);
+                }
 
-                    // User Account - Show regular stats
-                    return _buildUserStatsSection(context, user.uid);
-                  },
-                );
+                // User Account - Show regular stats
+                return _buildUserStatsSection(context, user.uid);
               },
             ),
             const SizedBox(height: 32),
@@ -233,25 +205,16 @@ class ProfileTab extends StatelessWidget {
                 final user = FirebaseAuth.instance.currentUser;
                 if (user == null) return const SizedBox.shrink();
 
-                return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                  stream: FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(user.uid)
-                      .snapshots(),
-                  builder: (context, userSnapshot) {
-                    final userData = userSnapshot.data?.data();
-                    final accountType =
-                        userData?['accountType'] as String? ?? 'user';
+                final isBusiness =
+                    context.watch<UserSession>().isBusiness;
 
-                    // Business Account - Show Business Dashboard
-                    if (accountType == 'business') {
-                      return _buildBusinessSection(context, user.uid);
-                    }
+                // Business Account - Show Business Dashboard
+                if (isBusiness) {
+                  return _buildBusinessSection(context, user.uid);
+                }
 
-                    // User Account - Show Contribute Section
-                    return _buildUserContributeSection(context, user.uid);
-                  },
-                );
+                // User Account - Show Contribute Section
+                return _buildUserContributeSection(context, user.uid);
               },
             ),
             const SizedBox(height: 32),
