@@ -33,7 +33,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late int _currentIndex;
   final NotificationService _notificationService = NotificationService();
-  int _unreadCount = 0;
   String _accountType = 'user'; // Defaults to user
 
   // Tutorial Keys
@@ -54,6 +53,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Scroll controller passed to ExploreTab for animated focus
   final ScrollController _exploreScrollController = ScrollController();
+
+  // Cached once so rebuilds (tab switches, account-type fetch, tutorial)
+  // don't tear down and re-subscribe the Firestore listener on every build.
+  late final Stream<int> _unreadCountStream =
+      _notificationService.watchUnreadCount();
   // Flag: tour is pausing to go into a cafe
   bool _isTourGoingToCafe = false;
   // Flag: Phase 1 tour is actively running
@@ -96,13 +100,11 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ];
 
-    // Initialize notification service and get unread count
+    // Initialize notification service (Firestore listener, local notifs).
+    // The unread badge itself is a live Firestore stream — see
+    // _buildNotificationsAction().
     _notificationService.init().then((_) {
       if (mounted) {
-        setState(() {
-          _unreadCount = _notificationService.getUnreadCount();
-        });
-
         // AUTOMATED DISCOVERY: Check for new recommendations on startup.
         // Deferred until after first frame (+ short delay) so the scan never
         // competes with the initial render of the explore feed.
@@ -168,6 +170,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  void dispose() {
+    _exploreScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return PremiumBackground(
       child: InAppNotificationBannerManager(
@@ -182,55 +190,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     height: 25,
                   ),
                   actions: [
-                    Stack(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.notifications,
-                              color: Colors.white),
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const NotificationScreen(),
-                              ),
-                            ).then((_) {
-                              // Refresh unread count when returning from notification screen
-                              setState(() {
-                                _unreadCount =
-                                    _notificationService.getUnreadCount();
-                              });
-                            });
-                          },
-                        ),
-                        if (_unreadCount > 0)
-                          Positioned(
-                            right: 8,
-                            top: 8,
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(
-                                color: Colors.red,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              constraints: const BoxConstraints(
-                                minWidth: 16,
-                                minHeight: 16,
-                              ),
-                              child: Text(
-                                _unreadCount > 99
-                                    ? '99+'
-                                    : _unreadCount.toString(),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                    _buildNotificationsAction(),
                     const SizedBox(width: 16),
                   ],
                 )
@@ -283,6 +243,58 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Live unread badge driven directly by Firestore (count aggregation), so
+  /// it updates in real time on any device — including notifications created
+  /// by another user's device.
+  Widget _buildNotificationsAction() {
+    return StreamBuilder<int>(
+      stream: _unreadCountStream,
+      builder: (context, snapshot) {
+        final unreadCount = snapshot.data ?? 0;
+        return Stack(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.notifications, color: Colors.white),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const NotificationScreen(),
+                  ),
+                );
+              },
+            ),
+            if (unreadCount > 0)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 16,
+                    minHeight: 16,
+                  ),
+                  child: Text(
+                    unreadCount > 99 ? '99+' : unreadCount.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 

@@ -14,11 +14,33 @@ import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/features/jobs/job_details_screen.dart';
 import 'package:cofi/utils/formatters.dart';
 
-class CommunityTab extends StatelessWidget {
+class CommunityTab extends StatefulWidget {
+  const CommunityTab({super.key});
+
+  @override
+  State<CommunityTab> createState() => _CommunityTabState();
+}
+
+class _CommunityTabState extends State<CommunityTab> {
   static final EventRepository _eventRepository = EventRepository();
   static final JobRepository _jobRepository = JobRepository();
 
-  const CommunityTab({super.key});
+  // Created once — a new PageController per rebuild resets swipe position
+  // and leaks the previous controller.
+  final PageController _eventPageController =
+      PageController(viewportFraction: 0.96);
+
+  // Shuffle memo: only re-randomize when the underlying doc set changes,
+  // so visible cards don't reorder on every stream emission / rebuild.
+  String? _lastSharedIdsKey;
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _displayedSharedDocs =
+      const [];
+
+  @override
+  void dispose() {
+    _eventPageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,8 +125,8 @@ class CommunityTab extends StatelessWidget {
                 final upcomingEvents = <CafeEvent>[];
 
                 for (final event in docs) {
-                  // Skip paused and archived events
-                  if (event.isPaused || event.isArchived) continue;
+                  // Skip rejected, paused, archived and private events
+                  if (!isVisibleEvent(event)) continue;
 
                   final startDateTime = event.startDate;
                   final endDateTime = event.endDate;
@@ -193,7 +215,7 @@ class CommunityTab extends StatelessWidget {
                       blendMode: BlendMode.dstIn,
                       child: PageView.builder(
                         padEnds: false,
-                        controller: PageController(viewportFraction: 0.96),
+                        controller: _eventPageController,
                         physics: const BouncingScrollPhysics(),
                         itemCount: allEvents.length,
                         itemBuilder: (context, idx) {
@@ -272,6 +294,7 @@ class CommunityTab extends StatelessWidget {
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: FirebaseFirestore.instance
                     .collection('sharedCollections')
+                    .orderBy('sharedAt', descending: true)
                     .limit(15) // Fetch a small pool to randomize from
                     .snapshots(),
                 builder: (context, snapshot) {
@@ -301,9 +324,15 @@ class CommunityTab extends StatelessWidget {
                     );
                   }
 
-                  // RANDOMIZE and limit to 5 (Spotify Style)
-                  publicDocs.shuffle();
-                  final displayedDocs = publicDocs.take(5).toList();
+                  // RANDOMIZE and limit to 5 (Spotify Style) — reshuffled
+                  // only when the doc set actually changes.
+                  final idsKey = publicDocs.map((d) => d.id).join(',');
+                  if (idsKey != _lastSharedIdsKey) {
+                    _lastSharedIdsKey = idsKey;
+                    final shuffled = List.of(publicDocs)..shuffle();
+                    _displayedSharedDocs = shuffled.take(5).toList();
+                  }
+                  final displayedDocs = _displayedSharedDocs;
                   
                   return SizedBox(
                     height: 180,
@@ -890,7 +919,7 @@ class CommunityTab extends StatelessWidget {
                 Icon(Icons.person, color: Colors.white54, size: 14),
                 const SizedBox(width: 4),
                 TextWidget(
-                  text: collection['sharedBy'] ?? 'Community',
+                  text: collection['sharedByName'] ?? collection['sharedBy'] ?? 'Community',
                   fontSize: 14,
                   color: Colors.white54,
                 ),

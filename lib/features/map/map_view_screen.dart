@@ -32,6 +32,10 @@ class _MapViewScreenState extends State<MapViewScreen> {
   // When true, we skip the auto-center after GPS resolves so we don't
   // hijack the camera away from where the user is looking.
   bool _userHasInteracted = false;
+  // True only while a real finger is down on the map. onCameraMove also fires
+  // for programmatic animateCamera calls, so we use raw pointer events to
+  // distinguish genuine gestures from GPS/recenter animations.
+  bool _mapPointerActive = false;
   final ValueNotifier<double> _sheetExtent = ValueNotifier<double>(0.35);
   
   // Tracks the live camera position. If the native map is forced to rebuild 
@@ -41,6 +45,25 @@ class _MapViewScreenState extends State<MapViewScreen> {
   // Cached streams to prevent map rebuilds on setState
   Stream<DocumentSnapshot<Map<String, dynamic>>>? _userStream;
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _shopsStream;
+
+  // Memoized per-shop review streams. Rebuilding the cafe list sheet (recenter
+  // toggle, shop select, bookmark change) previously created a fresh Firestore
+  // subscription PER ROW — N listener churns per interaction. Reusing the same
+  // Stream instance keeps StreamBuilders subscribed across rebuilds.
+  final Map<String, Stream<QuerySnapshot<Map<String, dynamic>>>>
+      _reviewStreams = {};
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _reviewsStreamFor(String shopId) {
+    return _reviewStreams.putIfAbsent(
+      shopId,
+      () => FirebaseFirestore.instance
+          .collection('shops')
+          .doc(shopId)
+          .collection('reviews')
+          .limit(10)
+          .snapshots(),
+    );
+  }
 
   BitmapDescriptor? _customMarker;
 
@@ -218,11 +241,21 @@ class _MapViewScreenState extends State<MapViewScreen> {
   // Fires continuously as camera moves — NO setState here to avoid rebuild loops
   void _onCameraMove(CameraPosition position) {
     _currentCameraPosition = position;
-    
-    // Just record that the user has interacted; no rebuild triggered
-    if (!_userHasInteracted) {
+
+    // Only record interaction when the camera is moving under a real finger.
+    // Programmatic animations (GPS auto-center, marker focus) have no active
+    // pointer, so they no longer flip this flag.
+    if (_mapPointerActive && !_userHasInteracted) {
       _userHasInteracted = true;
     }
+  }
+
+  void _onMapPointerDown(PointerDownEvent event) {
+    _mapPointerActive = true;
+  }
+
+  void _onMapPointerUp(PointerEvent event) {
+    _mapPointerActive = false;
   }
 
   // Fires once when the camera fully stops moving (gesture or programmatic)
@@ -504,7 +537,13 @@ class _MapViewScreenState extends State<MapViewScreen> {
       zoom: 14,
     );
 
-    return GoogleMap(
+    // Listener tracks real touch gestures on the map so onCameraMove can tell
+    // user pans apart from programmatic camera animations.
+    return Listener(
+      onPointerDown: _onMapPointerDown,
+      onPointerUp: _onMapPointerUp,
+      onPointerCancel: _onMapPointerUp,
+      child: GoogleMap(
       key: const ValueKey('google_map_view'),
       onMapCreated: _onMapCreated,
       onCameraMove: _onCameraMove,
@@ -523,6 +562,7 @@ class _MapViewScreenState extends State<MapViewScreen> {
         }
       },
       padding: const EdgeInsets.only(bottom: 120),
+      ),
     );
   }
 
@@ -533,11 +573,14 @@ class _MapViewScreenState extends State<MapViewScreen> {
   // This is a hard filter, NOT user-configurable.
   static const double _nearbyThresholdMeters = 2000.0;
 
-  /// Calculate distance from user to a shop in meters
-  double _calculateDistanceToShop(Map<String, dynamic> data) {
-    if (_userLocation == null) return double.infinity;
-    final lat = (data['latitude'] as num?)?.toDouble() ?? 0;
-    final lng = (data['longitude'] as num?)?.toDouble() ?? 0;
+  /// Calculate distance from user to a shop in meters.
+  /// Returns null when the shop has no usable coordinates so callers can
+  /// exclude it from the Nearby list (consistent with the marker layer).
+  double? _calculateDistanceToShop(Map<String, dynamic> data) {
+    if (_userLocation == null) return null;
+    final lat = (data['latitude'] as num?)?.toDouble();
+    final lng = (data['longitude'] as num?)?.toDouble();
+    if (lat == null || lng == null) return null;
     return Geolocator.distanceBetween(
       _userLocation!.latitude,
       _userLocation!.longitude,
@@ -557,6 +600,8 @@ class _MapViewScreenState extends State<MapViewScreen> {
     if (_userLocation != null) {
       for (final doc in docs) {
         final distance = _calculateDistanceToShop(doc.data());
+        // Skip shops without coordinates — we can't compute a real distance
+        if (distance == null) continue;
         if (distance <= _nearbyThresholdMeters) {
           filteredDocs.add(doc);
         }
@@ -568,8 +613,9 @@ class _MapViewScreenState extends State<MapViewScreen> {
       // Uses the Haversine logic (Geolocator.distanceBetween) to sort the 
       // list so that the physically closest café is at index 0.
       filteredDocs.sort((a, b) {
-        final distA = _calculateDistanceToShop(a.data());
-        final distB = _calculateDistanceToShop(b.data());
+        // All docs in filteredDocs passed the null-coordinate filter above
+        final distA = _calculateDistanceToShop(a.data())!;
+        final distB = _calculateDistanceToShop(b.data())!;
         return distA.compareTo(distB);
       });
     } else {
@@ -780,11 +826,7 @@ class _MapViewScreenState extends State<MapViewScreen> {
                                       ),
                                       const SizedBox(height: 8),
                                       StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                                        stream: FirebaseFirestore.instance
-                                            .collection('shops')
-                                            .doc(doc.id)
-                                            .collection('reviews')
-                                            .snapshots(),
+                                        stream: _reviewsStreamFor(doc.id),
                                         builder: (context, snapshot) {
                                           double rating = 0.0;
                                           int count = 0;
@@ -912,9 +954,14 @@ class _MapViewScreenState extends State<MapViewScreen> {
             : FieldValue.arrayUnion([shopId])
       });
     } catch (e) {
-      await ref.set({
-        'bookmarks': [shopId],
-      }, SetOptions(merge: true));
+      // update() fails when the user doc doesn't exist yet. Only seed the
+      // array when ADDING — re-adding on a failed removal would silently
+      // undo the user's action.
+      if (!isBookmarked) {
+        await ref.set({
+          'bookmarks': [shopId],
+        }, SetOptions(merge: true));
+      }
     }
   }
 
