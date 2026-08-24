@@ -1028,9 +1028,13 @@ class ProfileTab extends StatelessWidget {
         const SizedBox(height: 16),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: StreamBuilder<QuerySnapshot>(
-            stream:
-                FirebaseFirestore.instance.collectionGroup('jobs').snapshots(),
+          child: FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            // One-shot fetch instead of a permanent listener over ALL jobs.
+            // TODO(Phase 2): move applications to a user-scoped collection so
+            // this becomes where('applicantId', isEqualTo: uid) + limit().
+            future: FirebaseFirestore.instance
+                .collectionGroup('jobs')
+                .get(GetOptions(source: Source.serverAndCache)),
             builder: (context, snapshot) {
               // Filter documents to find those that actually contain the user's application
               final relevantDocs = snapshot.data?.docs.where((doc) {

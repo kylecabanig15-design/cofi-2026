@@ -18,8 +18,14 @@ class _ExploreEventsSectionState extends State<ExploreEventsSection> {
   @override
   void initState() {
     super.initState();
+    // Server-side filtered: only future events, bounded to 20.
+    // Previously this listened to the entire events collection group
+    // (every event of every shop) and performed writes inside build().
     _eventsStream = FirebaseFirestore.instance
         .collectionGroup('events')
+        .where('startDate', isGreaterThan: Timestamp.fromDate(DateTime.now()))
+        .orderBy('startDate')
+        .limit(20)
         .snapshots();
   }
 
@@ -46,27 +52,6 @@ class _ExploreEventsSectionState extends State<ExploreEventsSection> {
         }
         final docs = snapshot.data?.docs ?? [];
 
-        // Auto-archive finished events (mark them as archived)
-        for (final doc in docs) {
-          final event = doc.data();
-          final endDate = event['endDate'];
-          bool isFinished = false;
-
-          if (endDate is String && endDate.isNotEmpty) {
-            try {
-              final end = DateTime.parse(endDate);
-              isFinished = end.isBefore(now);
-            } catch (_) {}
-          }
-
-          // If event is finished and not yet marked as archived, mark it
-          if (isFinished && event['isArchived'] != true) {
-            doc.reference.update({'isArchived': true}).catchError((_) {});
-          }
-        }
-
-        // Filter to only show UPCOMING events (not started, not ended)
-        // NOTE: Paused events are still shown with a visual indicator
         final upcomingEvents = docs.where((doc) {
           final event = doc.data();
 
