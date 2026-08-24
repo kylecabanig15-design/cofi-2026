@@ -12,11 +12,17 @@ class ShopVerificationSheet extends StatefulWidget {
   final String shopName;
   final bool isVerificationFlow;
 
+  /// How many screens to pop above the base route after a successful
+  /// submission, on top of closing this sheet. Defaults to 0 because some
+  /// callers (e.g. submit flow) pop their own screen when the sheet closes.
+  final int popCountOnSuccess;
+
   const ShopVerificationSheet({
     super.key,
     required this.shopId,
     required this.shopName,
     this.isVerificationFlow = false,
+    this.popCountOnSuccess = 0,
   });
 
   @override
@@ -99,27 +105,8 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('User not logged in');
 
-      // 1. Upload Documents
-      String permitUrl = '';
-      String idUrl = '';
-
-      // Upload Permit
-      final permitRef = FirebaseStorage.instance
-          .ref()
-          .child('verification_docs')
-          .child('${widget.shopId}_permit_${DateTime.now().millisecondsSinceEpoch}');
-      await permitRef.putFile(File(_permitImage!.path));
-      permitUrl = await permitRef.getDownloadURL();
-
-      // Upload ID
-      final idRef = FirebaseStorage.instance
-          .ref()
-          .child('verification_docs')
-          .child('${widget.shopId}_id_${DateTime.now().millisecondsSinceEpoch}');
-      await idRef.putFile(File(_idImage!.path));
-      idUrl = await idRef.getDownloadURL();
-
-      // 2. Check for existing pending claims
+      // 1. Check for existing pending claims BEFORE uploading documents, so
+      // a duplicate submission never pays the Storage upload cost.
       final existingClaims = await FirebaseFirestore.instance
           .collection('shop_claims')
           .where('shopId', isEqualTo: widget.shopId)
@@ -141,6 +128,26 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
         }
       }
 
+      // 2. Upload Documents
+      String permitUrl = '';
+      String idUrl = '';
+
+      // Upload Permit
+      final permitRef = FirebaseStorage.instance
+          .ref()
+          .child('verification_docs')
+          .child('${widget.shopId}_permit_${DateTime.now().millisecondsSinceEpoch}');
+      await permitRef.putFile(File(_permitImage!.path));
+      permitUrl = await permitRef.getDownloadURL();
+
+      // Upload ID
+      final idRef = FirebaseStorage.instance
+          .ref()
+          .child('verification_docs')
+          .child('${widget.shopId}_id_${DateTime.now().millisecondsSinceEpoch}');
+      await idRef.putFile(File(_idImage!.path));
+      idUrl = await idRef.getDownloadURL();
+
       // 3. Save to Firestore
       if (widget.isVerificationFlow) {
         // DIRECT SUBMISSION: Update the existing shop doc directly
@@ -159,8 +166,14 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
           'verificationSubmittedAt': FieldValue.serverTimestamp(),
         });
       } else {
-        // CLAIM FLOW: Create a separate claim request for an EXISTING shop
-        await FirebaseFirestore.instance.collection('shop_claims').add({
+        // CLAIM FLOW: Create a separate claim request for an EXISTING shop.
+        // Deterministic doc id (shopId_uid) makes concurrent submissions from
+        // two devices idempotent — the second overwrites the same document
+        // instead of creating a duplicate, closing the check-then-add race.
+        await FirebaseFirestore.instance
+            .collection('shop_claims')
+            .doc('${widget.shopId}_${user.uid}')
+            .set({
           'shopId': widget.shopId,
           'shopName': widget.shopName,
           'claimantId': user.uid,
@@ -192,12 +205,15 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
         
         // 1. Pop the verification sheet
         Navigator.pop(context);
-        
-        // 2. Pop the SubmitShopScreen or ClaimShopScreen
-        Navigator.pop(context);
-        
-        // 3. Pop the BusinessDashboardScreen (Get Started bridge) to return to ProfileTab
-        Navigator.pop(context);
+
+        // 2. Pop intermediate screen(s) only as far as the caller asked for,
+        // guarded by canPop so we never pop past the base route (the number
+        // of routes above base varies between the submit and claim flows).
+        int remaining = widget.popCountOnSuccess;
+        while (remaining > 0 && mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+          remaining--;
+        }
       }
 
     } catch (e) {

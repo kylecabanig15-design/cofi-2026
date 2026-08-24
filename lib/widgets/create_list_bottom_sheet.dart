@@ -417,6 +417,7 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
                               // Custom collection - save selected shops
 
                               docRef = await listsCol.add({
+                                'userId': user.uid,
                                 'name': name,
                                 'description': description,
                                 'createdAt': now,
@@ -425,9 +426,11 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
                                 'isPrivate': _isPrivate,
                               });
 
-                              // Add selected shops to the items subcollection
+                              // Add selected shops to the items subcollection.
+                              // Doc IDs are always the shopId so removal by
+                              // .doc(shopId).delete() works for these items.
                               for (final shopId in _selectedShopIds) {
-                                await docRef.collection('items').add({
+                                await docRef.collection('items').doc(shopId).set({
                                   'shopId': shopId,
                                   'addedAt': now,
                                 });
@@ -438,7 +441,8 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
                                   .where((e) => e.value)
                                   .map((e) => e.key)
                                   .toList();
-                                docRef = await listsCol.add({
+                                  docRef = await listsCol.add({
+                                'userId': user.uid,
                                 'name': name,
                                 'description': description,
                                 'createdAt': now,

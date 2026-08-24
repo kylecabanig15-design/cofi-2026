@@ -16,10 +16,10 @@ rules_version = '2';
 //   the recipient's notifications subcollection). Create is therefore open
 //   to signed-in users; read/update/delete restricted to the recipient.
 //   This tightens automatically when fan-out moves to Cloud Functions.
-// - TRANSITIONAL: clients still write `allJobs`/`pendingJobs`
-//   (lib/services/job_sync_service.dart). Write access stays signed-in-only
-//   until that client-side sync is removed in favor of the Cloud Function,
-//   then becomes `allow write: if false`.
+// - allJobs/pendingJobs are written ONLY by Cloud Functions (the Admin SDK
+//   bypasses rules). Clients read them but can never write them; the old
+//   client-side sync in lib/services/job_sync_service.dart has been removed
+//   in favor of the shops/{shopId}/jobs triggers in functions/index.js.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -43,8 +43,12 @@ service cloud.firestore {
       return signedIn()
         && exists(/databases/$(database)/documents/shops/$(shopId))
         && (
+          // Claimed shops: only the owner manages them. posterId no longer
+          // grants rights once an owner exists, so original community
+          // submitters lose edit access after a claim is approved.
           get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId == request.auth.uid
-          || get(/databases/$(database)/documents/shops/$(shopId)).data.posterId == request.auth.uid
+          || (get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId == null
+              && get(/databases/$(database)/documents/shops/$(shopId)).data.posterId == request.auth.uid)
         );
     }
 
@@ -56,7 +60,6 @@ service cloud.firestore {
     // ---------- Users ----------
     match /users/{userId} {
       allow read: if signedIn();
-
       allow create: if isSelf(userId)
         && (!('isAdmin' in request.resource.data) || request.resource.data.isAdmin == false);
 
@@ -69,29 +72,120 @@ service cloud.firestore {
       allow delete: if isAdmin() || isSelf(userId);
 
       // Notifications are written by other users' actions (fan-out),
-      // but only the recipient can ever read or manage them.
+      // but only the recipient can ever read or manage them. Create is
+      // shape-validated; true sender verification requires moving fan-out
+      // to Cloud Functions.
       match /notifications/{notificationId} {
         allow read, update, delete: if isSelf(userId);
-        allow create: if signedIn();
+        allow create: if signedIn()
+          && request.resource.data.get('title', '') is string
+          && request.resource.data.title.size() <= 500
+          && request.resource.data.get('body', '') is string
+          && request.resource.data.body.size() <= 1000;
       }
+
+      // Per-user café lists (mirrors the top-level /lists rules below).
+      // Ownership comes from the document PATH ({userId}), so `userId` in
+      // the payload is optional — create_list_bottom_sheet.dart does not
+      // write it, and requiring it made every collection save fail with
+      // permission-denied.
+      match /lists/{listId} {
+        allow read: if signedIn();
+        allow create: if isSelf(userId)
+          && (!('userId' in request.resource.data)
+              || request.resource.data.userId == request.auth.uid);
+        allow update, delete: if isAdmin() || isSelf(userId);
+
+        match /items/{itemId} {
+          allow read: if signedIn();
+          allow create: if signedIn()
+            && (!('userId' in request.resource.data)
+                || request.resource.data.userId == request.auth.uid);
+          allow update, delete: if isAdmin() || isSelf(userId);
+        }
+
+        match /participants/{participantId} {
+          allow read: if signedIn();
+          allow create: if signedIn();
+          allow update, delete: if isAdmin() || isSelf(userId);
+        }
+      }
+    }
+
+    // ---------- Collection-group reads ----------
+    // Events and jobs are queried with collectionGroup() (community_repository.dart),
+    // which cannot be proven scoped to /shops by the rules engine — these
+    // wildcard matches make those feeds readable for signed-in users.
+    match /{path=**}/events/{eventId} {
+      allow read: if signedIn();
+    }
+    match /{path=**}/jobs/{jobId} {
+      allow read: if signedIn();
+    }
+    // Visits, reviews and comments are also read via collectionGroup()
+    // (activity stats, visited-cafes list, your-reviews screen), which
+    // cannot be proven scoped to /shops by the rules engine.
+    match /{path=**}/visits/{visitId} {
+      allow read: if signedIn();
+    }
+    match /{path=**}/reviews/{reviewId} {
+      allow read: if signedIn();
+    }
+    match /{path=**}/comments/{commentId} {
+      allow read: if signedIn();
     }
 
     // ---------- Shops ----------
     match /shops/{shopId} {
       allow read: if signedIn();
-      allow create: if signedIn();
+
+      // Community/business submissions must start unverified & pending.
+      // Without these checks any user could self-approve (`isVerified`,
+      // `approvalStatus`) or assign someone else as `ownerId`.
+      allow create: if signedIn()
+        && request.resource.data.isVerified == false
+        && request.resource.data.approvalStatus in ['pending_approval', 'awaiting_verification']
+        && (!('ownerId' in request.resource.data)
+            || request.resource.data.ownerId == null
+            || request.resource.data.ownerId == request.auth.uid)
+        && (!('posterId' in request.resource.data) || request.resource.data.posterId == request.auth.uid);
       allow delete: if isAdmin() || isShopStaff(shopId);
 
-      // Staff/admin full edit; everyone else only aggregate-rating updates.
+      // Staff/admin full edit — EXCEPT staff may never mark their own shop
+      // verified or flip its status to approved (admin-only decisions).
+      // Everyone else may ONLY append exactly one entry to the embedded
+      // reviews array and set a valid new average.
       allow update: if isAdmin()
-        || isShopStaff(shopId)
-        || (signedIn() && onlyTouches(['reviews', 'ratings', 'ratingsCount', 'reviewCount']));
+        || (isShopStaff(shopId)
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isVerified'])
+            && !(request.resource.data.diff(resource.data).affectedKeys().hasAny(['approvalStatus'])
+                 && request.resource.data.approvalStatus == 'approved'))
+        || (signedIn()
+            && onlyTouches(['reviews', 'ratings'])
+            && request.resource.data.reviews.size() == resource.data.get('reviews', []).size() + 1
+            && request.resource.data.ratings is number
+            && request.resource.data.ratings >= 0
+            && request.resource.data.ratings <= 5);
 
       // ----- Jobs (posted and managed by shop staff) -----
       match /jobs/{jobId} {
         allow read: if signedIn();
-        allow create: if signedIn(); // applicants' metadata flows refined in Phase 2
-        allow update, delete: if isAdmin() || isShopStaff(shopId);
+        // Only staff/admin may post jobs under a shop — a signed-in-only
+        // create allowed impersonation of other businesses.
+        allow create: if isAdmin() || isShopStaff(shopId);
+        // Staff/admin manage jobs (incl. whole-applications-array rewrites
+        // for accept/reject). Non-staff users may append EXACTLY ONE
+        // application entry identifying themselves as the applicant.
+        // NOTE: Firestore rules cannot diff list elements, so a malicious
+        // client could still mutate earlier entries while appending its own
+        // — full mitigation requires moving applications to a subcollection
+        // (Phase 3 schema migration).
+        allow update: if isAdmin() || isShopStaff(shopId)
+          || (signedIn()
+              && onlyTouches(['applications'])
+              && request.resource.data.applications.size() == resource.data.get('applications', []).size() + 1
+              && request.resource.data.applications[request.resource.data.applications.size() - 1].get('applicantId', '') == request.auth.uid);
+        allow delete: if isAdmin() || isShopStaff(shopId);
       }
 
       // ----- Events -----
@@ -162,10 +256,22 @@ service cloud.firestore {
     // ---------- Ownership claims ----------
     match /shop_claims/{claimId} {
       allow read: if signedIn() || isAdmin();
-      allow create: if signedIn();
-      // Only admins decide claims. Claimants may withdraw their own
-      // still-pending claim.
-      allow update: if isAdmin();
+      // Claim docs use deterministic ids ({shopId}_{uid}) so concurrent
+      // submissions are idempotent; claimants may (re)submit ONLY their own
+      // still-pending claims.
+      allow create: if signedIn()
+        && request.resource.data.get('claimantId', '') == request.auth.uid
+        && request.resource.data.get('status', 'pending') == 'pending';
+      // Only admins decide claims. Claimants may submit/refresh their own
+      // still-pending OR previously-rejected claim back to pending (docs use
+      // deterministic {shopId}_{uid} ids, so re-submission is an UPDATE);
+      // they can never touch an approved claim or change its shopId.
+      allow update: if isAdmin()
+        || (signedIn()
+            && resource.data.get('claimantId', '') == request.auth.uid
+            && resource.data.get('status', 'pending') != 'approved'
+            && request.resource.data.get('status', 'pending') == 'pending'
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['shopId']));
       allow delete: if isAdmin()
         || (signedIn()
             && resource.data.get('claimantId', resource.data.get('uid', '')) == request.auth.uid
@@ -182,7 +288,15 @@ service cloud.firestore {
 
       match /items/{itemId} {
         allow read: if signedIn();
-        allow create: if signedIn();
+        // Only the list owner (or an explicit participant of the list) may
+        // add items — previously any signed-in user could inject into
+        // another user's collection.
+        allow create: if isAdmin()
+          || (signedIn()
+              && exists(/databases/$(database)/documents/lists/$(listId))
+              && get(/databases/$(database)/documents/lists/$(listId)).data.userId == request.auth.uid)
+          || (signedIn()
+              && exists(/databases/$(database)/documents/lists/$(listId)/participants/$(request.auth.uid)));
         allow update, delete: if isAdmin()
           || (signedIn()
               && exists(/databases/$(database)/documents/lists/$(listId))
@@ -205,23 +319,45 @@ service cloud.firestore {
     match /sharedCollections/{shareId} {
       allow read: if signedIn();
       allow create: if signedIn();
+      // sharedBy holds the uid for new docs; LEGACY docs stored a display
+      // name there but always carried the real owner in `userId`, so that
+      // field authorizes managing old shares without a data migration.
       allow update, delete: if isAdmin()
-        || (signedIn() && resource.data.sharedBy == request.auth.uid);
+        || (signedIn()
+            && (resource.data.sharedBy == request.auth.uid
+                || resource.data.get('userId', '') == request.auth.uid));
     }
 
     // ---------- Job chat ----------
     match /job_chats/{chatId} {
       allow read: if signedIn();
       allow create: if signedIn();
-      // Participants and admins converse; message-level ownership enforced
-      // once chat participant model is normalized in Phase 2.
-      allow update: if isAdmin() || signedIn();
+      // Only chat participants (via the `participants` array, or the uids
+      // embedded in legacy {uidA}_{uidB}_{jobId} doc ids) and admins may
+      // update a chat thread's metadata.
+      allow update: if isAdmin()
+        || (signedIn()
+            && (resource.data.get('participants', []).hasAny([request.auth.uid])
+                || chatId.split('_')[0] == request.auth.uid
+                || chatId.split('_')[1] == request.auth.uid));
       allow delete: if isAdmin();
       match /messages/{messageId} {
         allow read: if signedIn();
         allow create: if signedIn();
+        // Senders manage their own messages; the RECIPIENT may only mark
+        // their incoming messages as read (isRead/readAt keys only). LEGACY
+        // messages predate recipientId, but chat ids embed both participant
+        // uids ({uidA}_{uidB}_{jobId}) — that authorizes read-marking of
+        // old threads without a backfill.
         allow update, delete: if isAdmin()
-          || (signedIn() && resource.data.senderId == request.auth.uid);
+          || (signedIn() && resource.data.senderId == request.auth.uid)
+          || (signedIn()
+              && resource.data.get('recipientId', '') == request.auth.uid
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'readAt']))
+          || (signedIn()
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'readAt'])
+              && (chatId.split('_')[0] == request.auth.uid
+                  || chatId.split('_')[1] == request.auth.uid));
       }
     }
 
@@ -232,16 +368,16 @@ service cloud.firestore {
     }
 
     // ---------- Denormalized job feeds ----------
-    // TRANSITIONAL: written by clients today, Cloud Function after Phase 2.
+    // Written ONLY by the Cloud Functions in functions/index.js (the Admin
+    // SDK bypasses rules); clients get read-only access.
     match /allJobs/{jobId} {
       allow read: if signedIn();
-      allow create, update: if signedIn();
-      allow delete: if isAdmin();
+      allow write: if false;
     }
+    // Reserved collection, currently unused by any client or function.
     match /pendingJobs/{jobId} {
       allow read: if signedIn();
-      allow create, update: if signedIn();
-      allow delete: if isAdmin();
+      allow write: if false;
     }
   }
 }
