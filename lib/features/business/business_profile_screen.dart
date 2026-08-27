@@ -1,7 +1,6 @@
 import 'package:cofi/widgets/my_events_bottom_sheet.dart';
 import 'package:cofi/widgets/my_jobs_bottom_sheet.dart';
 import 'package:cofi/widgets/post_job_bottom_sheet.dart';
-import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/widgets/text_widget.dart';
@@ -9,11 +8,8 @@ import 'package:cofi/widgets/post_event_bottom_sheet.dart';
 import 'package:cofi/features/events/event_archives_screen.dart';
 import 'package:cofi/features/jobs/job_archives_screen.dart';
 import 'package:cofi/features/cafe/reviews_screen.dart';
-import 'package:cofi/features/jobs/job_chat_screen.dart';
 import 'package:cofi/utils/colors.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:cofi/features/business/shop_verification_sheet.dart';
 
 import 'package:cofi/features/business/widgets/job_applications_sheet.dart';
@@ -129,9 +125,9 @@ class BusinessProfileScreen extends StatelessWidget {
                            margin: const EdgeInsets.only(top: 24),
                            padding: const EdgeInsets.all(16),
                            decoration: BoxDecoration(
-                             color: Colors.orange.withOpacity(0.1),
+                             color: Colors.orange.withValues(alpha: 0.1),
                              borderRadius: BorderRadius.circular(12),
-                             border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                             border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
                            ),
                            child: Row(
                              children: [

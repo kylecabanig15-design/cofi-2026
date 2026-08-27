@@ -4,9 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/utils/auth_error_handler.dart';
 import 'package:cofi/widgets/text_widget.dart';
-import 'package:cofi/widgets/button_widget.dart';
-import 'package:cofi/features/auth/login_screen.dart';
-import 'package:cofi/features/auth/interest_selection_screen.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/premium_background.dart';
 
@@ -526,7 +523,7 @@ class _SignupScreenState extends State<SignupScreen> {
               Switch(
                 value: value,
                 onChanged: onChanged,
-                activeColor: primary,
+                activeThumbColor: primary,
                 activeTrackColor: primary.withValues(alpha: 0.3),
                 inactiveThumbColor: Colors.grey[400],
                 inactiveTrackColor: Colors.grey[700],

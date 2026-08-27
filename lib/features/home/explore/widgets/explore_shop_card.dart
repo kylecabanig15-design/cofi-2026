@@ -40,10 +40,10 @@ class ExploreShopCard extends StatelessWidget {
     if (!isVerified && !isFeatured) return const SizedBox.shrink();
     
     final Color badgeColor = isFeatured 
-        ? primary.withOpacity(0.9) 
+        ? primary.withValues(alpha: 0.9)
         : (submissionType == 'business' 
-            ? const Color(0xFF546E7A).withOpacity(0.85) 
-            : const Color(0xFFF1C40F).withOpacity(0.85)); 
+            ? const Color(0xFF546E7A).withValues(alpha: 0.85)
+            : const Color(0xFFF1C40F).withValues(alpha: 0.85));
             
     final IconData badgeIcon = isFeatured
         ? Icons.auto_awesome 
@@ -63,7 +63,7 @@ class ExploreShopCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -168,7 +168,7 @@ class ExploreShopCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           blurRadius: 8,
                           offset: const Offset(0, 4),
                         ),

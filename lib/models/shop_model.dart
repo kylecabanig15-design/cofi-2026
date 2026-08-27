@@ -137,11 +137,15 @@ class Shop {
           .map((k, v) => MapEntry(
               k, ShopScheduleDay.fromFirestore(v as Map<String, dynamic>?))),
       logoUrl: data['logoUrl'] as String?,
-      gallery:
-          (data['gallery'] as List?)?.cast<String>() ?? const [],
+      // whereType materializes a real list — List.cast<String>() is a lazy
+      // view that throws TypeError at iteration time in widgets for any
+      // non-String element, outside the repository's parse protection.
+      gallery: (data['gallery'] as List?)?.whereType<String>().toList() ??
+          const [],
       menuPricePhotos:
-          (data['menuPricePhotos'] as List?)?.cast<String>() ?? const [],
-      tags: (data['tags'] as List?)?.cast<String>() ?? const [],
+          (data['menuPricePhotos'] as List?)?.whereType<String>().toList() ??
+              const [],
+      tags: (data['tags'] as List?)?.whereType<String>().toList() ?? const [],
       latitude: lat is num ? lat.toDouble() : null,
       longitude: lng is num ? lng.toDouble() : null,
       posterId: data['posterId'] is String ? data['posterId'] as String : null,

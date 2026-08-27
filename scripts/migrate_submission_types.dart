@@ -82,7 +82,7 @@ void main() async {
     }
   }
   
-  print('\n' + '=' * 60);
+  print('\n${'=' * 60}');
   print('🎉 Migration Complete!');
   print('=' * 60);
   print('✅ Updated: $updated shops');

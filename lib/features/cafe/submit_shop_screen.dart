@@ -36,7 +36,7 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
   // Image picker related variables
   final ImagePicker _picker = ImagePicker();
   File? _selectedImage;
-  List<File> _galleryImages = [];
+  final List<File> _galleryImages = [];
   final List<File> _menuPriceImages = [];
   bool _isUploading = false;
 
@@ -219,7 +219,7 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
       // Load existing location
       final double? latitude = data['latitude'] as double?;
       final double? longitude = data['longitude'] as double?;
-      if (latitude != null && longitude != null) {
+      if (mounted && latitude != null && longitude != null) {
         setState(() {
           _selectedLocation = LatLng(latitude, longitude);
           _locationType = 'custom_location';
@@ -228,11 +228,25 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
 
       // Load existing images
       _existingLogoUrl = (data['logoUrl'] as String?) ?? '';
-      _existingGalleryUrls = ((data['gallery'] as List?)?.cast<String>()) ?? [];
+      _existingGalleryUrls =
+          ((data['gallery'] as List?)?.whereType<String>().toList()) ?? [];
       _existingMenuPriceUrls =
-          ((data['menuPricePhotos'] as List?)?.cast<String>()) ?? [];
-    } catch (_) {
-      // ignore, basic UX handled by unchanged fields
+          ((data['menuPricePhotos'] as List?)?.whereType<String>().toList()) ??
+              [];
+    } catch (e) {
+      // Surface the failure — continuing with a blank edit form and letting
+      // the user hit save would overwrite the shop with empty fields.
+      debugPrint('Failed to load existing shop $id: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Could not load shop details. Please check your connection and try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        Navigator.pop(context);
+      }
     } finally {
       if (mounted) setState(() => _isLoadingExisting = false);
     }
@@ -259,6 +273,8 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
     if (!mounted) return;
     while (mounted) {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      // Re-check: the widget may have been disposed across the async gap.
+      if (!mounted) return;
       if (!serviceEnabled) {
         await showDialog<void>(
           context: context,
@@ -290,10 +306,12 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
       }
 
       LocationPermission permission = await Geolocator.checkPermission();
+      if (!mounted) return;
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
+        if (!mounted) return;
       }
-      if (permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.deniedForever && mounted) {
         await showDialog<void>(
           context: context,
           barrierDismissible: false,
@@ -672,7 +690,7 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
     showGeneralDialog(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.black.withOpacity(0.9),
+      barrierColor: Colors.black.withValues(alpha: 0.9),
       transitionDuration: const Duration(milliseconds: 400),
       pageBuilder: (context, animation, secondaryAnimation) {
         return FadeTransition(
@@ -691,7 +709,7 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
                         width: 100,
                         height: 100,
                         decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.2),
+                          color: Colors.green.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.green, width: 2),
                         ),
@@ -1613,7 +1631,7 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
                               ),
                             ],
                           );
-                        }).toList(),
+                        }),
                         const SizedBox(height: 24),
 
                         // Daily Schedule Section
@@ -1828,7 +1846,7 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
               ),
               Switch(
                 value: isOpen,
-                activeColor: primary,
+                activeThumbColor: primary,
                 onChanged: (val) {
                   setState(() {
                     _schedule[key]!['isOpen'] = val;

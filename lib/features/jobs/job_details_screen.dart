@@ -10,7 +10,6 @@ import 'package:cofi/features/jobs/job_archives_screen.dart';
 import 'package:cofi/features/jobs/job_application_screen.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class JobDetailsScreen extends StatefulWidget {
   final Map<String, dynamic>? job;

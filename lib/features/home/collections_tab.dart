@@ -287,80 +287,16 @@ class _CollectionsTabState extends State<CollectionsTab> {
                                         '$itemCount Shop${itemCount == 1 ? '' : 's'}',
                                     customIcon: const Icon(Icons.local_cafe,
                                         color: Colors.white, size: 28),
-                                    onTap: () async {
-                                      try {
-                                        final res = await FirebaseFirestore
-                                            .instance
-                                            .collection('users')
-                                            .doc(user.uid)
-                                            .collection('lists')
-                                            .doc(d.id)
-                                            .collection('items')
-                                            .get();
-                                        final ids = res.docs
-                                            .map((doc) =>
-                                                (doc.data()['shopId']
-                                                    as String?) ??
-                                                doc.id)
-                                            .where((id) => id.isNotEmpty)
-                                            .toSet()
-                                            .toList();
-                                        if (ids.isEmpty) {
-                                          ListBottomSheet.show(
-                                            context,
-                                            title: title,
-                                            shopsList: const <Map<String,
-                                                dynamic>>[],
-                                            listId: d.id,
-                                            userId: user.uid,
-                                          );
-                                          return;
-                                        }
-                                        // Fetch shops in batches of 10 due to whereIn limit
-                                        final List<Map<String, dynamic>>
-                                            shopsList = [];
-                                        const int batchSize = 10;
-                                        for (var i = 0;
-                                            i < ids.length;
-                                            i += batchSize) {
-                                          final batch = ids.sublist(
-                                              i,
-                                              i + batchSize > ids.length
-                                                  ? ids.length
-                                                  : i + batchSize);
-                                          final snap = await FirebaseFirestore
-                                              .instance
-                                              .collection('shops')
-                                              .where('isVerified',
-                                                  isEqualTo: true)
-                                              .where(FieldPath.documentId,
-                                                  whereIn: batch)
-                                              .get();
-                                          shopsList
-                                              .addAll(snap.docs.map((e) => {
-                                                    ...e.data(),
-                                                    'id': e.id,
-                                                  }));
-                                        }
-                                        if (!mounted) return;
-                                        ListBottomSheet.show(
-                                          context,
-                                          title: title,
-                                          shopsList: shopsList,
-                                          listId: d.id,
-                                          userId: user.uid,
-                                          filterTags:
-                                              tags.isNotEmpty ? tags : null,
-                                        );
-                                      } catch (e) {
-                                        if (!mounted) return;
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                              content: Text(
-                                                  'Failed to load cafes: $e')),
-                                        );
-                                      }
+                                    onTap: () {
+                                      ListBottomSheet.show(
+                                        context,
+                                        title: title,
+                                        itemsStream: itemsStream,
+                                        listId: d.id,
+                                        userId: user.uid,
+                                        filterTags:
+                                            tags.isNotEmpty ? tags : null,
+                                      );
                                     },
                                   );
                                 },
@@ -441,77 +377,14 @@ class _CollectionsTabState extends State<CollectionsTab> {
                                       '$itemCount Shop${itemCount == 1 ? '' : 's'}',
                                   customIcon: const Icon(Icons.local_cafe,
                                       color: Colors.white, size: 28),
-                                  onTap: () async {
-                                    try {
-                                      final res = await FirebaseFirestore
-                                          .instance
-                                          .collection('users')
-                                          .doc(user.uid)
-                                          .collection('lists')
-                                          .doc(d.id)
-                                          .collection('items')
-                                          .get();
-                                      final ids = res.docs
-                                          .map((doc) =>
-                                              (doc.data()['shopId']
-                                                  as String?) ??
-                                              doc.id)
-                                          .where((id) => id.isNotEmpty)
-                                          .toSet()
-                                          .toList();
-                                      if (ids.isEmpty) {
-                                        ListBottomSheet.show(
-                                          context,
-                                          title: title,
-                                          shopsList: const <Map<String,
-                                              dynamic>>[],
-                                          listId: d.id,
-                                          userId: user.uid,
-                                        );
-                                        return;
-                                      }
-                                      // Fetch shops in batches of 10 due to whereIn limit
-                                      final List<Map<String, dynamic>>
-                                          shopsList = [];
-                                      const int batchSize = 10;
-                                      for (var i = 0;
-                                          i < ids.length;
-                                          i += batchSize) {
-                                        final batch = ids.sublist(
-                                            i,
-                                            i + batchSize > ids.length
-                                                ? ids.length
-                                                : i + batchSize);
-                                        final snap = await FirebaseFirestore
-                                            .instance
-                                            .collection('shops')
-                                            .where('isVerified',
-                                                isEqualTo: true)
-                                            .where(FieldPath.documentId,
-                                                whereIn: batch)
-                                            .get();
-                                        shopsList.addAll(snap.docs.map((e) => {
-                                              ...e.data(),
-                                              'id': e.id,
-                                            }));
-                                      }
-                                      if (!mounted) return;
-                                      ListBottomSheet.show(
-                                        context,
-                                        title: title,
-                                        shopsList: shopsList,
-                                        listId: d.id,
-                                        userId: user.uid,
-                                      );
-                                    } catch (e) {
-                                      if (!mounted) return;
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                            content: Text(
-                                                'Failed to load cafes: $e')),
-                                      );
-                                    }
+                                  onTap: () {
+                                    ListBottomSheet.show(
+                                      context,
+                                      title: title,
+                                      itemsStream: itemsStream,
+                                      listId: d.id,
+                                      userId: user.uid,
+                                    );
                                   },
                                 );
                               },

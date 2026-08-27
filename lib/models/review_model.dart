@@ -39,7 +39,10 @@ class ReviewResponse {
       ownerAvatarUrl: data['ownerAvatarUrl'] ?? '',
       responseText: data['responseText'] ?? '',
       createdAt: _parseDate(data['createdAt']) ?? _epochDate,
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      // Route through _parseDate — a hard `as Timestamp?` cast throws on
+      // legacy ISO-string values, which (inside ShopRepository._parseAll's
+      // per-doc catch) silently hides the ENTIRE review from every list.
+      updatedAt: _parseDate(data['updatedAt']),
     );
   }
 
@@ -99,7 +102,10 @@ class Review {
       authorPhotoUrl: data['authorPhotoUrl'] as String?,
       text: data['text'] as String? ?? data['comment'] as String? ?? '',
       rating: data['rating'] ?? 0,
-      tags: (data['tags'] as List?)?.cast<String>() ?? [],
+      // whereType materializes a real list — List.cast<String>() is a lazy
+      // view that throws TypeError at iteration time in widgets for any
+      // non-String element, outside the repository's parse protection.
+      tags: (data['tags'] as List?)?.whereType<String>().toList() ?? [],
       imageUrl: data['imageUrl'] as String?,
       createdAt: _parseDate(data['createdAt']) ?? _epochDate,
       responses: responses,

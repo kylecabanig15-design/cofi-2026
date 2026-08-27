@@ -264,19 +264,19 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [primary.withOpacity(0.15), Colors.transparent],
+                        colors: [primary.withValues(alpha: 0.15), Colors.transparent],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ),
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: primary.withOpacity(0.1)),
+                      border: Border.all(color: primary.withValues(alpha: 0.1)),
                     ),
                     child: Column(
                       children: [
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: primary.withOpacity(0.1),
+                            color: primary.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(Icons.verified_user_rounded, color: primary, size: 32),
@@ -467,7 +467,7 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
               hintText: hint,
               hintStyle: TextStyle(color: Colors.white24),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.05),
+              fillColor: Colors.white.withValues(alpha: 0.05),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
@@ -486,7 +486,7 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
       child: Container(
         height: 160,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
+          color: Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: file != null ? primary : Colors.white10,

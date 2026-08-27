@@ -244,7 +244,7 @@ class _SharedCollectionScreenState extends State<SharedCollectionScreen> {
                           CachedNetworkImage(
                             imageUrl: logo,
                             fit: BoxFit.cover,
-                            color: Colors.black.withOpacity(0.5),
+                            color: Colors.black.withValues(alpha: 0.5),
                             colorBlendMode: BlendMode.darken,
                           ),
                       ],
@@ -264,7 +264,7 @@ class _SharedCollectionScreenState extends State<SharedCollectionScreen> {
                         end: Alignment.bottomCenter,
                         colors: [
                           Colors.transparent,
-                          Colors.black.withOpacity(0.4),
+                          Colors.black.withValues(alpha: 0.4),
                           Colors.black,
                         ],
                         stops: const [0.0, 0.6, 1.0],
@@ -282,7 +282,7 @@ class _SharedCollectionScreenState extends State<SharedCollectionScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: primary.withOpacity(0.2),
+                            color: primary.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(color: primary.withValues(alpha: 0.3)),
                           ),
@@ -375,7 +375,7 @@ class _SharedCollectionScreenState extends State<SharedCollectionScreen> {
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.03),
+          color: Colors.white.withValues(alpha: 0.03),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         ),
@@ -386,7 +386,7 @@ class _SharedCollectionScreenState extends State<SharedCollectionScreen> {
               height: 56,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),

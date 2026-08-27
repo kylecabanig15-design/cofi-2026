@@ -6,19 +6,18 @@ import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/widgets/edit_profile_dialog.dart';
 import 'package:cofi/services/google_sign_in_service.dart';
 import 'package:cofi/utils/auth_error_handler.dart';
-import 'package:cofi/services/notification_service.dart';
 import 'package:cofi/features/settings/privacy_policy_screen.dart';
 import 'package:cofi/features/settings/terms_of_service_screen.dart';
 import 'package:cofi/features/settings/help_support_screen.dart';
-import 'package:cofi/utils/formatters.dart';
 import 'package:cofi/features/auth/interest_selection_screen.dart';
-import 'package:cofi/features/admin/admin_dashboard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cofi/widgets/custom_toast.dart';
 import 'package:cofi/widgets/custom_dialog.dart';
 import 'package:cofi/features/settings/change_password_screen.dart';
-import 'package:cofi/features/business/business_profile_screen.dart';
 import 'package:cofi/features/business/widgets/job_applications_sheet.dart';
+import 'package:cofi/services/notification_service.dart';
+import 'package:permission_handler/permission_handler.dart';
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -42,7 +41,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _notifyShop = true;
   bool _notifyRecommendation = true;
 
-
   @override
   void initState() {
     super.initState();
@@ -50,6 +48,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       final doc = await FirebaseFirestore.instance
@@ -64,6 +63,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _isLoadingAdmin = false;
           _accountType = data['accountType'] as String? ?? 'user';
           _applicantAlertsEnabled = data['applicantAlertsEnabled'] ?? true;
+          _notifyChat =
+              data['chatsEnabled'] ?? prefs.getBool('notify_chat') ?? true;
+          _notifyJob = (data['jobUpdatesEnabled'] ??
+                  prefs.getBool('notify_job') ??
+                  true) &&
+              (_accountType != 'business' || _applicantAlertsEnabled);
+          _notifyReview =
+              data['reviewsEnabled'] ?? prefs.getBool('notify_review') ?? true;
+          _notifyEvent = data['cafeEventsEnabled'] ??
+              prefs.getBool('notify_event') ??
+              true;
+          _notifyEventParticipation = data['eventParticipationEnabled'] ??
+              prefs.getBool('notify_event_participation') ??
+              true;
+          _notifyShop = data['communityActivityEnabled'] ??
+              prefs.getBool('notify_shop') ??
+              true;
+          _notifyRecommendation = data['tasteTwinsEnabled'] ??
+              prefs.getBool('notify_recommendation') ??
+              true;
         });
       }
     } else {
@@ -71,34 +90,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _isLoadingAdmin = false;
       });
     }
-
-    // Load SharedPreferences toggles
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _notifyChat = prefs.getBool('notify_chat') ?? true;
-      _notifyJob = prefs.getBool('notify_job') ?? true;
-      _notifyReview = prefs.getBool('notify_review') ?? true;
-      _notifyEvent = prefs.getBool('notify_event') ?? true;
-      _notifyEventParticipation = prefs.getBool('notify_event_participation') ?? true;
-      _notifyShop = prefs.getBool('notify_shop') ?? true;
-      _notifyRecommendation = prefs.getBool('notify_recommendation') ?? true;
-    });
   }
 
-  Future<void> _togglePref(String key, bool value, void Function(bool) updateState) async {
+  Future<void> _togglePref(String localKey, String firestoreField, bool value,
+      void Function(bool) updateState) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, value);
+    await Future.wait([
+      prefs.setBool(localKey, value),
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({firestoreField: value}),
+    ]);
+    if (!mounted) return;
     setState(() {
       updateState(value);
     });
   }
 
-  Future<void> _toggleJobPref(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('notify_job', value);
-    setState(() {
-      _notifyJob = value;
-    });
+  String get _notificationSummary {
+    final values = _accountType == 'business'
+        ? [_notifyChat, _notifyJob, _notifyReview, _notifyEventParticipation]
+        : [
+            _notifyChat,
+            _notifyJob,
+            _notifyReview,
+            _notifyEvent,
+            _notifyShop,
+            _notifyRecommendation,
+          ];
+    final enabled = values.where((value) => value).length;
+    if (!_notificationsEnabled) return 'All alerts are paused';
+    if (enabled == values.length) return 'All categories enabled';
+    if (enabled == 0) return 'No categories enabled';
+    return '$enabled of ${values.length} categories enabled';
   }
 
   Future<void> _toggleNotifications(bool value) async {
@@ -145,32 +172,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _notificationsEnabled = value;
         });
       }
+      if (value) {
+        await NotificationService().requestPermissionIfNeeded();
+        final status = await Permission.notification.status;
+        if (mounted && !status.isGranted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                  'Push notifications are blocked in your device settings.'),
+              action: SnackBarAction(
+                label: 'Open Settings',
+                onPressed: openAppSettings,
+              ),
+            ),
+          );
+        }
+      }
     }
   }
 
-  Future<void> _toggleApplicantAlerts(bool value) async {
+  Future<void> _toggleJobAlerts(bool value) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      await FirebaseFirestore.instance
+    if (user == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final update = <String, dynamic>{'jobUpdatesEnabled': value};
+    if (_accountType == 'business') {
+      update['applicantAlertsEnabled'] = value;
+    }
+    await Future.wait([
+      prefs.setBool('notify_job', value),
+      FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
-          .update({'applicantAlertsEnabled': value});
-      if (mounted) {
-        setState(() {
-          _applicantAlertsEnabled = value;
-        });
-      }
-    }
+          .update(update),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _notifyJob = value;
+      if (_accountType == 'business') _applicantAlertsEnabled = value;
+    });
   }
 
   Future<void> _viewShopApplications() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator(color: primary)),
+      builder: (context) =>
+          const Center(child: CircularProgressIndicator(color: primary)),
     );
 
     try {
@@ -178,7 +229,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           .collection('shops')
           .where('ownerId', isEqualTo: user.uid)
           .get();
-          
+
       if (mounted) {
         Navigator.pop(context); // close loading indicator
       }
@@ -210,7 +261,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-
   void _showEditProfileDialog() {
     showDialog(
       context: context,
@@ -231,7 +281,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           final prefs = await SharedPreferences.getInstance();
           await prefs.remove('hasSeenExploreTutorial');
           await prefs.remove('hasSeenCafeDetailsTutorial');
-          
+
           await GoogleSignInService.signOut();
           if (mounted) {
             // Unwind to the root route only. AuthGate (the home route) must
@@ -264,7 +314,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade900.withOpacity(0.3),
+                  color: Colors.red.shade900.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
@@ -295,10 +345,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade900.withOpacity(0.2),
+                    color: Colors.red.shade900.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: Colors.red.shade800.withOpacity(0.5),
+                      color: Colors.red.shade800.withValues(alpha: 0.5),
                     ),
                   ),
                   child: const Row(
@@ -529,7 +579,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // Step 5: Ensure Google Sign In is also signed out
       await GoogleSignInService.signOut();
-      
+
       // Step 6: Clear tutorial preference so new users on same device see it
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('hasSeenExploreTutorial');
@@ -549,7 +599,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } on Exception catch (e) {
       // Close initial loading dialog if it was shown
-      if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
 
       if (mounted) {
         CustomToast.showError(context, AuthErrorHandler.getFriendlyMessage(e));
@@ -562,7 +614,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // 1. Lists & Items within them
     try {
-      final listsRef = firestore.collection('users').doc(uid).collection('lists');
+      final listsRef =
+          firestore.collection('users').doc(uid).collection('lists');
       final lists = await listsRef.get();
       for (var list in lists.docs) {
         try {
@@ -584,7 +637,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // 2. Shop Claims (delete pending claims individually; non-pending claims
     // are admin records that rules prevent us from deleting — skip them)
     try {
-      final claims = await firestore.collection('shop_claims').where('claimantId', isEqualTo: uid).get();
+      final claims = await firestore
+          .collection('shop_claims')
+          .where('claimantId', isEqualTo: uid)
+          .get();
       var deletedClaims = 0;
       var skippedClaims = 0;
       for (var doc in claims.docs) {
@@ -601,14 +657,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           debugPrint('Skipping shop claim ${doc.id} during cleanup: $e');
         }
       }
-      debugPrint('Shop claims cleanup finished: $deletedClaims deleted, $skippedClaims skipped');
+      debugPrint(
+          'Shop claims cleanup finished: $deletedClaims deleted, $skippedClaims skipped');
     } catch (e) {
       debugPrint('Error cleaning up shop claims: $e');
     }
 
     // 3. Shared Collections
     try {
-      final shared = await firestore.collection('sharedCollections').where('userId', isEqualTo: uid).get();
+      final shared = await firestore
+          .collection('sharedCollections')
+          .where('userId', isEqualTo: uid)
+          .get();
       if (shared.docs.isNotEmpty) {
         final batch = firestore.batch();
         for (var doc in shared.docs) {
@@ -620,18 +680,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       debugPrint('Error cleaning up shared collections: $e');
     }
 
-    // 4. Jobs (allJobs mirror now requires admin; delete what we can and
-    // continue past permission failures instead of aborting the loop)
+    // 4. Jobs — delete only the shop-scoped docs; the allJobs mirror is
+    // admin-only and is cleaned up by the onJobDelete Cloud Function that
+    // fires from each successful subcollection delete below.
     try {
-      final jobs = await firestore.collectionGroup('jobs').where('createdBy', isEqualTo: uid).get();
+      final jobs = await firestore
+          .collectionGroup('jobs')
+          .where('createdBy', isEqualTo: uid)
+          .get();
       var failedDeletes = 0;
       for (var doc in jobs.docs) {
-        try {
-          await firestore.collection('allJobs').doc(doc.id).delete();
-        } catch (e) {
-          failedDeletes++;
-          debugPrint('Skipping allJobs/${doc.id} during cleanup: $e');
-        }
         try {
           await doc.reference.delete();
         } catch (e) {
@@ -640,7 +698,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       }
       if (failedDeletes > 0) {
-        debugPrint('Job cleanup finished with $failedDeletes skipped document(s)');
+        debugPrint(
+            'Job cleanup finished with $failedDeletes skipped document(s)');
       }
     } catch (e) {
       debugPrint('Error cleaning up jobs (Check index): $e');
@@ -648,7 +707,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // 5. Reviews across all shops
     try {
-      final reviews = await firestore.collectionGroup('reviews').where('userId', isEqualTo: uid).get();
+      final reviews = await firestore
+          .collectionGroup('reviews')
+          .where('userId', isEqualTo: uid)
+          .get();
       if (reviews.docs.isNotEmpty) {
         final batch = firestore.batch();
         for (var doc in reviews.docs) {
@@ -662,7 +724,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // 6. Community Event Comments
     try {
-      final comments = await firestore.collectionGroup('comments').where('userId', isEqualTo: uid).get();
+      final comments = await firestore
+          .collectionGroup('comments')
+          .where('userId', isEqualTo: uid)
+          .get();
       if (comments.docs.isNotEmpty) {
         final batch = firestore.batch();
         for (var doc in comments.docs) {
@@ -676,7 +741,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // 6a. User Events
     try {
-      final events = await firestore.collectionGroup('events').where('userId', isEqualTo: uid).get();
+      final events = await firestore
+          .collectionGroup('events')
+          .where('userId', isEqualTo: uid)
+          .get();
       if (events.docs.isNotEmpty) {
         final batch = firestore.batch();
         for (var doc in events.docs) {
@@ -690,7 +758,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // 6b. User Visits
     try {
-      final visits = await firestore.collectionGroup('visits').where('userId', isEqualTo: uid).get();
+      final visits = await firestore
+          .collectionGroup('visits')
+          .where('userId', isEqualTo: uid)
+          .get();
       if (visits.docs.isNotEmpty) {
         final batch = firestore.batch();
         for (var doc in visits.docs) {
@@ -704,7 +775,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // 7. Community Shops (Added by user)
     try {
-      final shopsAdded = await firestore.collection('shops').where('posterId', isEqualTo: uid).get();
+      final shopsAdded = await firestore
+          .collection('shops')
+          .where('posterId', isEqualTo: uid)
+          .get();
       if (shopsAdded.docs.isNotEmpty) {
         final batch = firestore.batch();
         for (var doc in shopsAdded.docs) {
@@ -718,10 +792,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // 8. Dissociate Business Ownership & revert status (CRITICAL FIX)
     try {
-      final shopsOwned = await firestore.collection('shops').where('ownerId', isEqualTo: uid).get();
+      final shopsOwned = await firestore
+          .collection('shops')
+          .where('ownerId', isEqualTo: uid)
+          .get();
       for (var doc in shopsOwned.docs) {
         await doc.reference.update({
-          'ownerId': null, 
+          'ownerId': null,
           'isVerified': false,
           'submissionType': 'community'
         });
@@ -901,7 +978,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ],
                 ),
-                
+
                 // Hide all other containers if Admin
                 if (!_isAdmin) ...[
                   const SizedBox(height: 16),
@@ -918,7 +995,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const InterestSelectionScreen(
+                              builder: (context) =>
+                                  const InterestSelectionScreen(
                                 isEditing: true,
                               ),
                             ),
@@ -933,22 +1011,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onTap: () {
                           showDialog(
                             context: context,
-                            barrierColor: Colors.black.withOpacity(0.75),
+                            barrierColor: Colors.black.withValues(alpha: 0.75),
                             builder: (ctx) => Dialog(
                               backgroundColor: Colors.transparent,
-                              insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+                              insetPadding:
+                                  const EdgeInsets.symmetric(horizontal: 28),
                               child: Container(
                                 padding: const EdgeInsets.all(28),
                                 decoration: BoxDecoration(
                                   gradient: const LinearGradient(
-                                    colors: [Color(0xFF1A1A1A), Color(0xFF0D0D0D)],
+                                    colors: [
+                                      Color(0xFF1A1A1A),
+                                      Color(0xFF0D0D0D)
+                                    ],
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                   ),
                                   borderRadius: BorderRadius.circular(28),
-                                  border: Border.all(color: Colors.white.withOpacity(0.12), width: 1.5),
+                                  border: Border.all(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.12),
+                                      width: 1.5),
                                   boxShadow: [
-                                    BoxShadow(color: Colors.redAccent.withOpacity(0.2), blurRadius: 30, spreadRadius: 5),
+                                    BoxShadow(
+                                        color: Colors.redAccent
+                                            .withValues(alpha: 0.2),
+                                        blurRadius: 30,
+                                        spreadRadius: 5),
                                   ],
                                 ),
                                 child: Column(
@@ -958,21 +1047,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       padding: const EdgeInsets.all(16),
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
-                                        color: Colors.redAccent.withOpacity(0.15),
-                                        border: Border.all(color: Colors.redAccent.withOpacity(0.4), width: 1.5),
+                                        color: Colors.redAccent
+                                            .withValues(alpha: 0.15),
+                                        border: Border.all(
+                                            color: Colors.redAccent
+                                                .withValues(alpha: 0.4),
+                                            width: 1.5),
                                       ),
-                                      child: const Icon(Icons.tour_rounded, color: Colors.redAccent, size: 32),
+                                      child: const Icon(Icons.tour_rounded,
+                                          color: Colors.redAccent, size: 32),
                                     ),
                                     const SizedBox(height: 20),
                                     const Text(
                                       'Replay Guided Tour?',
-                                      style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800),
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.w800),
                                       textAlign: TextAlign.center,
                                     ),
                                     const SizedBox(height: 10),
                                     Text(
                                       'This will restart the full onboarding tour from the beginning. You\'ll be taken to the home screen.',
-                                      style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 14, height: 1.5),
+                                      style: TextStyle(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.65),
+                                          fontSize: 14,
+                                          height: 1.5),
                                       textAlign: TextAlign.center,
                                     ),
                                     const SizedBox(height: 28),
@@ -980,13 +1081,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       children: [
                                         Expanded(
                                           child: OutlinedButton(
-                                            onPressed: () => Navigator.of(ctx).pop(),
+                                            onPressed: () =>
+                                                Navigator.of(ctx).pop(),
                                             style: OutlinedButton.styleFrom(
-                                              side: BorderSide(color: Colors.white.withOpacity(0.2)),
-                                              padding: const EdgeInsets.symmetric(vertical: 14),
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                              side: BorderSide(
+                                                  color: Colors.white
+                                                      .withValues(alpha: 0.2)),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 14),
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          14)),
                                             ),
-                                            child: Text('Cancel', style: TextStyle(color: Colors.white.withOpacity(0.7), fontWeight: FontWeight.w600)),
+                                            child: Text('Cancel',
+                                                style: TextStyle(
+                                                    color: Colors.white
+                                                        .withValues(alpha: 0.7),
+                                                    fontWeight:
+                                                        FontWeight.w600)),
                                           ),
                                         ),
                                         const SizedBox(width: 12),
@@ -994,24 +1108,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                           child: ElevatedButton(
                                             onPressed: () async {
                                               Navigator.of(ctx).pop();
-                                              final prefs = await SharedPreferences.getInstance();
-                                              await prefs.setBool('hasSeenExploreTutorial', false);
-                                              await prefs.setBool('hasSeenCafeDetailsTutorial', false);
+                                              final prefs =
+                                                  await SharedPreferences
+                                                      .getInstance();
+                                              await prefs.setBool(
+                                                  'hasSeenExploreTutorial',
+                                                  false);
+                                              await prefs.setBool(
+                                                  'hasSeenCafeDetailsTutorial',
+                                                  false);
                                               if (mounted) {
                                                 // Keep AuthGate (root route)
                                                 // mounted; it renders
                                                 // HomeScreen for signed-in
                                                 // users.
-                                                Navigator.of(context).popUntil((route) => route.isFirst);
+                                                Navigator.of(context).popUntil(
+                                                    (route) => route.isFirst);
                                               }
                                             },
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor: Colors.redAccent,
-                                              padding: const EdgeInsets.symmetric(vertical: 14),
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 14),
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          14)),
                                               elevation: 0,
                                             ),
-                                            child: const Text('Replay', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                                            child: const Text('Replay',
+                                                style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight:
+                                                        FontWeight.w700)),
                                           ),
                                         ),
                                       ],
@@ -1023,83 +1153,126 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           );
                         },
                       ),
-
-                      const Divider(color: Colors.white12, height: 1),
-                      if (_accountType != 'business') ...[
-                        _buildSwitchTile(
-                          icon: Icons.notifications_active_outlined,
-                          title: 'Enable All Push Notifications',
-                          subtitle: 'Master switch for all alerts',
-                          value: _notificationsEnabled,
-                          onChanged: _toggleNotifications,
-                        ),
-                        const Divider(color: Colors.white12, height: 1),
-                      ],
                     ],
                   ),
                   const SizedBox(height: 16),
 
                   _buildSectionCard(
-                    title: 'Notification Preferences',
+                    title: 'Notifications',
                     children: [
                       _buildSwitchTile(
-                        icon: Icons.chat_bubble_outline,
-                        title: 'Chats',
-                        subtitle: 'Messages from businesses or users',
-                        value: _notifyChat,
-                        onChanged: (val) => _togglePref('notify_chat', val, (v) => _notifyChat = v),
+                        icon: Icons.notifications_active_outlined,
+                        title: 'Push Notifications',
+                        subtitle: _notificationSummary,
+                        value: _notificationsEnabled,
+                        onChanged: _toggleNotifications,
                       ),
                       const Divider(color: Colors.white12, height: 1),
-                      _buildSwitchTile(
-                        icon: Icons.work_outline,
-                        title: 'Job Updates',
-                        subtitle: 'Job application statuses and updates',
-                        value: _notifyJob,
-                        onChanged: _toggleJobPref,
-                      ),
-                      const Divider(color: Colors.white12, height: 1),
-                      _buildSwitchTile(
-                        icon: Icons.rate_review_outlined,
-                        title: 'Reviews',
-                        subtitle: 'New reviews and replies',
-                        value: _notifyReview,
-                        onChanged: (val) => _togglePref('notify_review', val, (v) => _notifyReview = v),
-                      ),
-                      if (_accountType != 'business') ...[
-                        const Divider(color: Colors.white12, height: 1),
-                        _buildSwitchTile(
-                          icon: Icons.event_outlined,
-                          title: 'Café Events',
-                          subtitle: 'New events from cafés in the community',
-                          value: _notifyEvent,
-                          onChanged: (val) => _togglePref('notify_event', val, (v) => _notifyEvent = v),
+                      ExpansionTile(
+                        leading: const Icon(Icons.tune, color: primary),
+                        title: const Text(
+                          'Customize alerts',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ],
-                      if (_accountType == 'business') ...[
-                        const Divider(color: Colors.white12, height: 1),
-                        _buildSwitchTile(
-                          icon: Icons.group_add_outlined,
-                          title: 'Event Participation',
-                          subtitle: 'When users join your events',
-                          value: _notifyEventParticipation,
-                          onChanged: (val) => _togglePref('notify_event_participation', val, (v) => _notifyEventParticipation = v),
+                        subtitle: const Text(
+                          'Choose what is worth interrupting you for',
+                          style: TextStyle(color: Colors.white54, fontSize: 12),
                         ),
-                      ],
-                      const Divider(color: Colors.white12, height: 1),
-                      _buildSwitchTile(
-                        icon: Icons.store_outlined,
-                        title: 'Community Activity',
-                        subtitle: 'Shop updates and community news',
-                        value: _notifyShop,
-                        onChanged: (val) => _togglePref('notify_shop', val, (v) => _notifyShop = v),
-                      ),
-                      const Divider(color: Colors.white12, height: 1),
-                      _buildSwitchTile(
-                        icon: Icons.auto_awesome,
-                        title: 'Taste Twins',
-                        subtitle: 'Personalized café matches',
-                        value: _notifyRecommendation,
-                        onChanged: (val) => _togglePref('notify_recommendation', val, (v) => _notifyRecommendation = v),
+                        iconColor: Colors.white70,
+                        collapsedIconColor: Colors.white54,
+                        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+                        childrenPadding: const EdgeInsets.only(left: 8),
+                        enabled: _notificationsEnabled,
+                        children: [
+                          _buildSwitchTile(
+                            icon: Icons.chat_bubble_outline,
+                            title: 'Messages',
+                            subtitle: 'Direct conversations',
+                            value: _notifyChat,
+                            onChanged: (val) => _togglePref('notify_chat',
+                                'chatsEnabled', val, (v) => _notifyChat = v),
+                          ),
+                          const Divider(color: Colors.white12, height: 1),
+                          _buildSwitchTile(
+                            icon: Icons.work_outline,
+                            title: _accountType == 'business'
+                                ? 'Jobs & Applicants'
+                                : 'Job Updates',
+                            subtitle: _accountType == 'business'
+                                ? 'Applications and hiring activity'
+                                : 'Applications and status changes',
+                            value: _notifyJob,
+                            onChanged: _toggleJobAlerts,
+                          ),
+                          const Divider(color: Colors.white12, height: 1),
+                          _buildSwitchTile(
+                            icon: Icons.rate_review_outlined,
+                            title: 'Reviews',
+                            subtitle: _accountType == 'business'
+                                ? 'New reviews and customer feedback'
+                                : 'Replies to your reviews',
+                            value: _notifyReview,
+                            onChanged: (val) => _togglePref(
+                                'notify_review',
+                                'reviewsEnabled',
+                                val,
+                                (v) => _notifyReview = v),
+                          ),
+                          if (_accountType == 'business') ...[
+                            const Divider(color: Colors.white12, height: 1),
+                            _buildSwitchTile(
+                              icon: Icons.groups_outlined,
+                              title: 'Event RSVPs',
+                              subtitle: 'When someone joins your event',
+                              value: _notifyEventParticipation,
+                              onChanged: (val) => _togglePref(
+                                  'notify_event_participation',
+                                  'eventParticipationEnabled',
+                                  val,
+                                  (v) => _notifyEventParticipation = v),
+                            ),
+                          ] else ...[
+                            const Divider(color: Colors.white12, height: 1),
+                            _buildSwitchTile(
+                              icon: Icons.event_outlined,
+                              title: 'Events',
+                              subtitle: 'New café events near your interests',
+                              value: _notifyEvent,
+                              onChanged: (val) => _togglePref(
+                                  'notify_event',
+                                  'cafeEventsEnabled',
+                                  val,
+                                  (v) => _notifyEvent = v),
+                            ),
+                            const Divider(color: Colors.white12, height: 1),
+                            _buildSwitchTile(
+                              icon: Icons.store_outlined,
+                              title: 'Community',
+                              subtitle: 'New cafés and community updates',
+                              value: _notifyShop,
+                              onChanged: (val) => _togglePref(
+                                  'notify_shop',
+                                  'communityActivityEnabled',
+                                  val,
+                                  (v) => _notifyShop = v),
+                            ),
+                            const Divider(color: Colors.white12, height: 1),
+                            _buildSwitchTile(
+                              icon: Icons.auto_awesome,
+                              title: 'Café Matches',
+                              subtitle: 'Strong recommendations for your taste',
+                              value: _notifyRecommendation,
+                              onChanged: (val) => _togglePref(
+                                  'notify_recommendation',
+                                  'tasteTwinsEnabled',
+                                  val,
+                                  (v) => _notifyRecommendation = v),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),
@@ -1108,14 +1281,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _buildSectionCard(
                       title: 'Business Notifications',
                       children: [
-                        _buildSwitchTile(
-                          icon: Icons.work_outline,
-                          title: 'New Applicant Alerts',
-                          subtitle: 'Get notified when someone applies for a job',
-                          value: _applicantAlertsEnabled,
-                          onChanged: _toggleApplicantAlerts,
-                        ),
-                        const Divider(color: Colors.white12, height: 1),
                         _buildListTile(
                           icon: Icons.description_outlined,
                           title: 'View Applications',
@@ -1191,7 +1356,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
-
                 ],
               ],
             ),
@@ -1263,14 +1427,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Color? titleColor,
     Color? borderColor,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
+    return Material(
+      color: Colors.grey[900],
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        border: borderColor != null
-            ? Border.all(color: borderColor, width: 1)
-            : null,
+        side: borderColor != null
+            ? BorderSide(color: borderColor, width: 1)
+            : BorderSide.none,
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1343,7 +1508,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       trailing: Switch(
         value: value,
         onChanged: onChanged,
-        activeColor: primary,
+        activeThumbColor: primary,
       ),
     );
   }

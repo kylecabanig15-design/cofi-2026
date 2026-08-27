@@ -10,7 +10,6 @@ import 'package:cofi/features/events/event_details_screen.dart';
 import 'package:cofi/features/jobs/job_details_screen.dart';
 import 'package:cofi/features/cafe/cafe_details_screen.dart';
 import 'package:cofi/features/jobs/job_chat_screen.dart';
-import 'package:cofi/features/business/business_profile_screen.dart';
 import 'package:cofi/features/business/widgets/job_applications_sheet.dart';
 import 'package:cofi/widgets/custom_toast.dart';
 import 'package:provider/provider.dart';
@@ -26,29 +25,48 @@ class NotificationScreen extends StatefulWidget {
 class _NotificationScreenState extends State<NotificationScreen> {
   final NotificationService _notificationService = NotificationService();
   String _selectedFilter = 'All';
-  final List<String> _filters = ['All', 'Chats', 'Jobs', 'Events', 'Cafés', 'Others'];
+  final List<String> _filters = [
+    'All',
+    'Chats',
+    'Jobs',
+    'Events',
+    'Cafés',
+    'Others'
+  ];
   String _accountType = 'user';
   UserSession? _session;
+
+  // Cached per-role stream. Recreating getUserNotifications() on every build
+  // (filter-chip taps, pull-to-refresh) tore down and re-attached the live
+  // Firestore listener, flashing a spinner and churning snapshot listeners.
+  // Only a role change needs a new stream.
+  Stream<List<NotificationModel>>? _notificationsStream;
 
   String _mapTypeToFilter(String type) {
     if (type == 'chat') return 'Chats';
     if (type.contains('job') || type == 'business_application') return 'Jobs';
     if (type.contains('event')) return 'Events';
-    if (type == 'shop' || type == 'recommendation' || type == 'review') return 'Cafés';
+    if (type == 'shop' || type == 'recommendation' || type == 'review') {
+      return 'Cafés';
+    }
     return 'Others';
   }
 
-  Map<String, List<NotificationModel>> _groupNotifications(List<NotificationModel> notifications) {
+  Map<String, List<NotificationModel>> _groupNotifications(
+      List<NotificationModel> notifications) {
     final grouped = {
       'Today': <NotificationModel>[],
       'This Week': <NotificationModel>[],
       'Older': <NotificationModel>[],
     };
-    
+
     final now = DateTime.now();
     for (var n in notifications) {
-      if (_selectedFilter != 'All' && _mapTypeToFilter(n.type) != _selectedFilter) continue;
-      
+      if (_selectedFilter != 'All' &&
+          _mapTypeToFilter(n.type) != _selectedFilter) {
+        continue;
+      }
+
       final diff = now.difference(n.createdAt);
       if (diff.inDays == 0 && now.day == n.createdAt.day) {
         grouped['Today']!.add(n);
@@ -58,7 +76,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         grouped['Older']!.add(n);
       }
     }
-    
+
     return grouped;
   }
 
@@ -87,8 +105,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
     final newRole = (_session?.isBusiness ?? false) ? 'business' : 'user';
     if (newRole == _accountType) return;
     setState(() => _accountType = newRole);
-    // StreamBuilder in build() picks up the new stream from setState;
-    // mark-all-read must cover the newly active role as well.
+    // Cached stream must be rebuilt for the new role; StreamBuilder in
+    // build() picks up the new stream from setState. Mark-all-read must
+    // cover the newly active role as well.
+    _notificationsStream =
+        _notificationService.getUserNotifications(role: newRole);
     _notificationService.markAllAsRead(role: newRole);
   }
 
@@ -131,11 +152,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
             itemBuilder: (context) => [
               const PopupMenuItem(
                 value: 'read',
-                child: Text('Mark all as read', style: TextStyle(color: Colors.white)),
+                child: Text('Mark all as read',
+                    style: TextStyle(color: Colors.white)),
               ),
               const PopupMenuItem(
                 value: 'clear',
-                child: Text('Clear all', style: TextStyle(color: Colors.redAccent)),
+                child: Text('Clear all',
+                    style: TextStyle(color: Colors.redAccent)),
               ),
             ],
           ),
@@ -146,129 +169,134 @@ class _NotificationScreenState extends State<NotificationScreen> {
           _buildFilterChips(),
           Expanded(
             child: StreamBuilder<List<NotificationModel>>(
-                  stream: _notificationService.getUserNotifications(role: _accountType),
-                  builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            );
-          }
+              stream: _notificationsStream ??=
+                  _notificationService.getUserNotifications(role: _accountType),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  );
+                }
 
-          if (snapshot.hasError) {
-            return Center(
-              child: TextWidget(
-                text: 'Error loading notifications',
-                fontSize: 16,
-                color: Colors.redAccent,
-              ),
-            );
-          }
-
-          final notifications = snapshot.data ?? [];
-
-          if (notifications.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.notifications_off,
-                    size: 64,
-                    color: Colors.grey[600],
-                  ),
-                  const SizedBox(height: 16),
-                  TextWidget(
-                    text: 'No notifications yet',
-                    fontSize: 18,
-                    color: Colors.grey[400],
-                  ),
-                  const SizedBox(height: 8),
-                  TextWidget(
-                    text:
-                        'You\'ll see notifications for new events, jobs, and shops here',
-                    fontSize: 14,
-                    color: Colors.grey[500],
-                    align: TextAlign.center,
-                  ),
-                ],
-              ),
-            );
-          }
-
-          final grouped = _groupNotifications(notifications);
-          final hasItems = grouped.values.any((list) => list.isNotEmpty);
-
-          if (!hasItems) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.filter_list_off, size: 48, color: Colors.grey[700]),
-                  const SizedBox(height: 16),
-                  TextWidget(
-                    text: 'No $_selectedFilter notifications',
-                    fontSize: 16,
-                    color: Colors.grey[500],
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return RefreshIndicator(
-            onRefresh: () async {
-              setState(() {});
-              return;
-            },
-            color: primary,
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: grouped.keys.length,
-              itemBuilder: (context, sectionIndex) {
-                final sectionKey = grouped.keys.elementAt(sectionIndex);
-                final sectionItems = grouped[sectionKey]!;
-
-                if (sectionItems.isEmpty) return const SizedBox.shrink();
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                      child: TextWidget(
-                        text: sectionKey,
-                        fontSize: 14,
-                        color: Colors.white70,
-                        isBold: true,
-                      ),
+                if (snapshot.hasError) {
+                  return Center(
+                    child: TextWidget(
+                      text: 'Error loading notifications',
+                      fontSize: 16,
+                      color: Colors.redAccent,
                     ),
-                    ...sectionItems.map((notification) {
-                      return Dismissible(
-                        key: Key(notification.id),
-                        direction: DismissDirection.endToStart,
-                        background: Container(
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.only(right: 20),
-                          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.redAccent.withOpacity(0.8),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Icon(Icons.delete_outline, color: Colors.white),
+                  );
+                }
+
+                final notifications = snapshot.data ?? [];
+
+                if (notifications.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.notifications_off,
+                          size: 64,
+                          color: Colors.grey[600],
                         ),
-                        onDismissed: (_) {
-                          _notificationService.deleteNotification(notification.id);
-                        },
-                        child: _buildNotificationItem(notification),
+                        const SizedBox(height: 16),
+                        TextWidget(
+                          text: 'No notifications yet',
+                          fontSize: 18,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 8),
+                        TextWidget(
+                          text:
+                              'You\'ll see notifications for new events, jobs, and shops here',
+                          fontSize: 14,
+                          color: Colors.grey[500],
+                          align: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                final grouped = _groupNotifications(notifications);
+                final hasItems = grouped.values.any((list) => list.isNotEmpty);
+
+                if (!hasItems) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.filter_list_off,
+                            size: 48, color: Colors.grey[700]),
+                        const SizedBox(height: 16),
+                        TextWidget(
+                          text: 'No $_selectedFilter notifications',
+                          fontSize: 16,
+                          color: Colors.grey[500],
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    setState(() {});
+                    return;
+                  },
+                  color: primary,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: grouped.keys.length,
+                    itemBuilder: (context, sectionIndex) {
+                      final sectionKey = grouped.keys.elementAt(sectionIndex);
+                      final sectionItems = grouped[sectionKey]!;
+
+                      if (sectionItems.isEmpty) return const SizedBox.shrink();
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                            child: TextWidget(
+                              text: sectionKey,
+                              fontSize: 14,
+                              color: Colors.white70,
+                              isBold: true,
+                            ),
+                          ),
+                          ...sectionItems.map((notification) {
+                            return Dismissible(
+                              key: Key(notification.id),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20),
+                                margin: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.redAccent.withValues(alpha: 0.8),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: const Icon(Icons.delete_outline,
+                                    color: Colors.white),
+                              ),
+                              onDismissed: (_) {
+                                _notificationService
+                                    .deleteNotification(notification.id);
+                              },
+                              child: _buildNotificationItem(notification),
+                            );
+                          }),
+                        ],
                       );
-                    }).toList(),
-                  ],
+                    },
+                  ),
                 );
               },
             ),
-          );
-        },
-      ),
           ),
         ],
       ),
@@ -293,7 +321,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 });
               },
               backgroundColor: Colors.grey[900],
-              selectedColor: primary.withOpacity(0.3),
+              selectedColor: primary.withValues(alpha: 0.3),
               checkmarkColor: primary,
               labelStyle: TextStyle(
                 color: isSelected ? primary : Colors.white70,
@@ -314,7 +342,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   Widget _buildNotificationItem(NotificationModel notification) {
     final bool isAlert = notification.isAlert;
-    
+
     return GestureDetector(
       onTap: () {
         // Mark as read when tapped
@@ -334,22 +362,22 @@ class _NotificationScreenState extends State<NotificationScreen> {
           gradient: isAlert
               ? LinearGradient(
                   colors: [
-                    _getNotificationColor(notification.type).withOpacity(0.15),
-                    _getNotificationColor(notification.type).withOpacity(0.05),
+                    _getNotificationColor(notification.type).withValues(alpha: 0.15),
+                    _getNotificationColor(notification.type).withValues(alpha: 0.05),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 )
               : null,
-          color: isAlert 
-              ? null 
-              : (notification.isRead 
-                  ? Colors.transparent 
+          color: isAlert
+              ? null
+              : (notification.isRead
+                  ? Colors.transparent
                   : Colors.white.withValues(alpha: 0.03)),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isAlert 
-                ? _getNotificationColor(notification.type).withOpacity(0.4)
+            color: isAlert
+                ? _getNotificationColor(notification.type).withValues(alpha: 0.4)
                 : Colors.white12,
             width: isAlert ? 2 : 1,
           ),
@@ -368,7 +396,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                     ? [
                         BoxShadow(
                           color: _getNotificationColor(notification.type)
-                              .withOpacity(0.4),
+                              .withValues(alpha: 0.4),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),
@@ -383,8 +411,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
                         width: isAlert ? 56 : 48,
                         height: isAlert ? 56 : 48,
                         fit: BoxFit.cover,
-                        placeholder: (context, url) => _buildIconContainer(
-                            notification.type, isAlert),
+                        placeholder: (context, url) =>
+                            _buildIconContainer(notification.type, isAlert),
                         errorWidget: (context, url, error) =>
                             _buildIconContainer(notification.type, isAlert),
                       ),
@@ -421,10 +449,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: primary.withOpacity(0.2),
+                                  color: primary.withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: primary.withOpacity(0.5),
+                                    color: primary.withValues(alpha: 0.5),
                                     width: 1,
                                   ),
                                 ),
@@ -484,7 +512,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.2),
+                            color: Colors.orange.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: TextWidget(
@@ -734,6 +762,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   posterId: notification.metadata!['posterId'] ?? '',
                   applicantId: notification.metadata!['applicantId'] ?? '',
                   applicationId: notification.metadata!['applicationId'] ?? '',
+                  conversationId: notification.relatedId ??
+                      notification.metadata!['conversationId'],
                 ),
               ),
             );
@@ -770,7 +800,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 .get();
 
             if (eventSnapshot.exists) {
-              final eventData = eventSnapshot.data() as Map<String, dynamic>?;
+              final eventData = eventSnapshot.data();
               if (eventData != null) {
                 Navigator.push(
                   context,
@@ -857,7 +887,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 }
               } catch (e) {
                 if (mounted) {
-                  CustomToast.showError(context, 'Failed to clear notifications');
+                  CustomToast.showError(
+                      context, 'Failed to clear notifications');
                 }
               }
             },

@@ -41,7 +41,11 @@ class NotificationModel {
       type: data['type'] ?? '',
       relatedId: data['relatedId'],
       imageUrl: data['imageUrl'],
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      // Default to epoch (NOT DateTime.now()) so a missing/garbled
+      // timestamp never passes the "created after listener start" freshness
+      // gate — that would replay old notifications as new banners/alerts.
+      createdAt:
+          (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0),
       isRead: data['isRead'] ?? false,
       isAlert: data['isAlert'] ?? false,
       priority: data['priority'] ?? 'low',

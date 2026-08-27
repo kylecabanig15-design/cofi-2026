@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 
 class ExploreUtils {
   static String ratingText(dynamic ratings, dynamic ratingCount) {

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cofi/widgets/text_widget.dart';
-import 'package:cofi/widgets/custom_toast.dart';
 
 class PostJobBottomSheet extends StatefulWidget {
   const PostJobBottomSheet({
@@ -193,12 +192,6 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
             .doc(jobId)
             .update(updateData);
 
-        // Also update in allJobs collection (merge: true preserves status and other fields)
-        await FirebaseFirestore.instance
-            .collection('allJobs')
-            .doc(jobId)
-            .set(updateData, SetOptions(merge: true));
-
         if (mounted) {
           Navigator.pop(context, updateData); // Close modal and return updated data
           ScaffoldMessenger.of(context).showSnackBar(
@@ -214,15 +207,6 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
             .doc(widget.shopId)
             .collection('jobs')
             .add(data);
-
-        // Also save to allJobs collection immediately
-        await FirebaseFirestore.instance
-            .collection('allJobs')
-            .doc(jobRef.id)
-            .set({
-          ...data,
-          'jobId': jobRef.id,
-        });
 
         if (mounted) {
           Navigator.pop(context);

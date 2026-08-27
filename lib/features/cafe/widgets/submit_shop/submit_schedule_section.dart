@@ -62,10 +62,8 @@ class SubmitScheduleSection extends StatelessWidget {
               ),
               Switch(
                 value: isOpen,
-                activeColor: primary,
-                onChanged: onToggleDay != null
-                    ? (val) => onToggleDay(key, val)
-                    : null,
+                activeThumbColor: primary,
+                onChanged: (val) => onToggleDay(key, val),
               )
             ],
           ),

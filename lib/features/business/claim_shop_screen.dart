@@ -14,7 +14,7 @@ class ClaimShopScreen extends StatefulWidget {
 
 class _ClaimShopScreenState extends State<ClaimShopScreen> {
   final TextEditingController _searchController = TextEditingController();
-  
+
   List<Map<String, dynamic>> _searchResults = [];
   bool _isSearching = false;
   bool _isDirectClaim = false;
@@ -28,7 +28,8 @@ class _ClaimShopScreenState extends State<ClaimShopScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       if (args != null && args['preselectShopId'] != null) {
         setState(() {
           _isDirectClaim = true;
@@ -50,27 +51,36 @@ class _ClaimShopScreenState extends State<ClaimShopScreen> {
     });
 
     try {
-      final doc = await FirebaseFirestore.instance.collection('shops').doc(shopId).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('shops')
+          .doc(shopId)
+          .get();
       if (!doc.exists) {
         setState(() => _directClaimError = 'Shop not found.');
         return;
       }
 
       final data = doc.data()!;
-      final isVerified = data['isVerified'] == true;
       final ownerId = data['ownerId'];
       final submissionType = data['submissionType']?.toString().toLowerCase();
       final approvalStatus = data['approvalStatus']?.toString().toLowerCase();
 
       final currentUser = FirebaseAuth.instance.currentUser;
-      final isOwner = currentUser != null && ownerId != null && ownerId.toString().trim() == currentUser.uid;
+      final isOwner = currentUser != null &&
+          ownerId != null &&
+          ownerId.toString().trim() == currentUser.uid;
 
       if (ownerId != null && ownerId.toString().trim().isNotEmpty && !isOwner) {
         setState(() => _directClaimError = 'This shop is already claimed.');
       } else if (submissionType != 'community' && !isOwner) {
-        setState(() => _directClaimError = 'This shop cannot be claimed (business submission).');
-      } else if (approvalStatus != 'approved' && approvalStatus != 'pending_approval' && approvalStatus != 'pending' && approvalStatus != 'awaiting_verification') {
-        setState(() => _directClaimError = 'This shop is not eligible for claiming (Rejected or Invalid status).');
+        setState(() => _directClaimError =
+            'This shop cannot be claimed (business submission).');
+      } else if (approvalStatus != 'approved' &&
+          approvalStatus != 'pending_approval' &&
+          approvalStatus != 'pending' &&
+          approvalStatus != 'awaiting_verification') {
+        setState(() => _directClaimError =
+            'This shop is not eligible for claiming (Rejected or Invalid status).');
       }
     } catch (e) {
       setState(() => _directClaimError = 'Failed to validate shop: $e');
@@ -91,55 +101,58 @@ class _ClaimShopScreenState extends State<ClaimShopScreen> {
     });
 
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('shops')
-          .get();
+      final snapshot =
+          await FirebaseFirestore.instance.collection('shops').get();
 
       final results = snapshot.docs
           .map((doc) => {'id': doc.id, ...doc.data()})
           .where((data) {
-            final name = (data['name'] as String?)?.toLowerCase() ?? '';
-            final address = (data['address'] as String?)?.toLowerCase() ?? '';
-            final searchLower = query.toLowerCase().trim();
-            
-            final ownerId = data['ownerId'];
-            final submissionType = data['submissionType']?.toString().toLowerCase();
-            final isVerified = data['isVerified'] == true;
-            final approvalStatus = data['approvalStatus']?.toString().toLowerCase();
-            
-            // Allow claiming of community-added shops that:
-            // 1. Have NO ownerId (unclaimed)
-            // 2. Are EXPLICITLY 'community' type (not business)
-            // 3. Are EXPLICITLY 'approved' by admin
-            final isClaimable = (ownerId == null || ownerId.toString().trim().isEmpty) && 
-                               (submissionType == 'community') &&
-                               (approvalStatus == 'approved' || approvalStatus == 'pending_approval' || approvalStatus == 'pending');
+        final name = (data['name'] as String?)?.toLowerCase() ?? '';
+        final address = (data['address'] as String?)?.toLowerCase() ?? '';
+        final searchLower = query.toLowerCase().trim();
 
-            if (!isClaimable) return false;
+        final ownerId = data['ownerId'];
+        final submissionType = data['submissionType']?.toString().toLowerCase();
+        final approvalStatus = data['approvalStatus']?.toString().toLowerCase();
 
-            // If query is empty, allow all (will be sorted/limited below)
-            if (searchLower.isEmpty) return true;
+        // Allow claiming of community-added shops that:
+        // 1. Have NO ownerId (unclaimed)
+        // 2. Are EXPLICITLY 'community' type (not business)
+        // 3. Are EXPLICITLY 'approved' by admin
+        final isClaimable =
+            (ownerId == null || ownerId.toString().trim().isEmpty) &&
+                (submissionType == 'community') &&
+                (approvalStatus == 'approved' ||
+                    approvalStatus == 'pending_approval' ||
+                    approvalStatus == 'pending');
 
-            return (name.contains(searchLower) || address.contains(searchLower));
-          })
-          .toList();
+        if (!isClaimable) return false;
+
+        // If query is empty, allow all (will be sorted/limited below)
+        if (searchLower.isEmpty) return true;
+
+        return (name.contains(searchLower) || address.contains(searchLower));
+      }).toList();
 
       // Sort: Most recent first, then by name
       results.sort((a, b) {
         final aTime = a['postedAt'] as Timestamp?;
         final bTime = b['postedAt'] as Timestamp?;
-        
+
         if (aTime != null && bTime != null) {
           return bTime.compareTo(aTime);
         }
-        
+
         // If timestamps are missing, prioritize 'community' type as a secondary sort
-        final aComm = (a['submissionType']?.toString().toLowerCase() == 'community');
-        final bComm = (b['submissionType']?.toString().toLowerCase() == 'community');
+        final aComm =
+            (a['submissionType']?.toString().toLowerCase() == 'community');
+        final bComm =
+            (b['submissionType']?.toString().toLowerCase() == 'community');
         if (aComm && !bComm) return -1;
         if (!aComm && bComm) return 1;
-        
-        return (a['name']?.toString() ?? '').compareTo(b['name']?.toString() ?? '');
+
+        return (a['name']?.toString() ?? '')
+            .compareTo(b['name']?.toString() ?? '');
       });
 
       setState(() {
@@ -175,7 +188,6 @@ class _ClaimShopScreenState extends State<ClaimShopScreen> {
     );
   }
 
-                
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -212,7 +224,8 @@ class _ClaimShopScreenState extends State<ClaimShopScreen> {
                     decoration: InputDecoration(
                       hintText: 'Search for your shop...',
                       hintStyle: TextStyle(color: Colors.grey[500]),
-                      prefixIcon: const Icon(Icons.search, color: Colors.white54),
+                      prefixIcon:
+                          const Icon(Icons.search, color: Colors.white54),
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.all(16),
                     ),
@@ -220,25 +233,29 @@ class _ClaimShopScreenState extends State<ClaimShopScreen> {
                   ),
                 ),
               ),
-            
+
             // Info banner explaining what shops are shown
             if (!_isDirectClaim)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: Colors.orange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                    border:
+                        Border.all(color: Colors.orange.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline, color: Colors.orange, size: 18),
+                      const Icon(Icons.info_outline,
+                          color: Colors.orange, size: 18),
                       const SizedBox(width: 8),
                       Expanded(
                         child: TextWidget(
-                          text: 'Showing unverified community-added shops. These shops are pending admin approval.',
+                          text:
+                              'Showing unverified community-added shops. These shops are pending admin approval.',
                           fontSize: 12,
                           color: Colors.white70,
                           maxLines: 3,
@@ -248,10 +265,11 @@ class _ClaimShopScreenState extends State<ClaimShopScreen> {
                   ),
                 ),
               ),
-            
+
             if (_searchResults.isNotEmpty && !_isDirectClaim && !_isSearching)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                 child: Row(
                   children: [
                     TextWidget(
@@ -263,7 +281,7 @@ class _ClaimShopScreenState extends State<ClaimShopScreen> {
                   ],
                 ),
               ),
-            
+
             Expanded(
               child: _isSearching || _isDirectClaimValidating
                   ? const Center(child: CircularProgressIndicator())
@@ -274,7 +292,8 @@ class _ClaimShopScreenState extends State<ClaimShopScreen> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                                const Icon(Icons.error_outline,
+                                    color: Colors.red, size: 48),
                                 const SizedBox(height: 16),
                                 TextWidget(
                                   text: _directClaimError!,
@@ -288,18 +307,29 @@ class _ClaimShopScreenState extends State<ClaimShopScreen> {
                         )
                       : (_isDirectClaim || _searchResults.isNotEmpty)
                           ? ListView.separated(
-                              padding: const EdgeInsets.symmetric(horizontal: 24),
-                              itemCount: _isDirectClaim ? 1 : _searchResults.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 16),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 24),
+                              itemCount:
+                                  _isDirectClaim ? 1 : _searchResults.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 16),
                               itemBuilder: (context, index) {
-                                final shop = _isDirectClaim 
-                                    ? {'id': _preselectedShopId, 'name': _preselectedShopName, 'address': 'Currently viewing', 'submissionType': 'community'} 
+                                final shop = _isDirectClaim
+                                    ? {
+                                        'id': _preselectedShopId,
+                                        'name': _preselectedShopName,
+                                        'address': 'Currently viewing',
+                                        'submissionType': 'community'
+                                      }
                                     : _searchResults[index];
-                                final name = shop['name'] as String? ?? 'Unknown';
-                                final address = shop['address'] as String? ?? '';
+                                final name =
+                                    shop['name'] as String? ?? 'Unknown';
+                                final address =
+                                    shop['address'] as String? ?? '';
                                 final shopId = shop['id'] as String;
 
-                                return _buildShopResultCard(shop, shopId, name, address);
+                                return _buildShopResultCard(
+                                    shop, shopId, name, address);
                               },
                             )
                           : Center(
@@ -322,7 +352,8 @@ class _ClaimShopScreenState extends State<ClaimShopScreen> {
     );
   }
 
-  Widget _buildShopResultCard(Map<String, dynamic> shop, String shopId, String name, String address) {
+  Widget _buildShopResultCard(
+      Map<String, dynamic> shop, String shopId, String name, String address) {
     return GestureDetector(
       onTap: () => _showVerificationForm(shopId, name),
       child: Container(
@@ -330,7 +361,9 @@ class _ClaimShopScreenState extends State<ClaimShopScreen> {
         decoration: BoxDecoration(
           color: Colors.grey[900],
           borderRadius: BorderRadius.circular(12),
-          border: _isDirectClaim ? Border.all(color: primary.withOpacity(0.5)) : null,
+          border: _isDirectClaim
+              ? Border.all(color: primary.withValues(alpha: 0.5))
+              : null,
         ),
         child: Row(
           children: [
@@ -341,7 +374,8 @@ class _ClaimShopScreenState extends State<ClaimShopScreen> {
                 color: primary,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.local_cafe, color: Colors.white, size: 24),
+              child:
+                  const Icon(Icons.local_cafe, color: Colors.white, size: 24),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -368,9 +402,10 @@ class _ClaimShopScreenState extends State<ClaimShopScreen> {
                       if (shop['submissionType'] == 'community') ...[
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.2),
+                            color: Colors.blue.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(
@@ -388,11 +423,14 @@ class _ClaimShopScreenState extends State<ClaimShopScreen> {
                   const SizedBox(height: 4),
                   // Verification status badge
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.15),
+                      color: Colors.orange.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.orange.withOpacity(0.3), width: 1),
+                      border: Border.all(
+                          color: Colors.orange.withValues(alpha: 0.3),
+                          width: 1),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,

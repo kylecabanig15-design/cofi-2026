@@ -117,7 +117,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                     decoration: BoxDecoration(
                                       color: _currentImageIndex == index
                                           ? Colors.white
-                                          : Colors.white.withOpacity(0.6),
+                                          : Colors.white.withValues(alpha: 0.6),
                                       shape: BoxShape.circle,
                                     ),
                                   ),
@@ -240,7 +240,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                           decoration: BoxDecoration(
                                             shape: BoxShape.circle,
                                             border: Border.all(
-                                              color: Colors.white.withOpacity(0.3),
+                                              color: Colors.white.withValues(alpha: 0.3),
                                               width: 1,
                                             ),
                                           ),
@@ -571,10 +571,10 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                         vertical: 16, horizontal: 20),
                                     margin: const EdgeInsets.only(bottom: 12),
                                     decoration: BoxDecoration(
-                                      color: Colors.orange.withOpacity(0.15),
+                                      color: Colors.orange.withValues(alpha: 0.15),
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
-                                        color: Colors.orange.withOpacity(0.4),
+                                        color: Colors.orange.withValues(alpha: 0.4),
                                         width: 1,
                                       ),
                                     ),

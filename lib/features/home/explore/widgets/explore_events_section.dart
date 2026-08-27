@@ -46,7 +46,7 @@ class _ExploreEventsSectionState extends State<ExploreEventsSection> {
             decoration: BoxDecoration(
               color: const Color(0xFF1E1E1E),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -74,7 +74,7 @@ class _ExploreEventsSectionState extends State<ExploreEventsSection> {
                 return LinearGradient(
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
-                  colors: [Colors.white, Colors.white, Colors.white.withOpacity(0.6)],
+                  colors: [Colors.white, Colors.white, Colors.white.withValues(alpha: 0.6)],
                   stops: [0.0, 0.88, 1.0],
                 ).createShader(bounds);
               },

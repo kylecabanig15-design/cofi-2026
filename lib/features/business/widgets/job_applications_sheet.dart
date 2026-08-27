@@ -30,7 +30,7 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
         ),
         boxShadow: [
           BoxShadow(
-            color: primary.withOpacity(0.15),
+            color: primary.withValues(alpha: 0.15),
             blurRadius: 20,
             spreadRadius: 2,
             offset: const Offset(0, -5),
@@ -61,7 +61,7 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: primary.withOpacity(0.2),
+                        color: primary.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(Icons.work_history_rounded, color: primary, size: 24),
@@ -145,7 +145,7 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
                           margin: EdgeInsets.only(bottom: 16, top: index == 0 ? 0 : 24),
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.05),
+                            color: Colors.white.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(color: Colors.white12),
                           ),
@@ -179,7 +179,7 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
+              color: Colors.white.withValues(alpha: 0.05),
               shape: BoxShape.circle,
             ),
             child: Icon(Icons.inbox_rounded, size: 64, color: Colors.grey[600]),
@@ -215,10 +215,10 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
       decoration: BoxDecoration(
         color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -267,7 +267,7 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.2),
+                    color: Colors.black.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
@@ -357,17 +357,17 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
     switch (status) {
       case 'accepted':
       case 'approved':
-        bgColor = Colors.green.withOpacity(0.2);
+        bgColor = Colors.green.withValues(alpha: 0.2);
         textColor = Colors.greenAccent;
         text = 'ACCEPTED';
         break;
       case 'rejected':
-        bgColor = Colors.red.withOpacity(0.2);
+        bgColor = Colors.red.withValues(alpha: 0.2);
         textColor = Colors.redAccent;
         text = 'REJECTED';
         break;
       default:
-        bgColor = Colors.orange.withOpacity(0.2);
+        bgColor = Colors.orange.withValues(alpha: 0.2);
         textColor = Colors.orangeAccent;
         text = 'PENDING';
     }
@@ -377,7 +377,7 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: textColor.withOpacity(0.3)),
+        border: Border.all(color: textColor.withValues(alpha: 0.3)),
       ),
       child: TextWidget(
         text: text,

@@ -159,7 +159,7 @@ void showAdminClaimDetailsSheet(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      Colors.black.withOpacity(0),
+                      Colors.black.withValues(alpha: 0),
                       const Color(0xFF1A1A1A)
                     ],
                     begin: Alignment.topCenter,
@@ -270,10 +270,10 @@ Widget _buildLegalTag(String label, bool value) {
     margin: const EdgeInsets.only(bottom: 10),
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     decoration: BoxDecoration(
-      color: (value ? Colors.green : Colors.redAccent).withOpacity(0.05),
+      color: (value ? Colors.green : Colors.redAccent).withValues(alpha: 0.05),
       borderRadius: BorderRadius.circular(10),
       border: Border.all(
-          color: (value ? Colors.green : Colors.redAccent).withOpacity(0.15)),
+          color: (value ? Colors.green : Colors.redAccent).withValues(alpha: 0.15)),
     ),
     child: Row(
       children: [

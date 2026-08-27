@@ -6,6 +6,7 @@ import 'package:cofi/widgets/text_widget.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/utils/formatters.dart';
 import 'package:cofi/widgets/custom_toast.dart';
+import 'package:cofi/utils/app_signals.dart';
 
 class LogVisitScreen extends StatefulWidget {
   final String shopId;
@@ -77,6 +78,8 @@ class _LogVisitScreenState extends State<LogVisitScreen> {
       } catch (_) {
         // No-op: UI feedback below still applies
       }
+
+      recommendationVersion.value++;
 
       if (!mounted) return;
       Navigator.pop(context);

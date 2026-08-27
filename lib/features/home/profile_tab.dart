@@ -11,7 +11,6 @@ import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/features/jobs/job_chat_screen.dart';
 import 'package:cofi/features/settings/settings_screen.dart';
-import 'package:cofi/features/business/shop_verification_sheet.dart';
 
 class ProfileTab extends StatelessWidget {
   static final JobRepository _jobRepository = JobRepository();
@@ -38,247 +37,255 @@ class ProfileTab extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.only(bottom: 120),
                 children: [
-            const SizedBox(height: 32),
-            // Profile header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Builder(builder: (context) {
-                    final user = FirebaseAuth.instance.currentUser;
-                    if (user == null) {
-                      return Container(
-                        width: 72,
-                        height: 72,
-                        decoration: const BoxDecoration(
-                          color: primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Image.asset(
-                              'assets/images/logo.png',
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-                    return StreamBuilder<
-                        DocumentSnapshot<Map<String, dynamic>>>(
-                      stream: FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(user.uid)
-                          .snapshots(),
-                      builder: (context, snapshot) {
-                        final data = snapshot.data?.data();
-                        final photoUrl = (data?['photoUrl'] as String?)?.trim();
+                  const SizedBox(height: 32),
+                  // Profile header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Builder(builder: (context) {
+                          final user = FirebaseAuth.instance.currentUser;
+                          if (user == null) {
+                            return Container(
+                              width: 72,
+                              height: 72,
+                              decoration: const BoxDecoration(
+                                color: primary,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Image.asset(
+                                    'assets/images/logo.png',
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                          return StreamBuilder<
+                              DocumentSnapshot<Map<String, dynamic>>>(
+                            stream: FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(user.uid)
+                                .snapshots(),
+                            builder: (context, snapshot) {
+                              final data = snapshot.data?.data();
+                              final photoUrl =
+                                  (data?['photoUrl'] as String?)?.trim();
 
-                        return Container(
+                              return Container(
+                                width: 72,
+                                height: 72,
+                                decoration: const BoxDecoration(
+                                  color: primary,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: ClipOval(
+                                    child: (photoUrl != null &&
+                                            photoUrl.isNotEmpty)
+                                        ? CachedNetworkImage(
+                                            imageUrl: photoUrl,
+                                            width: 72,
+                                            height: 72,
+                                            fit: BoxFit.cover,
+                                            placeholder: (context, url) =>
+                                                const CircularProgressIndicator(
+                                                    color: Colors.white,
+                                                    strokeWidth: 2),
+                                            errorWidget:
+                                                (context, url, error) =>
+                                                    Padding(
+                                              padding:
+                                                  const EdgeInsets.all(8.0),
+                                              child: Image.asset(
+                                                  'assets/images/logo.png'),
+                                            ),
+                                          )
+                                        : Padding(
+                                            padding: const EdgeInsets.all(8.0),
+                                            child: Image.asset(
+                                                'assets/images/logo.png'),
+                                          ),
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        }),
+                        Row(
+                          children: [
+                            IconButton(
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const SettingsScreen(),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(
+                                  Icons.settings,
+                                  color: Colors.white,
+                                )),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Builder(builder: (context) {
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user == null) {
+                        return TextWidget(
+                          text: 'Guest',
+                          fontSize: 32,
+                          color: Colors.white,
+                          isBold: true,
+                        );
+                      }
+                      final sessionName =
+                          context.watch<UserSession>().user?.name.trim();
+                      final displayName =
+                          (sessionName != null && sessionName.isNotEmpty)
+                              ? sessionName
+                              : (user.displayName ?? 'User');
+                      return TextWidget(
+                        text: displayName,
+                        fontSize: 32,
+                        color: Colors.white,
+                        isBold: true,
+                      );
+                    }),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Builder(builder: (context) {
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user == null) {
+                        return TextWidget(
+                          text: 'Not signed in',
+                          fontSize: 16,
+                          color: Colors.white70,
+                        );
+                      }
+                      final sessionAddress =
+                          context.watch<UserSession>().user?.address.trim() ??
+                              '';
+                      if (sessionAddress.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
+                      return TextWidget(
+                        text: sessionAddress,
+                        fontSize: 16,
+                        color: Colors.white70,
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 32),
+                  // Stats Card - Different for Business vs User accounts
+                  Builder(
+                    builder: (context) {
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user == null) return const SizedBox.shrink();
+
+                      final isBusiness =
+                          context.watch<UserSession>().isBusiness;
+
+                      // Business Account - Show Analytics & Stats
+                      if (isBusiness) {
+                        return _buildBusinessAnalyticsSection(
+                            context, user.uid);
+                      }
+
+                      // User Account - Show regular stats
+                      return _buildUserStatsSection(context, user.uid);
+                    },
+                  ),
+                  const SizedBox(height: 32),
+                  // Contribute to Community or Business Dashboard based on account type
+                  Builder(
+                    builder: (context) {
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user == null) return const SizedBox.shrink();
+
+                      final isBusiness =
+                          context.watch<UserSession>().isBusiness;
+
+                      // Business Account - Show Business Dashboard
+                      if (isBusiness) {
+                        return _buildBusinessSection(context, user.uid);
+                      }
+
+                      // User Account - Show Contribute Section
+                      return _buildUserContributeSection(context, user.uid);
+                    },
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Find the perfect cafe
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Column(
+                      children: [
+                        Container(
                           width: 72,
                           height: 72,
                           decoration: const BoxDecoration(
                             color: primary,
                             shape: BoxShape.circle,
                           ),
-                          child: Center(
-                            child: ClipOval(
-                              child: (photoUrl != null && photoUrl.isNotEmpty)
-                                  ? CachedNetworkImage(
-                                      imageUrl: photoUrl,
-                                      width: 72,
-                                      height: 72,
-                                      fit: BoxFit.cover,
-                                      placeholder: (context, url) =>
-                                          const CircularProgressIndicator(
-                                              color: Colors.white,
-                                              strokeWidth: 2),
-                                      errorWidget: (context, url, error) =>
-                                          Padding(
-                                        padding: const EdgeInsets.all(8.0),
-                                        child: Image.asset(
-                                            'assets/images/logo.png'),
-                                      ),
-                                    )
-                                  : Padding(
-                                      padding: const EdgeInsets.all(8.0),
-                                      child:
-                                          Image.asset('assets/images/logo.png'),
-                                    ),
+                          child: const Center(
+                            child: Icon(Icons.local_cafe,
+                                color: Colors.white, size: 36),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        TextWidget(
+                          text: 'Find the perfect cafe',
+                          fontSize: 22,
+                          color: Colors.white,
+                          isBold: true,
+                        ),
+                        const SizedBox(height: 8),
+                        TextWidget(
+                          align: TextAlign.center,
+                          text:
+                              'Explore, check cafe shops to visit and share it in the reviews.',
+                          fontSize: 15,
+                          color: Colors.white70,
+                        ),
+                        const SizedBox(height: 18),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: onOpenExplore,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primary,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                            ),
+                            child: const Text(
+                              'Explore Cafes',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
-                        );
-                      },
-                    );
-                  }),
-                  Row(
-                    children: [
-                      IconButton(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const SettingsScreen(),
-                              ),
-                            );
-                          },
-                          icon: const Icon(
-                            Icons.settings,
-                            color: Colors.white,
-                          )),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(height: 32),
                 ],
               ),
-            ),
-            const SizedBox(height: 18),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Builder(builder: (context) {
-                final user = FirebaseAuth.instance.currentUser;
-                if (user == null) {
-                  return TextWidget(
-                    text: 'Guest',
-                    fontSize: 32,
-                    color: Colors.white,
-                    isBold: true,
-                  );
-                }
-                final sessionName = context.watch<UserSession>().user?.name.trim();
-                final displayName = (sessionName != null && sessionName.isNotEmpty)
-                    ? sessionName
-                    : (user.displayName ?? 'User');
-                return TextWidget(
-                  text: displayName,
-                  fontSize: 32,
-                  color: Colors.white,
-                  isBold: true,
-                );
-              }),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Builder(builder: (context) {
-                final user = FirebaseAuth.instance.currentUser;
-                if (user == null) {
-                  return TextWidget(
-                    text: 'Not signed in',
-                    fontSize: 16,
-                    color: Colors.white70,
-                  );
-                }
-                final sessionAddress =
-                    context.watch<UserSession>().user?.address.trim() ?? '';
-                if (sessionAddress.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                return TextWidget(
-                  text: sessionAddress,
-                  fontSize: 16,
-                  color: Colors.white70,
-                );
-              }),
-            ),
-            const SizedBox(height: 32),
-            // Stats Card - Different for Business vs User accounts
-            Builder(
-              builder: (context) {
-                final user = FirebaseAuth.instance.currentUser;
-                if (user == null) return const SizedBox.shrink();
-
-                final isBusiness =
-                    context.watch<UserSession>().isBusiness;
-
-                // Business Account - Show Analytics & Stats
-                if (isBusiness) {
-                  return _buildBusinessAnalyticsSection(context, user.uid);
-                }
-
-                // User Account - Show regular stats
-                return _buildUserStatsSection(context, user.uid);
-              },
-            ),
-            const SizedBox(height: 32),
-            // Contribute to Community or Business Dashboard based on account type
-            Builder(
-              builder: (context) {
-                final user = FirebaseAuth.instance.currentUser;
-                if (user == null) return const SizedBox.shrink();
-
-                final isBusiness =
-                    context.watch<UserSession>().isBusiness;
-
-                // Business Account - Show Business Dashboard
-                if (isBusiness) {
-                  return _buildBusinessSection(context, user.uid);
-                }
-
-                // User Account - Show Contribute Section
-                return _buildUserContributeSection(context, user.uid);
-              },
-            ),
-            const SizedBox(height: 32),
-
-            // Find the perfect cafe
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Column(
-                children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: const BoxDecoration(
-                      color: primary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Center(
-                      child:
-                          Icon(Icons.local_cafe, color: Colors.white, size: 36),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  TextWidget(
-                    text: 'Find the perfect cafe',
-                    fontSize: 22,
-                    color: Colors.white,
-                    isBold: true,
-                  ),
-                  const SizedBox(height: 8),
-                  TextWidget(
-                    align: TextAlign.center,
-                    text:
-                        'Explore, check cafe shops to visit and share it in the reviews.',
-                    fontSize: 15,
-                    color: Colors.white70,
-                  ),
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: onOpenExplore,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primary,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                      ),
-                      child: const Text(
-                        'Explore Cafes',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-          ],
-        ),
             );
           },
         ),
@@ -457,7 +464,8 @@ class ProfileTab extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         TextWidget(
-                          text: 'Submit or claim a shop to unlock powerful insights and customer data.',
+                          text:
+                              'Submit or claim a shop to unlock powerful insights and customer data.',
                           fontSize: 14,
                           color: Colors.grey[500],
                           align: TextAlign.center,
@@ -526,7 +534,8 @@ class ProfileTab extends StatelessWidget {
                                         .toStringAsFixed(1)
                                     : '0.0',
                                 color: Colors.amber,
-                                tooltip: 'Average star rating from all customer reviews',
+                                tooltip:
+                                    'Average star rating from all customer reviews',
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -536,7 +545,8 @@ class ProfileTab extends StatelessWidget {
                                 label: 'Total Ratings',
                                 value: reviews.length.toString(),
                                 color: Colors.blue,
-                                tooltip: 'Total number of reviews submitted by customers',
+                                tooltip:
+                                    'Total number of reviews submitted by customers',
                               ),
                             ),
                           ],
@@ -559,7 +569,8 @@ class ProfileTab extends StatelessWidget {
                                     label: 'Customer Visits',
                                     value: visitCount.toString(),
                                     color: Colors.green,
-                                    tooltip: 'Total number of recorded customer visits',
+                                    tooltip:
+                                        'Total number of recorded customer visits',
                                   );
                                 },
                               ),
@@ -579,7 +590,8 @@ class ProfileTab extends StatelessWidget {
                                     label: 'Saved',
                                     value: savedCount.toString(),
                                     color: primary,
-                                    tooltip: 'Number of users who have bookmarked your shop',
+                                    tooltip:
+                                        'Number of users who have bookmarked your shop',
                                   );
                                 },
                               ),
@@ -641,7 +653,8 @@ class ProfileTab extends StatelessWidget {
                           label: 'Visited this week',
                           color: Colors.amber,
                           tooltip: 'Unique cafes you visited this week',
-                          onTap: () => Navigator.pushNamed(context, '/visitedCafes'),
+                          onTap: () =>
+                              Navigator.pushNamed(context, '/visitedCafes'),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -652,7 +665,8 @@ class ProfileTab extends StatelessWidget {
                           label: 'Visited this month',
                           color: Colors.blue,
                           tooltip: 'Unique cafes you visited this month',
-                          onTap: () => Navigator.pushNamed(context, '/visitedCafes'),
+                          onTap: () =>
+                              Navigator.pushNamed(context, '/visitedCafes'),
                         ),
                       ),
                     ],
@@ -667,7 +681,8 @@ class ProfileTab extends StatelessWidget {
                           label: 'Visited this year',
                           color: Colors.green,
                           tooltip: 'Unique cafes you visited this year',
-                          onTap: () => Navigator.pushNamed(context, '/visitedCafes'),
+                          onTap: () =>
+                              Navigator.pushNamed(context, '/visitedCafes'),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -678,7 +693,8 @@ class ProfileTab extends StatelessWidget {
                           label: 'Reviews written',
                           color: primary,
                           tooltip: 'Total cafes you have reviewed this year',
-                          onTap: () => Navigator.pushNamed(context, '/yourReviews'),
+                          onTap: () =>
+                              Navigator.pushNamed(context, '/yourReviews'),
                         ),
                       ),
                     ],
@@ -897,7 +913,8 @@ class ProfileTab extends StatelessWidget {
               if (hasShop) {
                 final count = snapshot.data!.docs.length;
                 label = 'My Contributions';
-                subtitle = 'You have contributed $count café${count > 1 ? 's' : ''}';
+                subtitle =
+                    'You have contributed $count café${count > 1 ? 's' : ''}';
                 statusIcon = Icons.stars_rounded;
                 statusColor = Colors.amber;
                 onTap = () {
@@ -917,9 +934,7 @@ class ProfileTab extends StatelessWidget {
                 onTap: onTap,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: onTap == null
-                        ? Colors.white.withValues(alpha: 0.04)
-                        : Colors.white.withValues(alpha: 0.08),
+                    color: Colors.white.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(32),
                   ),
                   child: Row(
@@ -948,25 +963,23 @@ class ProfileTab extends StatelessWidget {
                             TextWidget(
                               text: label,
                               fontSize: 18,
-                              color: onTap == null ? Colors.grey : Colors.white,
+                              color: Colors.white,
                               isBold: true,
                             ),
                             if (subtitle.isNotEmpty)
                               TextWidget(
                                 text: subtitle,
                                 fontSize: 14,
-                                color:
-                                    onTap == null ? Colors.grey : Colors.white70,
+                                color: Colors.white70,
                               ),
                           ],
                         ),
                       ),
-                      if (onTap != null)
-                        IconButton(
-                          icon: const Icon(Icons.arrow_forward_ios,
-                              color: Colors.white, size: 22),
-                          onPressed: onTap,
-                        ),
+                      IconButton(
+                        icon: const Icon(Icons.arrow_forward_ios,
+                            color: Colors.white, size: 22),
+                        onPressed: onTap,
+                      ),
                     ],
                   ),
                 ),
@@ -1084,8 +1097,7 @@ class ProfileTab extends StatelessWidget {
     );
   }
 
-  void _showJobApplicationsDialog(
-      BuildContext context, List<Job> jobs) {
+  void _showJobApplicationsDialog(BuildContext context, List<Job> jobs) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1093,11 +1105,11 @@ class ProfileTab extends StatelessWidget {
       builder: (ctx) => Container(
         height: MediaQuery.of(context).size.height * 0.75,
         decoration: BoxDecoration(
-          color: Colors.grey[900]!.withOpacity(0.95),
+          color: Colors.grey[900]!.withValues(alpha: 0.95),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
           boxShadow: [
             BoxShadow(
-              color: primary.withOpacity(0.2),
+              color: primary.withValues(alpha: 0.2),
               blurRadius: 20,
               spreadRadius: 2,
             ),
@@ -1122,7 +1134,7 @@ class ProfileTab extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.2),
+                      color: Colors.green.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.work_history,
@@ -1157,9 +1169,11 @@ class ProfileTab extends StatelessWidget {
             const SizedBox(height: 24),
             Expanded(
               child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 itemCount: jobs.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 16),
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 16),
                 itemBuilder: (context, index) {
                   final job = jobs[index];
                   final userApplications = job.applications
@@ -1194,8 +1208,9 @@ class ProfileTab extends StatelessWidget {
                               MaterialPageRoute(
                                 builder: (context) => JobChatScreen(
                                   jobId: job.id,
-                                  jobTitle:
-                                      job.title.isEmpty ? 'Unknown Position' : job.title,
+                                  jobTitle: job.title.isEmpty
+                                      ? 'Unknown Position'
+                                      : job.title,
                                   shopId: job.shopId,
                                   posterId: documentSnapshot['posterId'] ?? '',
                                   applicantId: currentUser.uid,
@@ -1220,12 +1235,12 @@ class ProfileTab extends StatelessWidget {
                         ),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.05),
+                          color: Colors.white.withValues(alpha: 0.05),
                           width: 1,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha: 0.2),
                             blurRadius: 10,
                             offset: const Offset(0, 5),
                           ),
@@ -1241,7 +1256,7 @@ class ProfileTab extends StatelessWidget {
                                 width: 48,
                                 height: 48,
                                 decoration: BoxDecoration(
-                                  color: primary.withOpacity(0.1),
+                                  color: primary.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: const Icon(Icons.coffee, color: primary),
@@ -1281,14 +1296,10 @@ class ProfileTab extends StatelessWidget {
                           const Divider(color: Colors.white12),
                           const SizedBox(height: 12),
                           ...userApplications.map((app) {
-                            final appData = app as Map<String, dynamic>;
-                            final status =
-                                appData['status'] as String? ?? 'pending';
-                            final appliedAt =
-                                appData['appliedAt'] as Timestamp?;
-                            final dateStr = appliedAt != null
+                            final status = app.status;
+                            final dateStr = app.appliedAt != null
                                 ? DateFormat('MMM dd, yyyy')
-                                    .format(appliedAt.toDate())
+                                    .format(app.appliedAt!)
                                 : 'Unknown date';
 
                             Color statusColor = Colors.orange;
@@ -1324,10 +1335,10 @@ class ProfileTab extends StatelessWidget {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 12, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: statusColor.withOpacity(0.15),
+                                    color: statusColor.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
-                                      color: statusColor.withOpacity(0.3),
+                                      color: statusColor.withValues(alpha: 0.3),
                                     ),
                                   ),
                                   child: Row(
@@ -1445,10 +1456,10 @@ class ProfileTab extends StatelessWidget {
                     .limit(1)
                     .snapshots(),
                 builder: (context, claimSnapshot) {
-                  final hasShop =
-                      shopSnapshot.hasData && shopSnapshot.data!.docs.isNotEmpty;
-                  final hasPendingClaim =
-                      claimSnapshot.hasData && claimSnapshot.data!.docs.isNotEmpty;
+                  final hasShop = shopSnapshot.hasData &&
+                      shopSnapshot.data!.docs.isNotEmpty;
+                  final hasPendingClaim = claimSnapshot.hasData &&
+                      claimSnapshot.data!.docs.isNotEmpty;
 
                   if (!hasShop && hasPendingClaim) {
                     final claimDoc = claimSnapshot.data!.docs.first;
@@ -1465,12 +1476,14 @@ class ProfileTab extends StatelessWidget {
                             .snapshots(),
                         builder: (context, shopCheckSnap) {
                           bool shopExists = true;
-                          if (shopCheckSnap.hasData && !shopCheckSnap.data!.exists) {
+                          if (shopCheckSnap.hasData &&
+                              !shopCheckSnap.data!.exists) {
                             shopExists = false;
                           }
 
                           if (!shopExists) {
-                             return _buildOrphanedClaimCard(context, claimId, shopName);
+                            return _buildOrphanedClaimCard(
+                                context, claimId, shopName);
                           }
 
                           // Default pending review state
@@ -1481,7 +1494,7 @@ class ProfileTab extends StatelessWidget {
                             icon: Icons.hourglass_top,
                             color: Colors.orange,
                             onTap: () {
-                                _showReviewDialog(context);
+                              _showReviewDialog(context);
                             },
                           );
                         },
@@ -1538,13 +1551,13 @@ class ProfileTab extends StatelessWidget {
                     }
                   } else {
                     // No Shop, No Pending Claim
-                     label = 'Claim or Submit Shop';
-                     subtitle = 'Get started with your business';
-                     icon = Icons.business;
-                     color = const Color(0xFF2563EB);
-                     onTap = () {
-                        Navigator.pushNamed(context, '/businessDashboard');
-                     };
+                    label = 'Claim or Submit Shop';
+                    subtitle = 'Get started with your business';
+                    icon = Icons.business;
+                    color = const Color(0xFF2563EB);
+                    onTap = () {
+                      Navigator.pushNamed(context, '/businessDashboard');
+                    };
                   }
 
                   return _buildBusinessCardContent(
@@ -1565,37 +1578,35 @@ class ProfileTab extends StatelessWidget {
   }
 
   void _showReviewDialog(BuildContext context) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: Colors.black,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: BorderSide(color: primary.withOpacity(0.3)),
-          ),
-          title: Row(
-            children: [
-              Icon(Icons.hourglass_empty, color: primary),
-              const SizedBox(width: 12),
-              const Text('Review in Progress',
-                  style: TextStyle(color: Colors.white)),
-            ],
-          ),
-          content: const Text(
-            'Your shop submission or ownership claim is currently being reviewed by our admin team. You will gain access to the business dashboard once approved.',
-            style: TextStyle(color: Colors.white70),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('OK',
-                  style: TextStyle(
-                      color: primary,
-                      fontWeight: FontWeight.bold)),
-            ),
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.black,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: primary.withValues(alpha: 0.3)),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.hourglass_empty, color: primary),
+            const SizedBox(width: 12),
+            const Text('Review in Progress',
+                style: TextStyle(color: Colors.white)),
           ],
         ),
-      );
+        content: const Text(
+          'Your shop submission or ownership claim is currently being reviewed by our admin team. You will gain access to the business dashboard once approved.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('OK',
+                style: TextStyle(color: primary, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildBusinessCardContent({
@@ -1610,10 +1621,10 @@ class ProfileTab extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(32),
           border: Border.all(
-            color: color.withOpacity(0.3),
+            color: color.withValues(alpha: 0.3),
             width: 1.5,
           ),
         ),
@@ -1665,76 +1676,95 @@ class ProfileTab extends StatelessWidget {
     );
   }
 
-  Widget _buildOrphanedClaimCard(BuildContext context, String claimId, String shopName) {
-      return Container(
-        decoration: BoxDecoration(
-          color: Colors.red.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(32),
-          border: Border.all(
-            color: Colors.red.withOpacity(0.3),
-            width: 1.5,
+  Widget _buildOrphanedClaimCard(
+      BuildContext context, String claimId, String shopName) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(
+          color: Colors.red.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 16),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Center(
+                child: Icon(Icons.domain_disabled_rounded,
+                    color: Colors.red, size: 24),
+              ),
+            ),
           ),
-        ),
-        child: Row(
-          children: [
-            const SizedBox(width: 16),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Center(
-                  child: Icon(Icons.domain_disabled_rounded, color: Colors.red, size: 24),
-                ),
-              ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextWidget(
+                    text: 'Shop Not Found',
+                    fontSize: 16,
+                    color: Colors.redAccent,
+                    isBold: true),
+                TextWidget(
+                    text: '"$shopName" is no longer available.',
+                    fontSize: 12,
+                    color: Colors.white54),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                   TextWidget(text: 'Shop Not Found', fontSize: 16, color: Colors.redAccent, isBold: true),
-                   TextWidget(text: '"$shopName" is no longer available.', fontSize: 12, color: Colors.white54),
-                ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: TextButton(
+              onPressed: () => _deleteOrphanedClaim(context, claimId),
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.red.withValues(alpha: 0.1),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
+              child: const Text('DISMISS',
+                  style: TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold)),
             ),
-            Padding(
-              padding: const EdgeInsets.only(right: 16.0),
-              child: TextButton(
-                  onPressed: () => _deleteOrphanedClaim(context, claimId),
-                  style: TextButton.styleFrom(
-                      backgroundColor: Colors.red.withOpacity(0.1),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('DISMISS', style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
   }
 
-  Future<void> _deleteOrphanedClaim(BuildContext context, String claimId) async {
-      try {
-          await FirebaseFirestore.instance.collection('shop_claims').doc(claimId).delete();
-          if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('Invalid claim removed'),
-                  backgroundColor: Colors.green,
-              ));
-          }
-      } catch (e) {
-          if (context.mounted) {
-             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                 content: Text('Error removing claim: $e'),
-                 backgroundColor: Colors.red,
-             ));
-          }
+  Future<void> _deleteOrphanedClaim(
+      BuildContext context, String claimId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('shop_claims')
+          .doc(claimId)
+          .delete();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Invalid claim removed'),
+          backgroundColor: Colors.green,
+        ));
       }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error removing claim: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    }
   }
 }

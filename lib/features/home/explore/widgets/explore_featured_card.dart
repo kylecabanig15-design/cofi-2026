@@ -77,12 +77,12 @@ class _ExploreFeaturedCardState extends State<ExploreFeaturedCard> {
             borderRadius: BorderRadius.circular(22),
             boxShadow: [
               BoxShadow(
-                color: primary.withOpacity(0.18),
+                color: primary.withValues(alpha: 0.18),
                 blurRadius: 18,
                 offset: const Offset(0, 8),
               ),
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -125,10 +125,10 @@ class _ExploreFeaturedCardState extends State<ExploreFeaturedCard> {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Colors.black.withOpacity(0.08),
-                        Colors.black.withOpacity(0.15),
-                        Colors.black.withOpacity(0.65),
-                        Colors.black.withOpacity(0.95),
+                        Colors.black.withValues(alpha: 0.08),
+                        Colors.black.withValues(alpha: 0.15),
+                        Colors.black.withValues(alpha: 0.65),
+                        Colors.black.withValues(alpha: 0.95),
                       ],
                       stops: const [0.0, 0.35, 0.65, 1.0],
                     ),
@@ -151,9 +151,9 @@ class _ExploreFeaturedCardState extends State<ExploreFeaturedCard> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
-                              color: primary.withOpacity(0.75),
+                              color: primary.withValues(alpha: 0.75),
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.white.withOpacity(0.2), width: 0.5),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 0.5),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -185,9 +185,9 @@ class _ExploreFeaturedCardState extends State<ExploreFeaturedCard> {
                             child: Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.35),
+                                color: Colors.black.withValues(alpha: 0.35),
                                 borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.white.withOpacity(0.15), width: 0.5),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 0.5),
                               ),
                               child: Icon(
                                 widget.isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
@@ -222,7 +222,7 @@ class _ExploreFeaturedCardState extends State<ExploreFeaturedCard> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.12),
+                                color: Colors.white.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Row(
@@ -288,9 +288,9 @@ class _ExploreFeaturedCardState extends State<ExploreFeaturedCard> {
                               margin: const EdgeInsets.only(bottom: 12),
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.5),
+                                color: Colors.black.withValues(alpha: 0.5),
                                 borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: Colors.white.withOpacity(0.2), width: 0.5),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 0.5),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -334,10 +334,10 @@ class _ExploreFeaturedCardState extends State<ExploreFeaturedCard> {
                           Container(
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.4),
+                                  color: Colors.black.withValues(alpha: 0.4),
                                   blurRadius: 8,
                                 ),
                               ],

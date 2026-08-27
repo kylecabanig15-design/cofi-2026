@@ -25,8 +25,8 @@ class PremiumBackground extends StatelessWidget {
               shape: BoxShape.circle,
               gradient: RadialGradient(
                 colors: [
-                  primary.withOpacity(0.18),
-                  Colors.black.withOpacity(0.0),
+                  primary.withValues(alpha: 0.18),
+                  Colors.black.withValues(alpha: 0.0),
                 ],
                 radius: 0.8,
               ),
@@ -44,8 +44,8 @@ class PremiumBackground extends StatelessWidget {
               shape: BoxShape.circle,
               gradient: RadialGradient(
                 colors: [
-                  primary.withOpacity(0.12),
-                  Colors.black.withOpacity(0.0),
+                  primary.withValues(alpha: 0.12),
+                  Colors.black.withValues(alpha: 0.0),
                 ],
                 radius: 0.8,
               ),
@@ -83,7 +83,7 @@ class NoisePainter extends CustomPainter {
         final x = random.nextDouble() * size.width;
         final y = random.nextDouble() * size.height;
         // Vary opacity slightly for depth
-        paint.color = Colors.white.withOpacity(random.nextDouble() * 0.5);
+        paint.color = Colors.white.withValues(alpha: random.nextDouble() * 0.5);
         canvas.drawRect(Rect.fromLTWH(x, y, 1.5, 1.5), paint);
     }
   }

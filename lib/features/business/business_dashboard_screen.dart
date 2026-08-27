@@ -184,7 +184,7 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
+                    color: Colors.blue.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.hourglass_top_rounded, color: Colors.blueAccent, size: 64),

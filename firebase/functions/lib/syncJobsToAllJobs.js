@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.syncAllJobsStatusBackToShops = exports.syncJobsToAllJobs = void 0;
+exports.scrubPublicJobFeed = exports.syncAllJobsStatusBackToShops = exports.syncJobsToAllJobs = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
@@ -42,8 +42,8 @@ const db = admin.firestore();
  * Cloud Function to sync jobs to allJobs collection
  * Triggered when any job document is created, updated, or deleted
  *
- * All jobs (pending and active) are synced to allJobs for public listing
- * Only closed and archived jobs are removed from allJobs
+ * Only public job fields are synced to allJobs. Applicant records contain
+ * contact details and resume URLs and must remain on the staff-only source doc.
  */
 exports.syncJobsToAllJobs = functions.firestore
     .document("shops/{shopId}/jobs/{jobId}")
@@ -62,13 +62,16 @@ exports.syncJobsToAllJobs = functions.firestore
         const statusLower = status.toLowerCase();
         // Sync all jobs except archived ones
         if (statusLower !== "archived") {
-            // Add to allJobs (pending, active, closed, or any other status)
+            const { applications: _privateApplications, ...publicFields } = newData;
             const jobData = {
-                ...newData,
+                ...publicFields,
                 shopId: shopId,
+                jobId: jobId,
                 syncedAt: admin.firestore.FieldValue.serverTimestamp(),
             };
-            await db.collection("allJobs").doc(jobId).set(jobData, { merge: true });
+            // A full replacement also removes private/stale fields copied by older
+            // versions of this function.
+            await db.collection("allJobs").doc(jobId).set(jobData);
             console.log(`[${status}] Job ${jobId} synced to allJobs from shop ${shopId}`);
         }
         else {
@@ -139,5 +142,32 @@ exports.syncAllJobsStatusBackToShops = functions.firestore
         console.error(`Error reverse-syncing job ${jobId} from allJobs:`, error);
         throw error;
     }
+});
+/** Removes applicant data left in public mirrors by pre-fix deployments. */
+exports.scrubPublicJobFeed = functions.pubsub
+    .schedule("every 60 minutes")
+    .onRun(async () => {
+    const snapshot = await db.collection("allJobs").get();
+    let batch = db.batch();
+    let operations = 0;
+    let scrubbed = 0;
+    for (const doc of snapshot.docs) {
+        if (!("applications" in doc.data()))
+            continue;
+        batch.update(doc.ref, {
+            applications: admin.firestore.FieldValue.delete(),
+        });
+        operations++;
+        scrubbed++;
+        if (operations >= 400) {
+            await batch.commit();
+            batch = db.batch();
+            operations = 0;
+        }
+    }
+    if (operations > 0)
+        await batch.commit();
+    functions.logger.info(`scrubPublicJobFeed: scrubbed ${scrubbed} jobs`);
+    return null;
 });
 //# sourceMappingURL=syncJobsToAllJobs.js.map

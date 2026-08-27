@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cofi/models/notification_model.dart';
 import 'package:cofi/services/notification_service.dart';
-import 'package:cofi/utils/colors.dart';
 
 class InAppNotificationBannerManager extends StatefulWidget {
   final Widget child;
@@ -11,10 +9,12 @@ class InAppNotificationBannerManager extends StatefulWidget {
   const InAppNotificationBannerManager({super.key, required this.child});
 
   @override
-  State<InAppNotificationBannerManager> createState() => _InAppNotificationBannerManagerState();
+  State<InAppNotificationBannerManager> createState() =>
+      _InAppNotificationBannerManagerState();
 }
 
-class _InAppNotificationBannerManagerState extends State<InAppNotificationBannerManager> {
+class _InAppNotificationBannerManagerState
+    extends State<InAppNotificationBannerManager> {
   StreamSubscription? _sub;
   NotificationModel? _currentNotification;
   Timer? _timer;
@@ -27,7 +27,7 @@ class _InAppNotificationBannerManagerState extends State<InAppNotificationBanner
         setState(() {
           _currentNotification = notification;
         });
-        
+
         _timer?.cancel();
         _timer = Timer(const Duration(seconds: 4), () {
           if (mounted) {
@@ -50,19 +50,22 @@ class _InAppNotificationBannerManagerState extends State<InAppNotificationBanner
   void _handleTap() {
     final nav = Navigator.of(context);
     final notification = _currentNotification;
-    
+
     setState(() {
       _currentNotification = null;
     });
-    
+
     if (notification == null) return;
 
     if (notification.type == 'chat') {
-      nav.pushNamed('/jobChat', arguments: notification.metadata);
+      nav.pushNamed('/jobChat', arguments: {
+        ...?notification.metadata,
+        'conversationId': notification.relatedId,
+      });
     } else {
       nav.pushNamed('/notifications'); // Default fallback
     }
-    
+
     NotificationService().markAsRead(notification.id);
   }
 
@@ -89,7 +92,8 @@ class _InAppNotificationBannerManagerState extends State<InAppNotificationBanner
               child: GestureDetector(
                 onTap: _handleTap,
                 onVerticalDragEnd: (details) {
-                  if (details.primaryVelocity != null && details.primaryVelocity! < 0) {
+                  if (details.primaryVelocity != null &&
+                      details.primaryVelocity! < 0) {
                     setState(() {
                       _currentNotification = null;
                     });
@@ -99,13 +103,15 @@ class _InAppNotificationBannerManagerState extends State<InAppNotificationBanner
                   color: Colors.transparent,
                   child: Container(
                     margin: const EdgeInsets.symmetric(horizontal: 16),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E1E1E), // Solid dark grey, like Instagram
+                      color: const Color(
+                          0xFF1E1E1E), // Solid dark grey, like Instagram
                       borderRadius: BorderRadius.circular(30), // Rounded pill
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           blurRadius: 15,
                           offset: const Offset(0, 5),
                         ),
@@ -136,7 +142,8 @@ class _InAppNotificationBannerManagerState extends State<InAppNotificationBanner
                                 _currentNotification!.title,
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontWeight: FontWeight.w600, // Semi-bold like Instagram
+                                  fontWeight: FontWeight
+                                      .w600, // Semi-bold like Instagram
                                   fontSize: 14,
                                 ),
                                 maxLines: 1,
@@ -146,7 +153,7 @@ class _InAppNotificationBannerManagerState extends State<InAppNotificationBanner
                               Text(
                                 _currentNotification!.body,
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.7),
+                                  color: Colors.white.withValues(alpha: 0.7),
                                   fontSize: 13,
                                   height: 1.2,
                                 ),
@@ -160,7 +167,7 @@ class _InAppNotificationBannerManagerState extends State<InAppNotificationBanner
                         Text(
                           'now',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
+                            color: Colors.white.withValues(alpha: 0.5),
                             fontSize: 12,
                           ),
                         ),
@@ -178,16 +185,26 @@ class _InAppNotificationBannerManagerState extends State<InAppNotificationBanner
 
   IconData _getIconForType(String type) {
     switch (type) {
-      case 'chat': return Icons.chat_bubble_outline;
-      case 'job': return Icons.work_outline;
-      case 'job_application': return Icons.assignment_ind_outlined;
-      case 'business_application': return Icons.person_add_alt;
-      case 'review': return Icons.star_outline;
-      case 'event': return Icons.event;
-      case 'event_participation': return Icons.how_to_reg;
-      case 'recommendation': return Icons.recommend_outlined;
-      case 'shop': return Icons.storefront_outlined;
-      default: return Icons.notifications_none;
+      case 'chat':
+        return Icons.chat_bubble_outline;
+      case 'job':
+        return Icons.work_outline;
+      case 'job_application':
+        return Icons.assignment_ind_outlined;
+      case 'business_application':
+        return Icons.person_add_alt;
+      case 'review':
+        return Icons.star_outline;
+      case 'event':
+        return Icons.event;
+      case 'event_participation':
+        return Icons.how_to_reg;
+      case 'recommendation':
+        return Icons.recommend_outlined;
+      case 'shop':
+        return Icons.storefront_outlined;
+      default:
+        return Icons.notifications_none;
     }
   }
 }

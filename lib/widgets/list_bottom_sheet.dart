@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/features/cafe/cafe_details_screen.dart';
@@ -11,7 +9,8 @@ import 'dart:ui'; // For BackdropFilter
 
 class SyncResult {
   final bool success;
-  final List<Map<String, String>> missingLogos; // List of {id: shopId, name: shopName}
+  final List<Map<String, String>>
+      missingLogos; // List of {id: shopId, name: shopName}
   SyncResult({required this.success, this.missingLogos = const []});
 }
 
@@ -44,7 +43,8 @@ class ListBottomSheet extends StatefulWidget {
     return s;
   }
 
-  static Future<SyncResult> syncLogos(dynamic userId, dynamic listId, {bool deleteIfEmpty = false}) async {
+  static Future<SyncResult> syncLogos(dynamic userId, dynamic listId,
+      {bool deleteIfEmpty = false}) async {
     final List<Map<String, String>> missingLogos = [];
     try {
       final String uId = _extractId(userId);
@@ -56,10 +56,15 @@ class ListBottomSheet extends StatefulWidget {
       }
 
       // Check if original list exists
-      final listRef = FirebaseFirestore.instance.collection('users').doc(uId).collection('lists').doc(lId);
+      final listRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uId)
+          .collection('lists')
+          .doc(lId);
       final listSnap = await listRef.get();
       if (!listSnap.exists) {
-        debugPrint('Sync Error: Original list does not exist at users/$uId/lists/$lId');
+        debugPrint(
+            'Sync Error: Original list does not exist at users/$uId/lists/$lId');
         return SyncResult(success: false);
       }
 
@@ -79,7 +84,7 @@ class ListBottomSheet extends StatefulWidget {
             .where('tags', arrayContainsAny: tags)
             .limit(20) // Don't fetch everything, just enough for count/logos
             .get();
-        
+
         shopCount = shopsSnap.docs.length;
         for (var doc in shopsSnap.docs) {
           final logo = doc.data()['logoUrl'] as String?;
@@ -95,7 +100,7 @@ class ListBottomSheet extends StatefulWidget {
         for (var doc in itemsSnap.docs) {
           final rawShopId = doc.data()['shopId'];
           final String shopId = _extractId(rawShopId);
-          
+
           if (shopId.isNotEmpty) {
             final shopDoc = await FirebaseFirestore.instance
                 .collection('shops')
@@ -121,8 +126,9 @@ class ListBottomSheet extends StatefulWidget {
           .get();
 
       if (sharedDocs.docs.isEmpty) {
-        debugPrint('Sync Note: No public sharing found for user $uId, list $lId');
-        return SyncResult(success: true, missingLogos: missingLogos); 
+        debugPrint(
+            'Sync Note: No public sharing found for user $uId, list $lId');
+        return SyncResult(success: true, missingLogos: missingLogos);
       }
 
       for (var doc in sharedDocs.docs) {
@@ -160,7 +166,7 @@ class ListBottomSheet extends StatefulWidget {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      useRootNavigator: true, 
+      useRootNavigator: true,
       showDragHandle: true,
       enableDrag: true,
       isDismissible: true,
@@ -190,7 +196,7 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    // We wrap in a Scaffold solely for the Snackbar support and structure, 
+    // We wrap in a Scaffold solely for the Snackbar support and structure,
     // but the parent is a ModalBottomSheet, so we constrain height.
     return Container(
       height: MediaQuery.of(context).size.height * 0.92, // Almost full screen
@@ -205,18 +211,19 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         floatingActionButton: (widget.listId != null && widget.userId != null)
-         ? FloatingActionButton(
-            backgroundColor: primary,
-            child: const Icon(Icons.add, color: Colors.white),
-            onPressed: () => _showAddCafeDialog(context),
-          )
-         : null,
+            ? FloatingActionButton(
+                backgroundColor: primary,
+                child: const Icon(Icons.add, color: Colors.white),
+                onPressed: () => _showAddCafeDialog(context),
+              )
+            : null,
         body: CustomScrollView(
           slivers: [
-             _buildSliverAppBar(context),
-             _buildActionButtons(context),
-             _buildListContent(context),
-             const SliverToBoxAdapter(child: SizedBox(height: 100)), // Bottom padding
+            _buildSliverAppBar(context),
+            _buildActionButtons(context),
+            _buildListContent(context),
+            const SliverToBoxAdapter(
+                child: SizedBox(height: 100)), // Bottom padding
           ],
         ),
       ),
@@ -224,456 +231,492 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
   }
 
   Widget _buildSliverAppBar(BuildContext context) {
-      return SliverAppBar(
-          expandedHeight: 280,
-          pinned: true,
-          backgroundColor: Colors.black,
-          automaticallyImplyLeading: false, 
-          leading: IconButton(
-            icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 32),
-            onPressed: () => Navigator.of(context).pop(),
+    return SliverAppBar(
+      expandedHeight: 280,
+      pinned: true,
+      backgroundColor: Colors.black,
+      automaticallyImplyLeading: false,
+      leading: IconButton(
+        icon: const Icon(Icons.keyboard_arrow_down,
+            color: Colors.white, size: 32),
+        onPressed: () => Navigator.of(context).pop(),
+      ),
+      actions: [
+        if (widget.listId != null && widget.userId != null)
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.white70),
+            onPressed: () => _showDeleteListConfirmation(context),
           ),
-          actions: [
-             if (widget.listId != null && widget.userId != null)
-                IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.white70),
-                    onPressed: () => _showDeleteListConfirmation(context),
+        const SizedBox(width: 8),
+      ],
+      flexibleSpace: FlexibleSpaceBar(
+        background: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Dynamic Header Image Background (Blurred)
+            if (_headerImageUrl != null)
+              Image.network(
+                _headerImageUrl!,
+                fit: BoxFit.cover,
+                height: double.infinity,
+                width: double.infinity,
+                errorBuilder: (_, __, ___) =>
+                    Container(color: primary.withValues(alpha: 0.3)),
+              )
+            else
+              Container(
+                color: primary.withValues(alpha: 0.2),
+                child: Center(
+                  child: Opacity(
+                    opacity: 0.1,
+                    child: Image.asset('assets/images/logo.png'),
+                  ),
                 ),
-             const SizedBox(width: 8),
-          ],
-          flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                fit: StackFit.expand,
+              ),
+
+            // Blur
+            BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Container(color: Colors.black.withValues(alpha: 0.5)),
+            ),
+
+            // Gradient Overlay
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.8),
+                    Colors.black,
+                  ],
+                  stops: const [0.0, 0.7, 1.0],
+                ),
+              ),
+            ),
+
+            // Content
+            Positioned(
+              bottom: 20,
+              left: 20,
+              right: 20,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                    // Dynamic Header Image Background (Blurred)
-                     if (_headerImageUrl != null)
-                        Image.network(
-                            _headerImageUrl!, 
-                            fit: BoxFit.cover,
-                            height: double.infinity,
-                            width: double.infinity,
-                            errorBuilder: (_,__,___) => Container(color: primary.withOpacity(0.3)),
-                        )
-                     else
-                        Container(
-                            color: primary.withOpacity(0.2),
-                            child: Center(
-                                child: Opacity(
-                                    opacity: 0.1,
-                                    child: Image.asset('assets/images/logo.png'),
-                                ),
-                            ),
+                  // Placeholder for "Playlist" label or similar
+                  TextWidget(
+                    text: widget.filterTags != null
+                        ? 'FILTER COLLECTION'
+                        : 'COLLECTION',
+                    fontSize: 12,
+                    color: Colors.white70,
+                    // isBold: true,
+                    // letterSpacing: 1.5,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _currentTitle ?? widget.title,
+                          style: const TextStyle(
+                            fontSize: 32, // Big title
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            fontFamily: 'Baloo2',
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                    
-                    // Blur
-                    BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(color: Colors.black.withOpacity(0.5)),
-                    ),
-
-                    // Gradient Overlay
-                    Container(
-                        decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                    Colors.transparent,
-                                    Colors.black.withOpacity(0.8),
-                                    Colors.black,
-                                ],
-                                stops: const [0.0, 0.7, 1.0],
-                            ),
+                      ),
+                      if (widget.userId != null &&
+                          widget.userId ==
+                              FirebaseAuth.instance.currentUser?.uid)
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined,
+                              color: Colors.white70, size: 24),
+                          onPressed: () => _showEditTitleDialog(context),
                         ),
-                    ),
-
-                    // Content
-                    Positioned(
-                        bottom: 20,
-                        left: 20,
-                        right: 20,
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                                // Placeholder for "Playlist" label or similar
-                                TextWidget(
-                                    text: widget.filterTags != null ? 'FILTER COLLECTION' : 'COLLECTION',
-                                    fontSize: 12,
-                                    color: Colors.white70,
-                                    // isBold: true,
-                                    // letterSpacing: 1.5,
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
-                                        Expanded(
-                                            child: Text(
-                                                _currentTitle ?? widget.title,
-                                                style: const TextStyle(
-                                                    fontSize: 32, // Big title
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.white,
-                                                    fontFamily: 'Baloo2',
-                                                ),
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                            ),
-                                        ),
-                                        if (widget.userId != null && widget.userId == FirebaseAuth.instance.currentUser?.uid)
-                                           IconButton(
-                                               icon: const Icon(Icons.edit_outlined, color: Colors.white70, size: 24),
-                                               onPressed: () => _showEditTitleDialog(context),
-                                           ),
-                                    ],
-                                ),
-                                const SizedBox(height: 8),
-                                // Metadata row would be nice here (e.g. "by User • 5 cafes")
-                                if (widget.userId != null && widget.userId == FirebaseAuth.instance.currentUser?.uid)
-                                   Row(
-                                       children: [
-                                            const CircleAvatar(
-                                                radius: 10,
-                                                backgroundImage: AssetImage('assets/images/logo.png'), 
-                                                // Ideally user avatar
-                                            ),
-                                            const SizedBox(width: 8),
-                                            TextWidget(
-                                                text: 'You',
-                                                fontSize: 14,
-                                                color: Colors.white,
-                                                isBold: true,
-                                            ),
-                                       ],
-                                   ),
-                            ],
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Metadata row would be nice here (e.g. "by User • 5 cafes")
+                  if (widget.userId != null &&
+                      widget.userId == FirebaseAuth.instance.currentUser?.uid)
+                    Row(
+                      children: [
+                        const CircleAvatar(
+                          radius: 10,
+                          backgroundImage: AssetImage('assets/images/logo.png'),
+                          // Ideally user avatar
                         ),
+                        const SizedBox(width: 8),
+                        TextWidget(
+                          text: 'You',
+                          fontSize: 14,
+                          color: Colors.white,
+                          isBold: true,
+                        ),
+                      ],
                     ),
                 ],
               ),
-          ),
-      );
+            ),
+          ],
+        ),
+      ),
+    );
   }
-  
+
   Widget _buildActionButtons(BuildContext context) {
-      if (widget.listId == null || widget.userId == null || widget.userId != FirebaseAuth.instance.currentUser?.uid) {
-           return const SliverToBoxAdapter(child: SizedBox(height: 16));
-      }
-      return SliverToBoxAdapter(
-          child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Row(
-                  children: [
-                      // Privacy Toggle
-                      StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                            stream: FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(widget.userId)
-                                .collection('lists')
-                                .doc(widget.listId)
-                                .snapshots(),
-                            builder: (context, snapshot) {
-                                final data = snapshot.data?.data();
-                                final isPrivate = data?['isPrivate'] ?? false;
-                                return TextButton.icon(
-                                    onPressed: () => _togglePrivacy(context, isPrivate),
-                                    icon: Icon(
-                                        isPrivate ? Icons.lock : Icons.public,
-                                        color: isPrivate ? Colors.grey : primary,
-                                        size: 20,
-                                    ),
-                                    label: TextWidget(
-                                        text: isPrivate ? 'Private' : 'Public',
-                                        fontSize: 14,
-                                        color: isPrivate ? Colors.grey : primary,
-                                        isBold: true,
-                                    ),
-                                    style: TextButton.styleFrom(
-                                        backgroundColor: Colors.white.withOpacity(0.05),
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                    ),
-                                );
-                            },
-                      ),
-                      const Spacer(),
-                      // Share Button logic moved or kept? 
-                      // The previous logic for share was "Check and Share".
-                      // We can add a simple share button icon here.
-                      IconButton(
-                           icon: const Icon(Icons.ios_share, color: Colors.white70),
-                           onPressed: () => _checkAndShareCollection(context),
-                      ),
-                  ],
-              ),
-          ),
-      );
+    if (widget.listId == null ||
+        widget.userId == null ||
+        widget.userId != FirebaseAuth.instance.currentUser?.uid) {
+      return const SliverToBoxAdapter(child: SizedBox(height: 16));
+    }
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Row(
+          children: [
+            // Privacy Toggle
+            StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(widget.userId)
+                  .collection('lists')
+                  .doc(widget.listId)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                final data = snapshot.data?.data();
+                final isPrivate = data?['isPrivate'] ?? false;
+                return TextButton.icon(
+                  onPressed: () => _togglePrivacy(context, isPrivate),
+                  icon: Icon(
+                    isPrivate ? Icons.lock : Icons.public,
+                    color: isPrivate ? Colors.grey : primary,
+                    size: 20,
+                  ),
+                  label: TextWidget(
+                    text: isPrivate ? 'Private' : 'Public',
+                    fontSize: 14,
+                    color: isPrivate ? Colors.grey : primary,
+                    isBold: true,
+                  ),
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.white.withValues(alpha: 0.05),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20)),
+                  ),
+                );
+              },
+            ),
+            const Spacer(),
+            // Share Button logic moved or kept?
+            // The previous logic for share was "Check and Share".
+            // We can add a simple share button icon here.
+            IconButton(
+              icon: const Icon(Icons.ios_share, color: Colors.white70),
+              onPressed: () => _checkAndShareCollection(context),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildListContent(BuildContext context) {
-      // Logic from old build() to determine source
-      
-      // Since we need to update _headerImageUrl, we should do it when we get data.
-      // But build() cannot set state.
-      // We can use a post-frame callback or just direct assignment if we are careful (but redundant renders).
-      // Or just let the first item render inform the header. 
-      // Actually, standard StreamBuilder is fine. We will extract the image URL from the first item in the list.
-      
-      if (widget.shopsList != null) {
-          final shops = widget.shopsList!.where((s) => !_removedShopIds.contains(s['id'])).toList();
-           if (shops.isNotEmpty && _headerImageUrl == null) {
-               final firstLogo = shops.first['logoUrl'] as String?;
-               if (firstLogo != null && firstLogo.isNotEmpty) {
-                   // Scheduling update to avoid build error
-                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                       if (mounted && _headerImageUrl != firstLogo) setState(() => _headerImageUrl = firstLogo);
-                   });
-               }
-           }
-           
-           return SliverList(
-               delegate: SliverChildBuilderDelegate(
-                   (context, index) {
-                       final data = shops[index];
-                       return _buildSpotifyCafeRow(
-                            index: index, 
-                            data: data, 
-                            shopId: data['id'],
-                            name: (data['name'] as String?) ?? 'Cafe',
-                            logo: (data['logoUrl'] as String?) ?? '',
-                       );
-                   },
-                   childCount: shops.length,
-               ),
-           );
-      }
-      
-      if (widget.shopsStream != null) {
-          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: widget.shopsStream,
-              builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-                  final docs = snapshot.data!.docs;
-                  _updateHeaderImage(docs.map((d) => d.data()).toList());
-                  
-                  return SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                           (context, index) {
-                               final shop = docs[index];
-                               final data = shop.data();
-                               return _buildSpotifyCafeRow(
-                                    index: index,
-                                    data: data,
-                                    shopId: shop.id,
-                                    name: (data['name'] as String?) ?? 'Cafe',
-                                    logo: (data['logoUrl'] as String?) ?? '',
-                               );
-                           },
-                           childCount: docs.length,
-                      ),
-                  );
-              }
-          );
-      }
-      
-      if (widget.itemsStream != null) {
-          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: widget.itemsStream,
-              builder: (context, snapshot) {
-                 if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-                 final items = snapshot.data!.docs.where((i) {
-                     final sid = (i.data()['shopId'] as String?) ?? i.id;
-                     return !_removedShopIds.contains(sid);
-                 }).toList();
-                 
-                 return SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                             final item = items[index];
-                             final shopId = (item.data()['shopId'] as String?) ?? item.id;
-                             
-                             // Need to fetch shop details
-                             return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                                 stream: FirebaseFirestore.instance.collection('shops').doc(shopId).snapshots(),
-                                 builder: (context, shopSnap) {
-                                     final shopData = shopSnap.data?.data() ?? {};
-                                     final name = (shopData['name'] as String?) ?? 'Cafe';
-                                     final logo = (shopData['logoUrl'] as String?) ?? '';
-                                     
-                                     // Attempt to set header image from first item
-                                     if (index == 0 && logo.isNotEmpty && _headerImageUrl == null) {
-                                         WidgetsBinding.instance.addPostFrameCallback((_) {
-                                            if (mounted) setState(() => _headerImageUrl = logo);
-                                         });
-                                     }
+    // Logic from old build() to determine source
 
-                                     return _buildSpotifyCafeRow(
-                                        index: index,
-                                        data: shopData,
-                                        shopId: shopId,
-                                        name: name,
-                                        logo: logo,
-                                     );
-                                 },
-                             );
-                        },
-                        childCount: items.length,
-                    ),
-                 );
-              },
-          );
-      }
+    // Since we need to update _headerImageUrl, we should do it when we get data.
+    // But build() cannot set state.
+    // We can use a post-frame callback or just direct assignment if we are careful (but redundant renders).
+    // Or just let the first item render inform the header.
+    // Actually, standard StreamBuilder is fine. We will extract the image URL from the first item in the list.
 
-      // shopIdsStream
-        if (widget.shopIdsStream != null) {
-          return StreamBuilder<List<String>>(
-              stream: widget.shopIdsStream,
-              builder: (context, snapshot) {
-                   if (!snapshot.hasData) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-                   final ids = snapshot.data!.where((id) => !_removedShopIds.contains(id)).toList();
-                   
-                    return SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                             final shopId = ids[index];
-                             return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                                 stream: FirebaseFirestore.instance.collection('shops').doc(shopId).snapshots(),
-                                 builder: (context, shopSnap) {
-                                     final shopData = shopSnap.data?.data() ?? {};
-                                     final name = (shopData['name'] as String?) ?? 'Cafe';
-                                     final logo = (shopData['logoUrl'] as String?) ?? '';
-                                     if (index == 0 && logo.isNotEmpty && _headerImageUrl == null) {
-                                         WidgetsBinding.instance.addPostFrameCallback((_) {
-                                            if (mounted) setState(() => _headerImageUrl = logo);
-                                         });
-                                     }
-                                     return _buildSpotifyCafeRow(
-                                        index: index,
-                                        data: shopData,
-                                        shopId: shopId,
-                                        name: name,
-                                        logo: logo,
-                                     );
-                                 },
-                             );
-                        },
-                        childCount: ids.length,
-                    ),
-                 );
-              }
-          );
+    if (widget.shopsList != null) {
+      final shops = widget.shopsList!
+          .where((s) => !_removedShopIds.contains(s['id']))
+          .toList();
+      if (shops.isNotEmpty && _headerImageUrl == null) {
+        final firstLogo = shops.first['logoUrl'] as String?;
+        if (firstLogo != null && firstLogo.isNotEmpty) {
+          // Scheduling update to avoid build error
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _headerImageUrl != firstLogo)
+              setState(() => _headerImageUrl = firstLogo);
+          });
         }
+      }
 
-      return const SliverToBoxAdapter(child: SizedBox());
+      return SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final data = shops[index];
+            return _buildSpotifyCafeRow(
+              index: index,
+              data: data,
+              shopId: data['id'],
+              name: (data['name'] as String?) ?? 'Cafe',
+              logo: (data['logoUrl'] as String?) ?? '',
+            );
+          },
+          childCount: shops.length,
+        ),
+      );
+    }
+
+    if (widget.shopsStream != null) {
+      return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: widget.shopsStream,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData)
+              return const SliverToBoxAdapter(
+                  child: Center(child: CircularProgressIndicator()));
+            final docs = snapshot.data!.docs;
+            _updateHeaderImage(docs.map((d) => d.data()).toList());
+
+            return SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final shop = docs[index];
+                  final data = shop.data();
+                  return _buildSpotifyCafeRow(
+                    index: index,
+                    data: data,
+                    shopId: shop.id,
+                    name: (data['name'] as String?) ?? 'Cafe',
+                    logo: (data['logoUrl'] as String?) ?? '',
+                  );
+                },
+                childCount: docs.length,
+              ),
+            );
+          });
+    }
+
+    if (widget.itemsStream != null) {
+      return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: widget.itemsStream,
+        builder: (context, snapshot) {
+          if (!snapshot.hasData)
+            return const SliverToBoxAdapter(
+                child: Center(child: CircularProgressIndicator()));
+          final items = snapshot.data!.docs.where((i) {
+            final sid = (i.data()['shopId'] as String?) ?? i.id;
+            return !_removedShopIds.contains(sid);
+          }).toList();
+
+          return SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final item = items[index];
+                final shopId = (item.data()['shopId'] as String?) ?? item.id;
+
+                // Need to fetch shop details
+                return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance
+                      .collection('shops')
+                      .doc(shopId)
+                      .snapshots(),
+                  builder: (context, shopSnap) {
+                    final shopData = shopSnap.data?.data() ?? {};
+                    final name = (shopData['name'] as String?) ?? 'Cafe';
+                    final logo = (shopData['logoUrl'] as String?) ?? '';
+
+                    // Attempt to set header image from first item
+                    if (index == 0 &&
+                        logo.isNotEmpty &&
+                        _headerImageUrl == null) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) setState(() => _headerImageUrl = logo);
+                      });
+                    }
+
+                    return _buildSpotifyCafeRow(
+                      index: index,
+                      data: shopData,
+                      shopId: shopId,
+                      name: name,
+                      logo: logo,
+                    );
+                  },
+                );
+              },
+              childCount: items.length,
+            ),
+          );
+        },
+      );
+    }
+
+    // shopIdsStream
+    if (widget.shopIdsStream != null) {
+      return StreamBuilder<List<String>>(
+          stream: widget.shopIdsStream,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData)
+              return const SliverToBoxAdapter(
+                  child: Center(child: CircularProgressIndicator()));
+            final ids = snapshot.data!
+                .where((id) => !_removedShopIds.contains(id))
+                .toList();
+
+            return SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final shopId = ids[index];
+                  return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance
+                        .collection('shops')
+                        .doc(shopId)
+                        .snapshots(),
+                    builder: (context, shopSnap) {
+                      final shopData = shopSnap.data?.data() ?? {};
+                      final name = (shopData['name'] as String?) ?? 'Cafe';
+                      final logo = (shopData['logoUrl'] as String?) ?? '';
+                      if (index == 0 &&
+                          logo.isNotEmpty &&
+                          _headerImageUrl == null) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) setState(() => _headerImageUrl = logo);
+                        });
+                      }
+                      return _buildSpotifyCafeRow(
+                        index: index,
+                        data: shopData,
+                        shopId: shopId,
+                        name: name,
+                        logo: logo,
+                      );
+                    },
+                  );
+                },
+                childCount: ids.length,
+              ),
+            );
+          });
+    }
+
+    return const SliverToBoxAdapter(child: SizedBox());
   }
 
   void _updateHeaderImage(List<Map<String, dynamic>> items) {
-       if (items.isNotEmpty && _headerImageUrl == null) {
-           final firstLogo = items.first['logoUrl'] as String?;
-           if (firstLogo != null && firstLogo.isNotEmpty) {
-               WidgetsBinding.instance.addPostFrameCallback((_) {
-                   if (mounted && _headerImageUrl != firstLogo) setState(() => _headerImageUrl = firstLogo);
-               });
-           }
-       }
+    if (items.isNotEmpty && _headerImageUrl == null) {
+      final firstLogo = items.first['logoUrl'] as String?;
+      if (firstLogo != null && firstLogo.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _headerImageUrl != firstLogo)
+            setState(() => _headerImageUrl = firstLogo);
+        });
+      }
+    }
   }
 
   Widget _buildSpotifyCafeRow({
-      required int index,
-      required Map<String, dynamic> data,
-      required String shopId,
-      required String name,
-      required String logo,
+    required int index,
+    required Map<String, dynamic> data,
+    required String shopId,
+    required String name,
+    required String logo,
   }) {
-      final isOwner = widget.userId != null && widget.userId == FirebaseAuth.instance.currentUser?.uid;
-      
-      return ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          leading: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                  TextWidget(
-                      text: '${index + 1}',
-                      fontSize: 14,
-                      color: Colors.grey,
-                      isBold: false, // Index number
-                  ),
-                  const SizedBox(width: 16),
-                  Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(4),
-                          color: Colors.grey[800],
-                      ),
-                      child: logo.isNotEmpty 
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: CachedNetworkImage(
-                                  imageUrl: logo, 
-                                  fit: BoxFit.cover,
-                                  errorWidget: (_,__,___) => const Icon(Icons.error),
-                              ),
-                          )
-                          : const Icon(Icons.local_cafe, color: Colors.white54),
-                  ),
-              ],
+    final isOwner = widget.userId != null &&
+        widget.userId == FirebaseAuth.instance.currentUser?.uid;
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextWidget(
+            text: '${index + 1}',
+            fontSize: 14,
+            color: Colors.grey,
+            isBold: false, // Index number
           ),
-          title: TextWidget(
-              text: name,
-              fontSize: 16,
-              color: Colors.white,
-              isBold: true,
-              maxLines: 1,
+          const SizedBox(width: 16),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              color: Colors.grey[800],
+            ),
+            child: logo.isNotEmpty
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: CachedNetworkImage(
+                      imageUrl: logo,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => const Icon(Icons.error),
+                    ),
+                  )
+                : const Icon(Icons.local_cafe, color: Colors.white54),
           ),
-          // subtitles like "Cafe • Distance" could go here if we had data
-          trailing: isOwner 
-             ? IconButton(
-                 icon: const Icon(Icons.more_vert, color: Colors.white54),
-                 onPressed: () => _showItemOptions(context, shopId, name),
-             )
-             : const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white54),
-          onTap: () {
-               Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => CafeDetailsScreen(
-                    shopId: shopId,
-                    shop: {'name': name, 'logoUrl': logo},
-                  ),
-                ),
-              );
-          },
-      );
+        ],
+      ),
+      title: TextWidget(
+        text: name,
+        fontSize: 16,
+        color: Colors.white,
+        isBold: true,
+        maxLines: 1,
+      ),
+      // subtitles like "Cafe • Distance" could go here if we had data
+      trailing: isOwner
+          ? IconButton(
+              icon: const Icon(Icons.more_vert, color: Colors.white54),
+              onPressed: () => _showItemOptions(context, shopId, name),
+            )
+          : const Icon(Icons.arrow_forward_ios,
+              size: 14, color: Colors.white54),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CafeDetailsScreen(
+              shopId: shopId,
+              shop: {'name': name, 'logoUrl': logo},
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _showItemOptions(BuildContext context, String shopId, String name) {
-      showModalBottomSheet(
-          context: context,
-          backgroundColor: Colors.grey[900],
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-          builder: (context) => SafeArea(
-              child: Wrap(
-                  children: [
-                      ListTile(
-                          leading: const Icon(Icons.delete, color: Colors.redAccent),
-                          title: const Text('Remove from collection', style: TextStyle(color: Colors.white)),
-                          onTap: () {
-                              Navigator.pop(context); // Close options
-                              _showRemoveConfirmation(
-                                  context: context,
-                                  shopId: shopId,
-                                  listId: widget.listId!,
-                                  userId: widget.userId!,
-                                  cafeName: name,
-                              );
-                          },
-                      ),
-                  ],
-              ),
-          ),
-      );
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.redAccent),
+              title: const Text('Remove from collection',
+                  style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context); // Close options
+                _showRemoveConfirmation(
+                  context: context,
+                  shopId: shopId,
+                  listId: widget.listId!,
+                  userId: widget.userId!,
+                  cafeName: name,
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // --- Logic Methods (Copied & Adapted) ---
@@ -686,7 +729,7 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
     final confirmMessage = isNowPublic
         ? 'Making this list Public will share it with the community in the Explore tab. Continue?'
         : 'Making this list Private will remove it from the Community tab. Are you sure?';
-    
+
     final confirmTitle = isNowPublic ? 'Unlock List?' : 'Make Private?';
     final confirmButton = isNowPublic ? 'Make Public' : 'Make Private';
     final confirmIcon = isNowPublic ? Icons.public : Icons.lock;
@@ -698,9 +741,14 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            Icon(confirmIcon, color: isNowPublic ? primary : Colors.white70, size: 24),
+            Icon(confirmIcon,
+                color: isNowPublic ? primary : Colors.white70, size: 24),
             const SizedBox(width: 8),
-            TextWidget(text: confirmTitle, fontSize: 18, color: Colors.white, isBold: true),
+            TextWidget(
+                text: confirmTitle,
+                fontSize: 18,
+                color: Colors.white,
+                isBold: true),
           ],
         ),
         content: TextWidget(
@@ -711,11 +759,16 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: TextWidget(text: 'Cancel', fontSize: 14, color: Colors.grey[400]),
+            child: TextWidget(
+                text: 'Cancel', fontSize: 14, color: Colors.grey[400]),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: TextWidget(text: confirmButton, fontSize: 14, color: isNowPublic ? primary : Colors.redAccent, isBold: true),
+            child: TextWidget(
+                text: confirmButton,
+                fontSize: 14,
+                color: isNowPublic ? primary : Colors.redAccent,
+                isBold: true),
           ),
         ],
       ),
@@ -748,13 +801,17 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
         // Fetch current user name for attribution
         String sharedByName = 'User';
         try {
-          final userDoc = await FirebaseFirestore.instance.collection('users').doc(widget.userId).get();
+          final userDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(widget.userId)
+              .get();
           if (userDoc.exists) {
             final name = (userDoc.data()?['name'] as String?)?.trim();
             if (name != null && name.isNotEmpty) {
               sharedByName = name;
             } else {
-              sharedByName = FirebaseAuth.instance.currentUser?.displayName ?? 'User';
+              sharedByName =
+                  FirebaseAuth.instance.currentUser?.displayName ?? 'User';
             }
           }
         } catch (e) {
@@ -780,7 +837,9 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
       if (context.mounted) {
         _showStatusDialog(
           context,
-          isNowPublic ? 'Collection is now Public' : 'Collection is now Private',
+          isNowPublic
+              ? 'Collection is now Public'
+              : 'Collection is now Private',
           isSuccess: true,
           icon: isNowPublic ? Icons.public : Icons.lock,
         );
@@ -792,7 +851,8 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
     }
   }
 
-  void _showStatusDialog(BuildContext context, String message, {required bool isSuccess, IconData? icon, VoidCallback? onConfirm}) {
+  void _showStatusDialog(BuildContext context, String message,
+      {required bool isSuccess, IconData? icon, VoidCallback? onConfirm}) {
     showDialog(
       context: context,
       builder: (dialogContext) => Dialog(
@@ -802,10 +862,10 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
           decoration: BoxDecoration(
             color: Colors.grey[900],
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.5),
+                color: Colors.black.withValues(alpha: 0.5),
                 blurRadius: 20,
                 spreadRadius: 5,
               ),
@@ -817,11 +877,16 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: isSuccess ? primary.withOpacity(0.1) : Colors.redAccent.withOpacity(0.1),
+                  color: isSuccess
+                      ? primary.withValues(alpha: 0.1)
+                      : Colors.redAccent.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  icon ?? (isSuccess ? Icons.check_circle_outline : Icons.error_outline),
+                  icon ??
+                      (isSuccess
+                          ? Icons.check_circle_outline
+                          : Icons.error_outline),
                   color: isSuccess ? primary : Colors.redAccent,
                   size: 40,
                 ),
@@ -850,10 +915,15 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: isSuccess ? primary : Colors.grey[800],
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  child: const TextWidget(text: 'OK', fontSize: 16, color: Colors.white, isBold: true),
+                  child: const TextWidget(
+                      text: 'OK',
+                      fontSize: 16,
+                      color: Colors.white,
+                      isBold: true),
                 ),
               ),
             ],
@@ -873,7 +943,7 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
           decoration: BoxDecoration(
             color: Colors.grey[900],
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -881,16 +951,22 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.redAccent.withOpacity(0.1),
+                  color: Colors.redAccent.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.delete_forever, color: Colors.redAccent, size: 40),
+                child: const Icon(Icons.delete_forever,
+                    color: Colors.redAccent, size: 40),
               ),
               const SizedBox(height: 20),
-              const TextWidget(text: 'Delete Collection?', fontSize: 20, color: Colors.white, isBold: true),
+              const TextWidget(
+                  text: 'Delete Collection?',
+                  fontSize: 20,
+                  color: Colors.white,
+                  isBold: true),
               const SizedBox(height: 8),
               TextWidget(
-                text: 'Are you sure you want to delete "${_currentTitle ?? widget.title}"? This action cannot be undone.',
+                text:
+                    'Are you sure you want to delete "${_currentTitle ?? widget.title}"? This action cannot be undone.',
                 fontSize: 14,
                 color: Colors.white70,
                 align: TextAlign.center,
@@ -903,24 +979,35 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
                       onPressed: () => Navigator.pop(dialogContext),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: TextWidget(text: 'Cancel', fontSize: 16, color: Colors.grey[400], isBold: true),
+                      child: TextWidget(
+                          text: 'Cancel',
+                          fontSize: 16,
+                          color: Colors.grey[400],
+                          isBold: true),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
-                        Navigator.pop(dialogContext); // Close confirmation dialog
+                        Navigator.pop(
+                            dialogContext); // Close confirmation dialog
                         _removeList(context); // Pass the sheet context
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.redAccent,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: const TextWidget(text: 'Delete', fontSize: 16, color: Colors.white, isBold: true),
+                      child: const TextWidget(
+                          text: 'Delete',
+                          fontSize: 16,
+                          color: Colors.white,
+                          isBold: true),
                     ),
                   ),
                 ],
@@ -940,27 +1027,28 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
           .collection('lists')
           .doc(widget.listId)
           .delete();
-      
+
       // Also delete shared
-      final shared = await FirebaseFirestore.instance.collection('sharedCollections')
+      final shared = await FirebaseFirestore.instance
+          .collection('sharedCollections')
           .where('listId', isEqualTo: widget.listId)
           .where('userId', isEqualTo: widget.userId)
           .get();
-      for(var doc in shared.docs) {
-          await doc.reference.delete();
+      for (var doc in shared.docs) {
+        await doc.reference.delete();
       }
 
       if (context.mounted) {
         // Show success feedback FIRST, then pop on OK
         _showStatusDialog(
-          context, 
-          'Collection deleted successfully', 
-          isSuccess: true, 
+          context,
+          'Collection deleted successfully',
+          isSuccess: true,
           icon: Icons.delete_outline,
           onConfirm: () {
-             if (context.mounted) {
-               Navigator.of(context).pop(); // Pop the BottomSheet
-             }
+            if (context.mounted) {
+              Navigator.of(context).pop(); // Pop the BottomSheet
+            }
           },
         );
       }
@@ -972,16 +1060,19 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
   }
 
   void _showAddCafeDialog(BuildContext context) {
-      showDialog(
-          context: context,
-          builder: (context) => AddCafeToListDialog(
-              listId: widget.listId!,
-              userId: widget.userId!,
-              onCafeAdded: () {
-                   setState(() {}); // Refresh? Stream should handle it.
-              },
-          ),
-      );
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      builder: (context) => AddCafeBottomSheet(
+        listId: widget.listId!,
+        userId: widget.userId!,
+        onCafeAdded: () {
+          // ItemsStream will handle UI updates
+        },
+      ),
+    );
   }
 
   void _showEditTitleDialog(BuildContext context) {
@@ -995,13 +1086,17 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
           decoration: BoxDecoration(
             color: Colors.grey[900],
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const TextWidget(text: 'Rename Collection', fontSize: 20, color: Colors.white, isBold: true),
+              const TextWidget(
+                  text: 'Rename Collection',
+                  fontSize: 20,
+                  color: Colors.white,
+                  isBold: true),
               const SizedBox(height: 16),
               TextField(
                 controller: controller,
@@ -1012,7 +1107,9 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
                   hintStyle: const TextStyle(color: Colors.white54),
                   filled: true,
                   fillColor: Colors.grey[800],
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none),
                 ),
               ),
               const SizedBox(height: 24),
@@ -1021,7 +1118,8 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: TextWidget(text: 'Cancel', fontSize: 16, color: Colors.grey[400]),
+                    child: TextWidget(
+                        text: 'Cancel', fontSize: 16, color: Colors.grey[400]),
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(
@@ -1036,9 +1134,14 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: const TextWidget(text: 'Save', fontSize: 16, color: Colors.white, isBold: true),
+                    child: const TextWidget(
+                        text: 'Save',
+                        fontSize: 16,
+                        color: Colors.white,
+                        isBold: true),
                   ),
                 ],
               ),
@@ -1060,7 +1163,8 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
           .doc(widget.userId)
           .collection('lists')
           .doc(widget.listId)
-          .update({'name': newTitle, 'updatedAt': FieldValue.serverTimestamp()});
+          .update(
+              {'name': newTitle, 'updatedAt': FieldValue.serverTimestamp()});
 
       // 3. Update Shared (if exists)
       final sharedQuery = await FirebaseFirestore.instance
@@ -1068,17 +1172,19 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
           .where('listId', isEqualTo: widget.listId)
           .where('userId', isEqualTo: widget.userId)
           .get();
-      
+
       for (var doc in sharedQuery.docs) {
         await doc.reference.update({'title': newTitle});
       }
 
       if (mounted) {
-         _showStatusDialog(context, 'Title updated successfully', isSuccess: true, icon: Icons.edit_note);
+        _showStatusDialog(context, 'Title updated successfully',
+            isSuccess: true, icon: Icons.edit_note);
       }
     } catch (e) {
       if (mounted) {
-        _showStatusDialog(context, 'Failed to update title: $e', isSuccess: false);
+        _showStatusDialog(context, 'Failed to update title: $e',
+            isSuccess: false);
       }
     }
   }
@@ -1096,27 +1202,33 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
         return AlertDialog(
           backgroundColor: Colors.grey[800],
           title: TextWidget(
-              text: 'Remove Cafe', fontSize: 18, color: Colors.white, isBold: true),
+              text: 'Remove Cafe',
+              fontSize: 18,
+              color: Colors.white,
+              isBold: true),
           content: TextWidget(
               text: 'Remove "$cafeName" from this collection?',
-              fontSize: 16, color: Colors.white70),
+              fontSize: 16,
+              color: Colors.white70),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: TextWidget(text: 'Cancel', fontSize: 14, color: Colors.grey[400]),
+              child: TextWidget(
+                  text: 'Cancel', fontSize: 14, color: Colors.grey[400]),
             ),
             TextButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
                 _removeCafeFromList(
-                  context: context, 
+                  context: context,
                   shopId: shopId,
                   listId: listId,
                   userId: userId,
                   cafeName: cafeName,
                 );
               },
-              child: TextWidget(text: 'Remove', fontSize: 14, color: Colors.redAccent),
+              child: TextWidget(
+                  text: 'Remove', fontSize: 14, color: Colors.redAccent),
             ),
           ],
         );
@@ -1161,18 +1273,21 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
         );
       }
     } catch (e) {
-       if (context.mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to remove cafe'), backgroundColor: Colors.red),
+          const SnackBar(
+              content: Text('Failed to remove cafe'),
+              backgroundColor: Colors.red),
         );
       }
     }
   }
 
   void _checkAndShareCollection(BuildContext context) async {
-     if (widget.listId == null || widget.userId == null) return;
-     
-     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sharing coming soon')));
+    if (widget.listId == null || widget.userId == null) return;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Sharing coming soon')));
   }
 
   Future<List<String>> _getPreviewLogos() async {
@@ -1215,15 +1330,12 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
   }
 }
 
-// Keep AddCafeToListDialog as is from the original file (I need to copy it back or assume it's there)
-// Since I'm overwriting the file, I MUST include AddCafeToListDialog.
-
-class AddCafeToListDialog extends StatefulWidget {
+class AddCafeBottomSheet extends StatefulWidget {
   final String listId;
   final String userId;
   final VoidCallback onCafeAdded;
 
-  const AddCafeToListDialog({
+  const AddCafeBottomSheet({
     super.key,
     required this.listId,
     required this.userId,
@@ -1231,171 +1343,259 @@ class AddCafeToListDialog extends StatefulWidget {
   });
 
   @override
-  State<AddCafeToListDialog> createState() => _AddCafeToListDialogState();
+  State<AddCafeBottomSheet> createState() => _AddCafeBottomSheetState();
 }
 
-class _AddCafeToListDialogState extends State<AddCafeToListDialog> {
+class _AddCafeBottomSheetState extends State<AddCafeBottomSheet> {
   late TextEditingController _searchController;
+  final FocusNode _searchFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController();
+    // Auto focus the search field after bottom sheet animation completes
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        _searchFocus.requestFocus();
+      }
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        width: MediaQuery.of(context).size.width * 0.9,
-        height: 600,
-        decoration: BoxDecoration(
-          color: Colors.grey[900],
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                   const Text(
-                    'Add Cafe',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.85,
+      decoration: BoxDecoration(
+        color: Colors.grey[900], // Premium dark background
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          // Drag handle
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            // Search field
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: TextField(
-                controller: _searchController,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'Search cafes...',
-                  hintStyle: TextStyle(color: Colors.grey[500]),
-                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                  filled: true,
-                  fillColor: Colors.black26,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
+          ),
+
+          // Header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const TextWidget(
+                  text: 'Add to Collection',
+                  fontSize: 20,
+                  color: Colors.white,
+                  isBold: true,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white70),
+                  onPressed: () => Navigator.pop(context),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white.withValues(alpha: 0.05),
                   ),
                 ),
-                onChanged: (value) => setState(() {}),
-              ),
+              ],
             ),
-            // Cafes list
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream:
-                    FirebaseFirestore.instance.collection('shops').snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const Center(
-                      child: CircularProgressIndicator(),
-                    );
-                  }
+          ),
 
-                  final searchText = _searchController.text.toLowerCase();
-                  final cafes = snapshot.data!.docs.where((doc) {
-                    final name = (doc['name'] as String? ?? '').toLowerCase();
-                    return name.contains(searchText);
-                  }).toList();
+          // Search Field
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: TextField(
+              controller: _searchController,
+              focusNode: _searchFocus,
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+              decoration: InputDecoration(
+                hintText: 'Search for a cafe...',
+                hintStyle: TextStyle(color: Colors.grey[500]),
+                prefixIcon: Icon(Icons.search, color: Colors.grey[400]),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear,
+                            color: Colors.white54, size: 20),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {});
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: Colors.black26,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(
+                      color: primary.withValues(alpha: 0.5), width: 1),
+                ),
+              ),
+              onChanged: (value) => setState(() {}),
+            ),
+          ),
 
-                  if (cafes.isEmpty) {
-                    return Center(
-                      child: Text(
-                        'No cafes found',
-                        style: TextStyle(color: Colors.grey[400]),
-                      ),
-                    );
-                  }
+          const Divider(color: Colors.white10, height: 1),
 
-                  return ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: cafes.length,
-                    itemBuilder: (context, index) {
-                      final cafe = cafes[index];
-                      final cafeName = cafe['name'] as String? ?? 'Unknown';
-                      final cafeId = cafe.id;
+          // Cafe List
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream:
+                  FirebaseFirestore.instance.collection('shops').snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                      final cafeLogoUrl = cafe['logoUrl'] as String? ?? '';
+                final searchText = _searchController.text.toLowerCase();
+                final cafes = snapshot.data!.docs.where((doc) {
+                  final name = (doc['name'] as String? ?? '').toLowerCase();
+                  return name.contains(searchText);
+                }).toList();
 
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                            vertical: 8),
-                        leading: Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[800],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: cafeLogoUrl.isNotEmpty
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: CachedNetworkImage(
-                                    imageUrl: cafeLogoUrl,
-                                    fit: BoxFit.cover,
-                                    placeholder: (context, url) =>
-                                        Container(color: Colors.grey[800]),
-                                    errorWidget: (context, url, error) =>
-                                        const Icon(Icons.local_cafe,
-                                            color: Colors.grey),
-                                  ),
-                                )
-                              : const Icon(Icons.local_cafe,
-                                  color: Colors.grey),
+                if (cafes.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.search_off,
+                            size: 64,
+                            color: Colors.white.withValues(alpha: 0.2)),
+                        const SizedBox(height: 16),
+                        TextWidget(
+                          text: 'No cafes found',
+                          fontSize: 16,
+                          color: Colors.white54,
                         ),
-                        title: Text(
-                          cafeName,
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        trailing: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primary,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          ),
-                          onPressed: () => _addCafeToList(cafeId, cafeName),
-                          child: const Text(
-                            'Add',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
-                      );
-                    },
+                      ],
+                    ),
                   );
-                },
-              ),
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: cafes.length,
+                  separatorBuilder: (context, index) => const Divider(
+                      color: Colors.white10, height: 1, indent: 86),
+                  itemBuilder: (context, index) {
+                    final cafe = cafes[index];
+                    final cafeName = cafe['name'] as String? ?? 'Unknown';
+                    final cafeId = cafe.id;
+                    final cafeLogoUrl = cafe['logoUrl'] as String? ?? '';
+
+                    return StreamBuilder<DocumentSnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(widget.userId)
+                            .collection('lists')
+                            .doc(widget.listId)
+                            .collection('items')
+                            .doc(cafeId)
+                            .snapshots(),
+                        builder: (context, itemSnapshot) {
+                          final isAdded =
+                              itemSnapshot.hasData && itemSnapshot.data!.exists;
+
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 4),
+                            leading: Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: Colors.black26,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: cafeLogoUrl.isNotEmpty
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: CachedNetworkImage(
+                                        imageUrl: cafeLogoUrl,
+                                        fit: BoxFit.cover,
+                                        placeholder: (context, url) =>
+                                            Container(color: Colors.black26),
+                                        errorWidget: (context, url, error) =>
+                                            const Icon(Icons.local_cafe,
+                                                color: Colors.white30),
+                                      ),
+                                    )
+                                  : const Icon(Icons.local_cafe,
+                                      color: Colors.white30),
+                            ),
+                            title: TextWidget(
+                              text: cafeName,
+                              fontSize: 16,
+                              color: Colors.white,
+                              isBold: true,
+                            ),
+                            subtitle: TextWidget(
+                              text: 'Cafe',
+                              fontSize: 13,
+                              color: Colors.white54,
+                            ),
+                            trailing: isAdded
+                                ? Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.check,
+                                            color: Colors.white70, size: 16),
+                                        const SizedBox(width: 4),
+                                        TextWidget(
+                                          text: 'Added',
+                                          fontSize: 12,
+                                          color: Colors.white70,
+                                          isBold: true,
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : IconButton(
+                                    icon: const Icon(Icons.add_circle_outline),
+                                    color: primary,
+                                    iconSize: 28,
+                                    onPressed: () =>
+                                        _addCafeToList(cafeId, cafeName),
+                                  ),
+                          );
+                        });
+                  },
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Future<void> _addCafeToList(String cafeId, String cafeName) async {
     try {
-      // Add cafe to the list
       await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.userId)
@@ -1410,25 +1610,8 @@ class _AddCafeToListDialogState extends State<AddCafeToListDialog> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text('$cafeName added to collection'),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.green, // Keep green for success
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
         // Sync logos after adding
         await ListBottomSheet.syncLogos(widget.userId, widget.listId);
-
         widget.onCafeAdded();
       }
     } catch (e) {

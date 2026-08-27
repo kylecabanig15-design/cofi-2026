@@ -87,47 +87,54 @@ class _ResponseReviewBottomSheetState extends State<ResponseReviewBottomSheet> {
               (userData?['displayName'] as String?) ??
               (userData?['name'] as String?) ??
               'Owner';
-      final ownerAvatarUrl = (userData?['avatarUrl'] as String?);
+      // Writers store the profile photo under 'photoUrl' (see
+      // user_model.dart / google_sign_in_service.dart) — 'avatarUrl' was
+      // always empty.
+      final ownerAvatarUrl = (userData?['photoUrl'] as String?);
       final shopName = (userData?['shopName'] as String?);
 
       if (widget.isEdit && widget.responseId != null) {
-        // Edit existing response
-        final reviewDoc = await FirebaseFirestore.instance
+        // Edit existing response. Runs inside a transaction so a concurrent
+        // arrayUnion (a new reply being added) can't be clobbered by the
+        // read-modify-write of the whole responses array.
+        final reviewRef = FirebaseFirestore.instance
             .collection('shops')
             .doc(widget.shopId)
             .collection('reviews')
-            .doc(widget.reviewId)
-            .get();
+            .doc(widget.reviewId);
 
-        // Defensive extraction: legacy docs may hold non-map entries
-        final rawResponses = (reviewDoc.data()?['responses'] as List?) ?? const [];
-        final responses = rawResponses
-            .whereType<Map>()
-            .map((r) => Map<String, dynamic>.from(r))
-            .toList();
-        final index = responses.indexWhere((r) => r['id'] == widget.responseId);
+        await FirebaseFirestore.instance.runTransaction((tx) async {
+          final reviewDoc = await tx.get(reviewRef);
 
-        if (index == -1) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('Response not found. It may have been deleted.')),
-          );
-          return;
-        }
+          // Defensive extraction: legacy docs may hold non-map entries
+          final rawResponses =
+              (reviewDoc.data()?['responses'] as List?) ?? const [];
+          final responses = rawResponses
+              .whereType<Map>()
+              .map((r) => Map<String, dynamic>.from(r))
+              .toList();
+          final index =
+              responses.indexWhere((r) => r['id'] == widget.responseId);
 
-        responses[index]['responseText'] = _responseCtrl.text.trim();
-        responses[index]['updatedAt'] = Timestamp.now();
+          if (index == -1) {
+            throw Exception('Response not found. It may have been deleted.');
+          }
 
-        await FirebaseFirestore.instance
-            .collection('shops')
-            .doc(widget.shopId)
-            .collection('reviews')
-            .doc(widget.reviewId)
-            .update({'responses': responses});
+          responses[index]['responseText'] = _responseCtrl.text.trim();
+          responses[index]['updatedAt'] = FieldValue.serverTimestamp();
+
+          tx.update(reviewRef, {'responses': responses});
+        });
       } else {
         // Add new response
-        final responseId = FirebaseFirestore.instance.collection('_').doc().id;
+        final responseId = FirebaseFirestore.instance
+            .collection('shops')
+            .doc(widget.shopId)
+            .collection('reviews')
+            .doc(widget.reviewId)
+            .collection('responses')
+            .doc()
+            .id;
 
         await FirebaseFirestore.instance
             .collection('shops')
@@ -141,7 +148,7 @@ class _ResponseReviewBottomSheetState extends State<ResponseReviewBottomSheet> {
               'ownerName': ownerName,
               'ownerAvatarUrl': ownerAvatarUrl ?? '',
               'responseText': _responseCtrl.text.trim(),
-              'createdAt': Timestamp.now(),
+              'createdAt': FieldValue.serverTimestamp(),
             }
           ]),
         });

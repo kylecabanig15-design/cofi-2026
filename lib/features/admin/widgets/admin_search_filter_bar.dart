@@ -29,9 +29,9 @@ class AdminSearchAndFilterBar extends StatelessWidget {
           Container(
             height: 48,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
+              color: Colors.white.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withOpacity(0.1)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             ),
             child: TextField(
               controller: searchController,
@@ -40,9 +40,9 @@ class AdminSearchAndFilterBar extends StatelessWidget {
               decoration: InputDecoration(
                 hintText: 'Search by name or location...',
                 hintStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.3), fontSize: 14),
+                    color: Colors.white.withValues(alpha: 0.3), fontSize: 14),
                 prefixIcon: Icon(Icons.search_rounded,
-                    color: Colors.white.withOpacity(0.3)),
+                    color: Colors.white.withValues(alpha: 0.3)),
                 suffixIcon: searchQuery.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear_rounded,
@@ -81,11 +81,11 @@ class AdminSearchAndFilterBar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected
-              ? primary.withOpacity(0.2)
-              : Colors.white.withOpacity(0.05),
+              ? primary.withValues(alpha: 0.2)
+              : Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? primary : Colors.white.withOpacity(0.1),
+            color: isSelected ? primary : Colors.white.withValues(alpha: 0.1),
           ),
         ),
         child: Text(

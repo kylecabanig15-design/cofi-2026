@@ -5,6 +5,76 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get_storage/get_storage.dart';
 
 class RecommendationService {
+  static Future<void> invalidateCache(GetStorage box, String userId) async {
+    await Future.wait([
+      box.remove('shop_recommendations_$userId'),
+      box.remove('shop_rec_timestamp_$userId'),
+    ]);
+  }
+
+  static const Map<String, double> defaultVisitTagWeights = {
+    'Study Session': 0.075,
+    'Business Meeting': 0.075,
+    'Chill / Hangout': 0.075,
+    'Group Gathering': 0.075,
+  };
+
+  static const Map<String, double> defaultAmenityTagWeights = {
+    'Specialty Coffee': 0.06,
+    'Espresso': 0.02,
+    'Flat White': 0.02,
+    'Spanish Latte': 0.02,
+    'Vietnamese Coffee': 0.02,
+    'Cold Brew': 0.02,
+    'Pour Over': 0.02,
+    'Matcha Drinks': 0.02,
+    'Pastries': 0.10,
+    'Work-Friendly (Wi-Fi + outlets)': 0.04,
+    'Pet-Friendly': 0.04,
+    'Parking Available': 0.04,
+    'Artsy / Aesthetic': 0.02,
+    'Instagrammable': 0.02,
+    'Night Café (Open Late)': 0.02,
+    'Family Friendly': 0.02,
+    'Minimalist / Modern': 0.05,
+    'Rustic / Cozy': 0.05,
+    'Outdoor / Garden': 0.05,
+    'Seaside / Scenic': 0.05,
+  };
+
+  /// Adds visit context to rated cafés without turning an unrated visit into
+  /// a zero-star rating. Reviews remain the primary recommendation signal.
+  static List<Map<String, dynamic>> mergeReviewAndVisitSignals({
+    required List<Map<String, dynamic>> reviews,
+    required List<Map<String, dynamic>> visits,
+  }) {
+    final merged = <String, Map<String, dynamic>>{};
+
+    for (final review in reviews) {
+      final shopId = review['shopId'] as String?;
+      if (shopId == null || review['rating'] is! num) continue;
+      merged[shopId] = {
+        ...review,
+        'tags': <String>{
+          ...((review['tags'] as List?)?.whereType<String>() ?? const []),
+        }.toList(),
+      };
+    }
+
+    for (final visit in visits) {
+      final shopId = visit['shopId'] as String?;
+      final ratedCafe = shopId == null ? null : merged[shopId];
+      if (ratedCafe == null) continue;
+      final tags = <String>{
+        ...((ratedCafe['tags'] as List?)?.whereType<String>() ?? const []),
+        ...((visit['tags'] as List?)?.whereType<String>() ?? const []),
+      };
+      ratedCafe['tags'] = tags.toList();
+    }
+
+    return merged.values.toList();
+  }
+
   /// Calculates the Cosine Similarity Index between two users based on their
   /// café ratings, visit tags, and amenity preferences.
   ///
@@ -35,13 +105,6 @@ class RecommendationService {
     // Stored as percentage points; divided by 100.0 at point of use.
     //
     // Visit Data subtotal: 7.5 + 7.5 + 7.5 + 7.5 = 30.0 pp
-    final Map<String, double> defaultVisitTagWeights = {
-      'Study Session': 7.5 / 100.0, // Visit Data: 30% × 25% = 7.5 pp
-      'Business Meeting': 7.5 / 100.0, // Visit Data: 30% × 25% = 7.5 pp
-      'Chill / Hangout': 7.5 / 100.0, // Visit Data: 30% × 25% = 7.5 pp
-      'Group Gathering': 7.5 / 100.0, // Visit Data: 30% × 25% = 7.5 pp
-    };
-
     // Amenity tags represent the features/characteristics of a café.
     //
     // Professor's weighting system — amenity subtotals:
@@ -53,36 +116,6 @@ class RecommendationService {
     //
     // NOTE: 'Study Sessions' is an alias for the visit tag 'Study Session'
     // and is intentionally NOT weighted here to avoid double-counting.
-    final Map<String, double> defaultAmenityTagWeights = {
-      // --- Type of Drinks (total 20 pp) ---
-      'Specialty Coffee': 6.0 / 100.0, // Drinks: dominant type
-      'Espresso': 2.0 / 100.0,
-      'Flat White': 2.0 / 100.0,
-      'Spanish Latte': 2.0 / 100.0,
-      'Vietnamese Coffee': 2.0 / 100.0,
-      'Cold Brew': 2.0 / 100.0,
-      'Pour Over': 2.0 / 100.0,
-      'Matcha Drinks': 2.0 / 100.0,
-
-      // --- Pastries (total 10 pp) ---
-      'Pastries': 10.0 / 100.0,
-
-      // --- Convenience (total 20 pp) ---
-      'Work-Friendly (Wi-Fi + outlets)': 4.0 / 100.0,
-      'Pet-Friendly': 4.0 / 100.0,
-      'Parking Available': 4.0 / 100.0,
-      'Artsy / Aesthetic': 2.0 / 100.0,
-      'Instagrammable': 2.0 / 100.0,
-      'Night Café (Open Late)': 2.0 / 100.0,
-      'Family Friendly': 2.0 / 100.0,
-
-      // --- Vibe (total 20 pp) ---
-      'Minimalist / Modern': 5.0 / 100.0,
-      'Rustic / Cozy': 5.0 / 100.0,
-      'Outdoor / Garden': 5.0 / 100.0,
-      'Seaside / Scenic': 5.0 / 100.0,
-    };
-
     // Use provided weights or fall back to defaults
     final visitWeights = visitTagWeights ?? defaultVisitTagWeights;
     final amenityWeights = amenityTagWeights ?? defaultAmenityTagWeights;
@@ -229,10 +262,27 @@ class RecommendationService {
   Future<List<Map<String, dynamic>>> _findSimilarUsers(User? user) async {
     if (user == null) return [];
 
+    // The caller can retain a User briefly while an auth-state transition is
+    // already in progress. Firestore then receives an unauthenticated request
+    // even though this method's argument is non-null.
+    final activeUser = FirebaseAuth.instance.currentUser;
+    if (activeUser == null || activeUser.uid != user.uid) {
+      debugLog(
+          '⚠️ [ALGORITHM] Similar-user lookup skipped: auth state changed.');
+      return [];
+    }
+
+    var queryStage = 'refreshing authentication';
+
     try {
+      // Ensure Firebase Auth has supplied a usable ID token before issuing the
+      // series of authenticated Firestore reads.
+      await activeUser.getIdToken();
+
       // STEP 1: Get current user's reviews AND visits
       // OPTIMIZATION: Only check top 30 most rated or popular shops to build the vector.
       // Checking ALL shops (thousands) is inefficient and costly.
+      queryStage = 'loading ranked shops';
       final shopsSnapshot = await FirebaseFirestore.instance
           .collection('shops')
           .orderBy('ratings',
@@ -240,83 +290,68 @@ class RecommendationService {
           .limit(30)
           .get();
 
+      final topShopIds = shopsSnapshot.docs.map((doc) => doc.id).toSet();
+      queryStage = 'loading review and visit signals';
+      final signalSnapshots = await Future.wait([
+        FirebaseFirestore.instance.collectionGroup('reviews').get(),
+        FirebaseFirestore.instance.collectionGroup('visits').get(),
+      ]);
+      final reviewDocs = signalSnapshots[0].docs;
+      final visitDocs = signalSnapshots[1].docs;
+
+      String? parentShopId(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+        return doc.reference.parent.parent?.id;
+      }
+
       final currentUserReviews = <Map<String, dynamic>>[];
       final currentUserVisits = <Map<String, dynamic>>[];
+      final allUsersCombined = <String, List<Map<String, dynamic>>>{};
 
-      // Get reviews
-      for (final shopDoc in shopsSnapshot.docs) {
-        final reviewsSnapshot = await shopDoc.reference
-            .collection('reviews')
-            .where('userId', isEqualTo: user.uid)
-            .get();
-
-        for (final reviewDoc in reviewsSnapshot.docs) {
-          final reviewData = reviewDoc.data();
-          currentUserReviews.add({
-            'shopId': shopDoc.id,
-            'rating': reviewData['rating'],
-            'tags': (reviewData['tags'] as List?)?.cast<String>() ?? [],
-          });
+      for (final reviewDoc in reviewDocs) {
+        final shopId = parentShopId(reviewDoc);
+        if (shopId == null || !topShopIds.contains(shopId)) continue;
+        final reviewData = reviewDoc.data();
+        final reviewUserId = reviewData['userId'] as String?;
+        if (reviewUserId == null) continue;
+        final signal = <String, dynamic>{
+          'shopId': shopId,
+          'rating': reviewData['rating'],
+          'tags': (reviewData['tags'] as List?)?.whereType<String>().toList() ??
+              const <String>[],
+        };
+        if (reviewUserId == activeUser.uid) {
+          currentUserReviews.add(signal);
+        } else {
+          allUsersCombined.putIfAbsent(reviewUserId, () => []).add(signal);
         }
+      }
 
-        // Get visits (with tags)
-        final visitsSnapshot = await shopDoc.reference
-            .collection('visits')
-            .where('userId', isEqualTo: user.uid)
-            .get();
-
-        for (final visitDoc in visitsSnapshot.docs) {
-          final visitData = visitDoc.data();
-          currentUserVisits.add({
-            'shopId': shopDoc.id,
-            'tags': (visitData['tags'] as List?)?.cast<String>() ?? [],
-          });
+      for (final visitDoc in visitDocs) {
+        final shopId = parentShopId(visitDoc);
+        if (shopId == null || !topShopIds.contains(shopId)) continue;
+        final visitData = visitDoc.data();
+        final visitUserId = visitData['userId'] as String?;
+        if (visitUserId == null) continue;
+        final signal = <String, dynamic>{
+          'shopId': shopId,
+          'tags': (visitData['tags'] as List?)?.whereType<String>().toList() ??
+              const <String>[],
+        };
+        if (visitUserId == activeUser.uid) {
+          currentUserVisits.add(signal);
+        } else {
+          allUsersCombined.putIfAbsent(visitUserId, () => []).add(signal);
         }
       }
 
       // Combine reviews and visits into one signal
-      final currentUserCombined = [...currentUserReviews, ...currentUserVisits];
+      final currentUserCombined = mergeReviewAndVisitSignals(
+        reviews: currentUserReviews,
+        visits: currentUserVisits,
+      );
 
       // If current user has no reviews or visits, return empty list
       if (currentUserCombined.isEmpty) return [];
-
-      // STEP 2: Get all other users' reviews AND visits
-      final allUsersCombined = <String, List<Map<String, dynamic>>>{};
-
-      for (final shopDoc in shopsSnapshot.docs) {
-        // Get all reviews
-        final reviewsSnapshot =
-            await shopDoc.reference.collection('reviews').get();
-
-        for (final reviewDoc in reviewsSnapshot.docs) {
-          final reviewData = reviewDoc.data();
-          final userId = reviewData['userId'] as String?;
-          if (userId == null || userId == user.uid) continue;
-
-          allUsersCombined.putIfAbsent(userId, () => []);
-          allUsersCombined[userId]!.add({
-            'shopId': shopDoc.id,
-            'rating': reviewData['rating'],
-            'tags': (reviewData['tags'] as List?)?.cast<String>() ?? [],
-          });
-        }
-
-        // Get all visits
-        final visitsSnapshot =
-            await shopDoc.reference.collection('visits').get();
-
-        for (final visitDoc in visitsSnapshot.docs) {
-          final visitData = visitDoc.data();
-          final userId = visitData['userId'] as String?;
-          if (userId == null || userId == user.uid) continue;
-
-          allUsersCombined.putIfAbsent(userId, () => []);
-          allUsersCombined[userId]!.add({
-            'shopId': shopDoc.id,
-            'tags': (visitData['tags'] as List?)?.cast<String>() ?? [],
-          });
-        }
-      }
 
       // STEP 3: Get shop amenities for all shops
       final shopAmenities = <String, List<String>>{};
@@ -327,11 +362,17 @@ class RecommendationService {
       }
 
       // STEP 4: Calculate similarity for each user using the Cosine Similarity algorithm
-      final List<Map<String, dynamic>> similarUsers = [];
+      final similarityCandidates = <Map<String, dynamic>>[];
 
       for (final entry in allUsersCombined.entries) {
         final otherUserId = entry.key;
-        final otherUserCombined = entry.value;
+        final otherSignals = entry.value;
+        final otherUserCombined = mergeReviewAndVisitSignals(
+          reviews:
+              otherSignals.where((signal) => signal['rating'] is num).toList(),
+          visits:
+              otherSignals.where((signal) => signal['rating'] is! num).toList(),
+        );
 
         // Calculate cosine similarity using our implemented algorithm
         final similarity = calculateCosineSimilarity(
@@ -341,14 +382,6 @@ class RecommendationService {
         );
         // Only include users with meaningful similarity (> 0.1)
         if (similarity > 0.1) {
-          // Get user info
-          final userDoc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(otherUserId)
-              .get();
-
-          final userName = userDoc.data()?['name'] ?? 'User';
-
           // Calculate common shops count
           final currentUserShops =
               currentUserCombined.map((r) => r['shopId'] as String).toSet();
@@ -357,9 +390,8 @@ class RecommendationService {
           final commonShops =
               currentUserShops.intersection(otherUserShops).length;
 
-          similarUsers.add({
+          similarityCandidates.add({
             'userId': otherUserId,
-            'userName': userName,
             'similarity': similarity,
             'commonShops': commonShops,
           });
@@ -367,12 +399,27 @@ class RecommendationService {
       }
 
       // STEP 5: Sort by similarity (highest first) and return top 5
-      similarUsers.sort((a, b) =>
+      similarityCandidates.sort((a, b) =>
           (b['similarity'] as double).compareTo(a['similarity'] as double));
-
-      return similarUsers.take(5).toList();
+      final topCandidates = similarityCandidates.take(5).toList();
+      queryStage = 'loading similar-user profiles';
+      final profileDocs = await Future.wait(topCandidates.map((candidate) =>
+          FirebaseFirestore.instance
+              .collection('users')
+              .doc(candidate['userId'] as String)
+              .get()));
+      for (var index = 0; index < topCandidates.length; index++) {
+        final profile = profileDocs[index].data();
+        topCandidates[index]['userName'] =
+            profile?['name'] ?? profile?['displayName'] ?? 'User';
+      }
+      return topCandidates;
+    } on FirebaseException catch (e) {
+      debugLog(
+          '❌ [ALGORITHM] Firestore error while $queryStage: ${e.code} ${e.message ?? ''}');
+      return [];
     } catch (e) {
-      debugLog('❌ [ALGORITHM] Error in _findSimilarUsers: $e');
+      debugLog('❌ [ALGORITHM] Error while $queryStage: $e');
       return [];
     }
   }
@@ -415,6 +462,10 @@ class RecommendationService {
       final similarUsers = await _findSimilarUsers(user);
       if (similarUsers.isEmpty) {
         debugLog('⚠️ [ALGORITHM] No similar users found. Logic skipped.');
+        // Cache the valid empty result too. Otherwise cold-start users with
+        // sparse data repeat the full collaborative query on every visit.
+        await box.write(recCacheKey, <String, double>{});
+        await box.write(recTimeKey, DateTime.now().millisecondsSinceEpoch);
         return {};
       }
 
@@ -449,6 +500,15 @@ class RecommendationService {
       final currentVisited =
           (currentData['visited'] as List?)?.cast<String>() ?? [];
       final currentShopSet = <String>{...currentBookmarks, ...currentVisited};
+      final candidateShopIds = shopsSnapshot.docs.map((doc) => doc.id).toSet();
+      final candidateReviews = <String, List<Map<String, dynamic>>>{};
+      final reviewsSnapshot =
+          await FirebaseFirestore.instance.collectionGroup('reviews').get();
+      for (final reviewDoc in reviewsSnapshot.docs) {
+        final shopId = reviewDoc.reference.parent.parent?.id;
+        if (shopId == null || !candidateShopIds.contains(shopId)) continue;
+        candidateReviews.putIfAbsent(shopId, () => []).add(reviewDoc.data());
+      }
 
       final Map<String, double> scores = {};
 
@@ -458,15 +518,10 @@ class RecommendationService {
         // Skip shops user already knows
         if (currentShopSet.contains(shopId)) continue;
 
-        // Optimization: Use a subcollection query limits
-        final reviewsSnapshot =
-            await shopDoc.reference.collection('reviews').limit(20).get();
-
         double score = 0.0;
         double totalSim = 0.0;
 
-        for (final reviewDoc in reviewsSnapshot.docs) {
-          final data = reviewDoc.data();
+        for (final data in candidateReviews[shopId] ?? const []) {
           final userId = data['userId'] as String?;
           if (userId == null) continue;
 

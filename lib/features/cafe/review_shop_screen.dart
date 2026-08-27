@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/widgets/custom_toast.dart';
+import 'package:cofi/utils/app_signals.dart';
 import 'package:cofi/utils/formatters.dart';
 import 'package:cofi/services/notification_service.dart';
 
@@ -63,7 +64,9 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
         });
       }
     } catch (e) {
-      CustomToast.showError(context, 'Failed to pick image: $e');
+      if (mounted) {
+        CustomToast.showError(context, 'Failed to pick image: $e');
+      }
     }
   }
 
@@ -86,7 +89,9 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
 
       return downloadUrl;
     } catch (e) {
-      CustomToast.showError(context, 'Failed to upload image: $e');
+      if (mounted) {
+        CustomToast.showError(context, 'Failed to upload image: $e');
+      }
       return null;
     } finally {
       if (mounted) {
@@ -121,17 +126,24 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
         imageUrl = await _uploadImageToFirebase();
       }
 
-      // Fetch user's current profile picture from Firestore
+      // Fetch the user and shop data needed by the atomic write below.
       String? userPhotoUrl;
+      String? ownerId;
       try {
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
+        final results = await Future.wait([
+          FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
+          FirebaseFirestore.instance
+              .collection('shops')
+              .doc(widget.shopId)
+              .get(),
+        ]);
+        final userDoc = results[0];
+        final shopDoc = results[1];
         final userData = userDoc.data();
         userPhotoUrl = userData?['photoUrl'] as String?;
+        ownerId = shopDoc.data()?['ownerId'] as String?;
       } catch (e) {
-        debugPrint('Error fetching user photoUrl: $e');
+        debugPrint('Error fetching review context: $e');
       }
 
       final reviewMap = {
@@ -144,72 +156,41 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
         'createdAt': FieldValue.serverTimestamp(),
         if (imageUrl != null) 'imageUrl': imageUrl,
       };
-      // Subcollection write
       final shopRef =
           FirebaseFirestore.instance.collection('shops').doc(widget.shopId);
-      final docRef = await shopRef.collection('reviews').add(reviewMap);
+      final docRef = shopRef.collection('reviews').doc();
       final reviewId = docRef.id;
+      final visitRef = shopRef.collection('visits').doc();
+      final userRef =
+          FirebaseFirestore.instance.collection('users').doc(user.uid);
 
-      // Automatically log this as a visit since reviewing implies visiting
-      await shopRef.collection('visits').add({
+      // Commit the review, implied visit, and visited-list update together.
+      // The backend trigger owns the shop rating/preview aggregates.
+      final batch = FirebaseFirestore.instance.batch();
+      batch.set(docRef, reviewMap);
+      batch.set(visitRef, {
         'userId': user.uid,
         'userEmail': user.email,
         'note': 'Review: $_rating stars',
         'tags': _selectedTags.toList(),
         'createdAt': FieldValue.serverTimestamp(),
       });
-
-      // Record this shopId in the user's `visited` array
-      try {
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+      batch.set(
+        userRef,
+        {
           'visited': FieldValue.arrayUnion([widget.shopId])
-        }, SetOptions(merge: true));
-      } catch (_) {}
-      
-      // Update embedded reviews and average rating atomically from a
-      // transaction-fresh snapshot (prevents lost updates under concurrency).
-      // Cap the embedded array to the most recent 50 reviews to stay well
-      // under Firestore's 1MiB document limit.
-      String? ownerId;
-      await FirebaseFirestore.instance.runTransaction((tx) async {
-        final snap = await tx.get(shopRef);
-        if (!snap.exists) return;
-        final data = snap.data()!;
-        ownerId = data['ownerId'] as String?;
+        },
+        SetOptions(merge: true),
+      );
+      await batch.commit();
 
-        final currentReviews = (data['reviews'] as List?) ?? [];
-        final newReviewEntry = {
-          'authorName': reviewMap['authorName'],
-          'authorPhotoUrl': reviewMap['authorPhotoUrl'],
-          'rating': reviewMap['rating'],
-          'text': reviewMap['text'],
-          'tags': reviewMap['tags'],
-          'createdAt': Timestamp.now(),
-          if (imageUrl != null) 'imageUrl': imageUrl,
-        };
-        final List<dynamic> updatedReviews = List.from(currentReviews)..add(newReviewEntry);
-        if (updatedReviews.length > 50) {
-          updatedReviews.removeRange(0, updatedReviews.length - 50);
-        }
-
-        // Calculate new average rating
-        double totalRating = 0;
-        for (var r in updatedReviews) {
-          totalRating += ((r as Map)['rating'] as num?)?.toDouble() ?? 0.0;
-        }
-        final double avgRating = updatedReviews.isEmpty ? 0.0 : totalRating / updatedReviews.length;
-
-        tx.update(shopRef, {
-          'reviews': updatedReviews,
-          'ratings': avgRating,
-        });
-      }).catchError((_) {});
+      recommendationVersion.value++;
 
       // Notify the business owner in real-time
       if (ownerId != null && ownerId != user.uid) {
         try {
           await NotificationService().createReviewNotification(
-            ownerId!,
+            ownerId,
             reviewId,
             widget.shopId,
             widget.shopName,

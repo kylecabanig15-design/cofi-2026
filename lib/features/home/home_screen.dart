@@ -6,20 +6,16 @@ import 'package:cofi/services/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:cofi/widgets/in_app_notification_banner.dart';
 
 import 'dart:ui';
 import 'explore_tab.dart';
 import 'community_tab.dart';
-import 'collections_tab.dart';
-import 'profile_tab.dart';
 import 'package:cofi/features/networking/notification_screen.dart';
 import 'package:cofi/widgets/premium_background.dart';
 import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cofi/features/cafe/cafe_details_screen.dart';
-import 'package:cofi/utils/backfill_notifications.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialTabIndex;
@@ -231,10 +227,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             fontSize: 16,
                             color: white,
                             isBold: true),
-                        icon: Icon(
-                          FontAwesomeIcons.map,
-                          color: white,
-                        ),
+                        icon: Icon(Icons.map, color: white),
                       ),
                     ),
                   ),
@@ -328,12 +321,12 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Container(
             height: 70,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(35),
-        border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
             blurRadius: 20,
             spreadRadius: 5,
             offset: const Offset(0, 10),
@@ -609,7 +602,7 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(
       context: context,
       barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.75),
+      barrierColor: Colors.black.withValues(alpha: 0.75),
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 24),
@@ -634,17 +627,17 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               borderRadius: BorderRadius.circular(32),
               border: Border.all(
-                color: Colors.white.withOpacity(0.12),
+                color: Colors.white.withValues(alpha: 0.12),
                 width: 1.5,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.redAccent.withOpacity(0.25),
+                  color: Colors.redAccent.withValues(alpha: 0.25),
                   blurRadius: 40,
                   spreadRadius: 5,
                 ),
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.6),
+                  color: Colors.black.withValues(alpha: 0.6),
                   blurRadius: 30,
                   offset: const Offset(0, 10),
                 ),
@@ -661,12 +654,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        Colors.redAccent.withOpacity(0.3),
+                        Colors.redAccent.withValues(alpha: 0.3),
                         Colors.transparent,
                       ],
                     ),
                     border: Border.all(
-                      color: Colors.redAccent.withOpacity(0.4),
+                      color: Colors.redAccent.withValues(alpha: 0.4),
                       width: 2,
                     ),
                   ),
@@ -689,7 +682,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text(
                   "Welcome to CoFi! You now know how to explore cafes, log visits, and connect with the community. Time to find your next favourite cup ☕",
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.75),
+                    color: Colors.white.withValues(alpha: 0.75),
                     fontSize: 15,
                     height: 1.6,
                   ),
@@ -699,12 +692,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Divider with sparkle
                 Row(
                   children: [
-                    Expanded(child: Divider(color: Colors.white.withOpacity(0.1))),
+                    Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.1))),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Text('✨', style: TextStyle(fontSize: 16)),
                     ),
-                    Expanded(child: Divider(color: Colors.white.withOpacity(0.1))),
+                    Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.1))),
                   ],
                 ),
                 const SizedBox(height: 28),
@@ -939,23 +932,23 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF1A1A1A).withOpacity(0.95),
-            const Color(0xFF111111).withOpacity(0.95),
+            const Color(0xFF1A1A1A).withValues(alpha: 0.95),
+            const Color(0xFF111111).withValues(alpha: 0.95),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white.withOpacity(0.15), width: 1.5),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.5),
+            color: Colors.black.withValues(alpha: 0.5),
             blurRadius: 30,
             spreadRadius: 5,
             offset: const Offset(0, 10),
           ),
           BoxShadow(
-            color: Colors.redAccent.withOpacity(0.15),
+            color: Colors.redAccent.withValues(alpha: 0.15),
             blurRadius: 20,
             spreadRadius: 0,
           ),
@@ -978,7 +971,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.redAccent.withOpacity(0.4),
+                      color: Colors.redAccent.withValues(alpha: 0.4),
                       blurRadius: 10,
                       spreadRadius: 1,
                     )
@@ -1004,7 +997,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Text(
             description,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.85),
+              color: Colors.white.withValues(alpha: 0.85),
               fontSize: 16,
               height: 1.5,
               fontWeight: FontWeight.w400,
@@ -1015,10 +1008,10 @@ class _HomeScreenState extends State<HomeScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                    color: Colors.redAccent.withOpacity(0.3), width: 1),
+                    color: Colors.redAccent.withValues(alpha: 0.3), width: 1),
               ),
               child: Row(
                 children: [

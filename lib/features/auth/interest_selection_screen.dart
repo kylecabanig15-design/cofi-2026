@@ -6,6 +6,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/widgets/premium_background.dart';
+import 'package:cofi/features/home/explore/services/recommendation_service.dart';
+import 'package:cofi/utils/app_signals.dart';
+import 'package:get_storage/get_storage.dart';
 
 class InterestSelectionScreen extends StatefulWidget {
   final bool isEditing;
@@ -29,13 +32,14 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final doc =
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
     if (doc.exists) {
       final data = doc.data();
-      final userInterests =
-          (data?['interests'] as List?)?.cast<String>() ?? [];
-      
+      final userInterests = (data?['interests'] as List?)?.cast<String>() ?? [];
+
       setState(() {
         for (var interest in userInterests) {
           if (interests.containsKey(interest)) {
@@ -142,17 +146,17 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
         'https://images.unsplash.com/photo-1506521781263-d8422e82f27a?w=800',
     'Family Friendly':
         'https://images.unsplash.com/photo-1540479859555-17af45c78602?w=800',
-    'Study Sessions': 
+    'Study Sessions':
         'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800',
     'Night Café (Open Late)':
         'https://images.unsplash.com/photo-1511018556340-d16986a1c194?w=800',
-    'Minimalist / Modern': 
+    'Minimalist / Modern':
         'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?w=800',
-    'Rustic / Cozy': 
+    'Rustic / Cozy':
         'https://images.unsplash.com/photo-1521017432531-fbd92d768814?w=800',
     'Outdoor / Garden':
         'https://images.unsplash.com/photo-1763301331567-21c465b66e02?w=800',
-    'Seaside / Scenic': 
+    'Seaside / Scenic':
         'https://images.unsplash.com/photo-1519046904884-53103b34b206?w=800',
     'Artsy / Aesthetic':
         'https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=800',
@@ -160,7 +164,8 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
         'https://images.unsplash.com/photo-1559925393-8be0ec4767c8?w=800',
   };
 
-  final String _fallbackImageUrl = 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=800';
+  final String _fallbackImageUrl =
+      'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=800';
 
   bool _isLoading = false;
 
@@ -214,6 +219,12 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
+        // Interests affect the For You ordering. Drop the old 24-hour score
+        // cache and notify an already-mounted Explore tab to refresh in the
+        // background; its user stream applies the interest bonus immediately.
+        await RecommendationService.invalidateCache(GetStorage(), user.uid);
+        recommendationVersion.value++;
+
         // If we are editing, just pop back
         if (widget.isEditing) {
           if (mounted) {
@@ -224,7 +235,7 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
           }
           return;
         }
-        
+
         // If onboarding, continue
         // Ensure we check if user needs to select commitment or account type
         // But for now, let auth_gate handle routing
@@ -233,7 +244,7 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Error saving interests. Please try again.')),
+              content: const Text('Error saving interests. Please try again.')),
         );
       }
     } finally {
@@ -487,333 +498,360 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
           backgroundColor: Colors.transparent,
           surfaceTintColor: Colors.transparent,
           elevation: 0,
-        leading: widget.isEditing
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.of(context).pop(),
-              )
-            : IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () async {
-                  // SAFE NAVIGATION: Check if we can pop first.
-                  if (Navigator.of(context).canPop()) {
-                    Navigator.of(context).pop();
-                  } else {
-                    // Only sign out if we can't go back (root) and user wants to abort
-                    // Or maybe just minimize app/do nothing?
-                    // For now, let's just confirm with the user
-                    final shouldLogout = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        backgroundColor: Colors.grey[900],
-                        title: const Text('Go back to login?', style: TextStyle(color: Colors.white)),
-                        actions: [
-                          TextButton(onPressed: ()=>Navigator.pop(context, false), child: const Text('Cancel')),
-                          TextButton(onPressed: ()=>Navigator.pop(context, true), child: const Text('Yes', style: TextStyle(color: Colors.red))),
-                        ],
-                      ),
-                    );
-                    if (shouldLogout == true) {
-                      await GoogleSignInService.signOut();
-                      await FirebaseAuth.instance.signOut();
-                      if (context.mounted) Navigator.of(context).pop();
-                    }
-                  }
-                },
-              ),
-        actions: [
-          if (!widget.isEditing)
-            TextButton(
-              onPressed: _isLoading ? null : () async {
-                final user = FirebaseAuth.instance.currentUser;
-                if (user != null) {
-                  setState(() => _isLoading = true);
-                  
-                  try {
-                    await FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(user.uid)
-                        .update({
-                      'interests': [], // Empty interests = skipped
-                      'updatedAt': FieldValue.serverTimestamp(),
-                    });
-                    
-                    if (mounted) {
-                      // Show quick confirmation
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Skipped! You can set interests later in settings.'),
-                          duration: Duration(seconds: 2),
-                          backgroundColor: Colors.green,
+          leading: widget.isEditing
+              ? IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.of(context).pop(),
+                )
+              : IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () async {
+                    // SAFE NAVIGATION: Check if we can pop first.
+                    if (Navigator.of(context).canPop()) {
+                      Navigator.of(context).pop();
+                    } else {
+                      // Only sign out if we can't go back (root) and user wants to abort
+                      // Or maybe just minimize app/do nothing?
+                      // For now, let's just confirm with the user
+                      final shouldLogout = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          backgroundColor: Colors.grey[900],
+                          title: const Text('Go back to login?',
+                              style: TextStyle(color: Colors.white)),
+                          actions: [
+                            TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancel')),
+                            TextButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text('Yes',
+                                    style: TextStyle(color: Colors.red))),
+                          ],
                         ),
                       );
-                      
-                      // AuthGate will now redirect to HomeScreen
-                      // since interests field exists (even if empty)
+                      if (shouldLogout == true) {
+                        await GoogleSignInService.signOut();
+                        await FirebaseAuth.instance.signOut();
+                        if (context.mounted) Navigator.of(context).pop();
+                      }
                     }
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Error: $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  } finally {
-                    if (mounted) setState(() => _isLoading = false);
-                  }
-                }
-              },
-              child: _isLoading 
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white70,
-                      ),
-                    )
-                  : const Text('Skip', style: TextStyle(color: Colors.white70)),
-            ),
-        ],
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: TextWidget(
-                  text: widget.isEditing 
-                      ? 'Update Your Interests' 
-                      : 'Choose Your Interests',
-                  fontSize: 24,
-                  color: Colors.white,
-                  isBold: true,
+                  },
                 ),
-              ),
-              const SizedBox(height: 8),
-              Center(
-                child: TextWidget(
-                  text: widget.isEditing
-                      ? 'Select the types of cafes you prefer'
-                      : 'Select at least one to get personalized recommendations',
-                  fontSize: 14,
-                  color: Colors.white70,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Expanded(
-                child: CustomScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  slivers: _interestGroups.entries.expand((entry) {
-                    return [
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 24, bottom: 16),
-                          child: Text(
-                            entry.key,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                      SliverGrid(
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 0.85,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            String interest = entry.value[index];
-                            bool isSelected = interests[interest]!;
+          actions: [
+            if (!widget.isEditing)
+              TextButton(
+                onPressed: _isLoading
+                    ? null
+                    : () async {
+                        final user = FirebaseAuth.instance.currentUser;
+                        if (user != null) {
+                          setState(() => _isLoading = true);
 
-                            return InkWell(
-                              onTap: () {
-                                setState(() {
-                                  interests[interest] = !interests[interest]!;
-                                });
-                              },
-                              splashColor: Colors.transparent,
-                              highlightColor: Colors.transparent,
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeInOut,
-                                transform: Matrix4.identity()
-                                  ..scale(isSelected ? 0.98 : 1.0),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: isSelected ? primary : Colors.white10,
-                                    width: isSelected ? 2 : 1,
-                                  ),
-                                  boxShadow: isSelected
-                                      ? [
-                                          BoxShadow(
-                                            color: primary.withOpacity(0.3),
-                                            blurRadius: 12,
-                                            spreadRadius: 2,
-                                          )
-                                        ]
-                                      : [],
+                          try {
+                            await FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(user.uid)
+                                .update({
+                              'interests': [], // Empty interests = skipped
+                              'updatedAt': FieldValue.serverTimestamp(),
+                            });
+
+                            if (mounted) {
+                              // Show quick confirmation
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                      'Skipped! You can set interests later in settings.'),
+                                  duration: Duration(seconds: 2),
+                                  backgroundColor: Colors.green,
                                 ),
-                                clipBehavior: Clip.antiAlias,
-                                child: Stack(
-                                  children: [
-                                    // Image
-                                    Positioned.fill(
-                                      child: CachedNetworkImage(
-                                        imageUrl: interestImages[interest] ?? _fallbackImageUrl,
-                                        fit: BoxFit.cover,
-                                        placeholder: (context, url) => Container(
-                                          color: Colors.white.withValues(alpha: 0.1),
-                                          child: const Center(
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              valueColor:
-                                                  AlwaysStoppedAnimation(Colors.white24),
-                                            ),
-                                          ),
-                                        ),
-                                        errorWidget: (context, url, error) => Image.network(
-                                          _fallbackImageUrl,
-                                          fit: BoxFit.cover,
-                                        ),
-                                      ),
-                                    ),
-                                    // Overlay Gradient
-                                    Positioned.fill(
-                                      child: AnimatedContainer(
-                                        duration: const Duration(milliseconds: 300),
-                                        decoration: BoxDecoration(
-                                          gradient: LinearGradient(
-                                            begin: Alignment.topCenter,
-                                            end: Alignment.bottomCenter,
-                                            colors: [
-                                              Colors.transparent,
-                                              isSelected
-                                                  ? primary.withOpacity(0.8)
-                                                  : Colors.black.withOpacity(0.8),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    // Content
-                                    Positioned(
-                                      bottom: 12,
-                                      left: 12,
-                                      right: 12,
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          if (isSelected)
-                                            AnimatedContainer(
-                                              duration: const Duration(milliseconds: 300),
-                                              padding: const EdgeInsets.all(4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                shape: BoxShape.circle,
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black.withOpacity(0.2),
-                                                    blurRadius: 4,
-                                                  )
-                                                ],
-                                              ),
-                                              child: Icon(
-                                                Icons.check_rounded,
-                                                color: primary,
-                                                size: 14,
-                                              ),
-                                            ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            interest,
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 13,
-                                              fontWeight: isSelected
-                                                  ? FontWeight.bold
-                                                  : FontWeight.w600,
-                                              letterSpacing: 0.5,
-                                            ),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
+                              );
+
+                              // AuthGate will now redirect to HomeScreen
+                              // since interests field exists (even if empty)
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error: $e'),
+                                  backgroundColor: Colors.red,
                                 ),
-                              ),
-                            );
-                          },
-                          childCount: entry.value.length,
+                              );
+                            }
+                          } finally {
+                            if (mounted) setState(() => _isLoading = false);
+                          }
+                        }
+                      },
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white70,
                         ),
-                      ),
-                    ];
-                  }).toList(),
-                ),
+                      )
+                    : const Text('Skip',
+                        style: TextStyle(color: Colors.white70)),
               ),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                height: 56,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [primary, primary.withOpacity(0.8)],
+          ],
+        ),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: TextWidget(
+                    text: widget.isEditing
+                        ? 'Update Your Interests'
+                        : 'Choose Your Interests',
+                    fontSize: 24,
+                    color: Colors.white,
+                    isBold: true,
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: primary.withOpacity(0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
                 ),
-                child: TextButton(
-                  onPressed: _isLoading ? null : _saveInterestsAndContinue,
-                  style: TextButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    padding: EdgeInsets.zero,
+                const SizedBox(height: 8),
+                Center(
+                  child: TextWidget(
+                    text: widget.isEditing
+                        ? 'Select the types of cafes you prefer'
+                        : 'Select at least one to get personalized recommendations',
+                    fontSize: 14,
+                    color: Colors.white70,
                   ),
-                  child: Center(
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 3,
+                ),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: CustomScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    slivers: _interestGroups.entries.expand((entry) {
+                      return [
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 24, bottom: 16),
+                            child: Text(
+                              entry.key,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          )
-                        : TextWidget(
-                            text:
-                                widget.isEditing ? 'Save Changes' : 'Continue',
-                            fontSize: 18,
-                            color: Colors.white,
-                            isBold: true,
                           ),
+                        ),
+                        SliverGrid(
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            childAspectRatio: 0.85,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                          ),
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              String interest = entry.value[index];
+                              bool isSelected = interests[interest]!;
+
+                              return InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    interests[interest] = !interests[interest]!;
+                                  });
+                                },
+                                splashColor: Colors.transparent,
+                                highlightColor: Colors.transparent,
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeInOut,
+                                  transform: Matrix4.identity()
+                                    ..scale(isSelected ? 0.98 : 1.0),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color:
+                                          isSelected ? primary : Colors.white10,
+                                      width: isSelected ? 2 : 1,
+                                    ),
+                                    boxShadow: isSelected
+                                        ? [
+                                            BoxShadow(
+                                              color: primary.withValues(
+                                                  alpha: 0.3),
+                                              blurRadius: 12,
+                                              spreadRadius: 2,
+                                            )
+                                          ]
+                                        : [],
+                                  ),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: Stack(
+                                    children: [
+                                      // Image
+                                      Positioned.fill(
+                                        child: CachedNetworkImage(
+                                          imageUrl: interestImages[interest] ??
+                                              _fallbackImageUrl,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) =>
+                                              Container(
+                                            color: Colors.white
+                                                .withValues(alpha: 0.1),
+                                            child: const Center(
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor:
+                                                    AlwaysStoppedAnimation(
+                                                        Colors.white24),
+                                              ),
+                                            ),
+                                          ),
+                                          errorWidget: (context, url, error) =>
+                                              Image.network(
+                                            _fallbackImageUrl,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                      ),
+                                      // Overlay Gradient
+                                      Positioned.fill(
+                                        child: AnimatedContainer(
+                                          duration:
+                                              const Duration(milliseconds: 300),
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              begin: Alignment.topCenter,
+                                              end: Alignment.bottomCenter,
+                                              colors: [
+                                                Colors.transparent,
+                                                isSelected
+                                                    ? primary.withValues(
+                                                        alpha: 0.8)
+                                                    : Colors.black
+                                                        .withValues(alpha: 0.8),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      // Content
+                                      Positioned(
+                                        bottom: 12,
+                                        left: 12,
+                                        right: 12,
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (isSelected)
+                                              AnimatedContainer(
+                                                duration: const Duration(
+                                                    milliseconds: 300),
+                                                padding:
+                                                    const EdgeInsets.all(4),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white,
+                                                  shape: BoxShape.circle,
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black
+                                                          .withValues(
+                                                              alpha: 0.2),
+                                                      blurRadius: 4,
+                                                    )
+                                                  ],
+                                                ),
+                                                child: Icon(
+                                                  Icons.check_rounded,
+                                                  color: primary,
+                                                  size: 14,
+                                                ),
+                                              ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              interest,
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 13,
+                                                fontWeight: isSelected
+                                                    ? FontWeight.bold
+                                                    : FontWeight.w600,
+                                                letterSpacing: 0.5,
+                                              ),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                            childCount: entry.value.length,
+                          ),
+                        ),
+                      ];
+                    }).toList(),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [primary, primary.withValues(alpha: 0.8)],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: primary.withValues(alpha: 0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: TextButton(
+                    onPressed: _isLoading ? null : _saveInterestsAndContinue,
+                    style: TextButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: EdgeInsets.zero,
+                    ),
+                    child: Center(
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 3,
+                              ),
+                            )
+                          : TextWidget(
+                              text: widget.isEditing
+                                  ? 'Save Changes'
+                                  : 'Continue',
+                              fontSize: 18,
+                              color: Colors.white,
+                              isBold: true,
+                            ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 }

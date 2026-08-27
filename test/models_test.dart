@@ -30,7 +30,9 @@ void main() {
 
     test('legacy postedBy map yields uid', () {
       expect(
-        Shop.legacyPostedByUid({'postedBy': {'uid': 'u123'}}),
+        Shop.legacyPostedByUid({
+          'postedBy': {'uid': 'u123'}
+        }),
         'u123',
       );
       expect(Shop.legacyPostedByUid({'postedBy': 'u456'}), 'u456');
@@ -83,6 +85,8 @@ void main() {
       }, 'j1');
       expect(job.applications.length, 1);
       expect(job.applications.first.applicantId, 'u1');
+      expect(job.applications.first.status, 'pending');
+      expect(job.applications.first.appliedAt, DateTime(2026, 8, 1));
     });
   });
 
@@ -97,6 +101,23 @@ void main() {
       final map = ev.toFirestore();
       expect(map['imageUrl'], 'a.png');
       expect(map['imageUrls'], ['a.png', 'b.png']);
+    });
+
+    test('accepts DateTime values already normalized by repositories', () {
+      final start = DateTime(2026, 8, 27, 9);
+      final end = DateTime(2026, 8, 27, 17);
+      final event = CafeEvent.fromFirestore({
+        'startDate': start,
+        'endDate': end,
+      }, 'e1');
+      expect(event.startDate, start);
+      expect(event.endDate, end);
+    });
+
+    test('startDate falls back to the legacy date field', () {
+      final legacyDate = Timestamp.fromDate(DateTime(2026, 9, 1));
+      final event = CafeEvent.fromFirestore({'date': legacyDate}, 'e1');
+      expect(event.startDate, DateTime(2026, 9, 1));
     });
   });
 

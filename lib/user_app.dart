@@ -6,6 +6,7 @@ import 'package:cofi/features/business/claim_shop_screen.dart';
 import 'package:cofi/features/cafe/cafe_details_screen.dart';
 import 'package:cofi/features/cafe/submit_shop_screen.dart';
 import 'package:cofi/features/map/map_view_screen.dart';
+import 'package:cofi/features/networking/notification_screen.dart';
 import 'package:cofi/features/networking/shared_collection_screen.dart';
 import 'package:cofi/features/profile/visited_cafes_screen.dart';
 import 'package:cofi/features/profile/your_reviews_screen.dart';
@@ -59,101 +60,106 @@ class UserApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => UserSession(),
       child: MaterialApp(
-      navigatorKey: Globals.navigatorKey,
-      title: 'Cofi',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: primary),
-        useMaterial3: true,
-      ),
-      debugShowCheckedModeBanner: false,
-      home: const AuthGate(),
-      builder: (context, child) => GestureDetector(
-        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-        child: child,
-      ),
-      onGenerateRoute: (settings) {
-        switch (settings.name) {
-          case '/cafeDetails':
-            final args = settings.arguments as Map<String, dynamic>?;
-            final shopId = args?['shopId'] as String?;
-            return MaterialPageRoute(
-              builder: (context) => CafeDetailsScreen(shopId: shopId),
-            );
-          case '/yourReviews':
-            return MaterialPageRoute(
-              builder: (context) => const YourReviewsScreen(),
-            );
-          case '/visitedCafes':
-            return MaterialPageRoute(
-              builder: (context) => const VisitedCafesScreen(),
-            );
-          case '/submitShop':
-            return MaterialPageRoute(
-              builder: (context) => const SubmitShopScreen(),
-              settings: settings,
-            );
-          case '/business':
-            return MaterialPageRoute(
-              builder: (context) => const BusinessScreen(),
-            );
-          case '/businessProfile':
-            return MaterialPageRoute(
-              builder: (context) => const BusinessProfileScreen(),
-              settings: settings,
-            );
-          case '/businessDashboard':
-            return MaterialPageRoute(
-              builder: (context) => const BusinessDashboardScreen(),
-            );
-          case '/mapView':
-            return MaterialPageRoute(
-              builder: (context) => const MapViewScreen(),
-            );
-          case '/myContributions':
-            return MaterialPageRoute(
-              builder: (context) => const MyContributionsScreen(),
-            );
-          case '/sharedCollection':
-            return MaterialPageRoute(
-              builder: (context) => const SharedCollectionScreen(),
-              settings: settings,
-            );
-          case '/claimShop':
-            return MaterialPageRoute(
-              builder: (context) => const ClaimShopScreen(),
-              settings: settings,
-            );
-          case '/jobChat':
-            final args = settings.arguments as Map<String, dynamic>?;
-            if (args != null) {
+        navigatorKey: Globals.navigatorKey,
+        title: 'Cofi',
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: primary),
+          useMaterial3: true,
+        ),
+        debugShowCheckedModeBanner: false,
+        home: const AuthGate(),
+        builder: (context, child) => GestureDetector(
+          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+          child: child,
+        ),
+        onGenerateRoute: (settings) {
+          switch (settings.name) {
+            case '/cafeDetails':
+              final args = settings.arguments as Map<String, dynamic>?;
+              final shopId = args?['shopId'] as String?;
               return MaterialPageRoute(
-                builder: (context) => JobChatScreen(
-                  jobId: args['jobId'] ?? '',
-                  jobTitle: args['jobTitle'] ?? 'Job',
-                  shopId: args['shopId'] ?? '',
-                  posterId: args['posterId'] ?? '',
-                  applicantId: args['applicantId'] ?? '',
-                  applicationId: args['applicationId'] ?? '',
+                builder: (context) => CafeDetailsScreen(shopId: shopId),
+              );
+            case '/yourReviews':
+              return MaterialPageRoute(
+                builder: (context) => const YourReviewsScreen(),
+              );
+            case '/visitedCafes':
+              return MaterialPageRoute(
+                builder: (context) => const VisitedCafesScreen(),
+              );
+            case '/submitShop':
+              return MaterialPageRoute(
+                builder: (context) => const SubmitShopScreen(),
+                settings: settings,
+              );
+            case '/business':
+              return MaterialPageRoute(
+                builder: (context) => const BusinessScreen(),
+              );
+            case '/businessProfile':
+              return MaterialPageRoute(
+                builder: (context) => const BusinessProfileScreen(),
+                settings: settings,
+              );
+            case '/businessDashboard':
+              return MaterialPageRoute(
+                builder: (context) => const BusinessDashboardScreen(),
+              );
+            case '/mapView':
+              return MaterialPageRoute(
+                builder: (context) => const MapViewScreen(),
+              );
+            case '/myContributions':
+              return MaterialPageRoute(
+                builder: (context) => const MyContributionsScreen(),
+              );
+            case '/sharedCollection':
+              return MaterialPageRoute(
+                builder: (context) => const SharedCollectionScreen(),
+                settings: settings,
+              );
+            case '/claimShop':
+              return MaterialPageRoute(
+                builder: (context) => const ClaimShopScreen(),
+                settings: settings,
+              );
+            case '/notifications':
+              return MaterialPageRoute(
+                builder: (context) => const NotificationScreen(),
+              );
+            case '/jobChat':
+              final args = settings.arguments as Map<String, dynamic>?;
+              if (args != null) {
+                return MaterialPageRoute(
+                  builder: (context) => JobChatScreen(
+                    jobId: args['jobId'] ?? '',
+                    jobTitle: args['jobTitle'] ?? 'Job',
+                    shopId: args['shopId'] ?? '',
+                    posterId: args['posterId'] ?? '',
+                    applicantId: args['applicantId'] ?? '',
+                    applicationId: args['applicationId'] ?? '',
+                    conversationId: args['conversationId'] ?? args['relatedId'],
+                  ),
+                );
+              }
+              return MaterialPageRoute(
+                builder: (context) => const Scaffold(
+                  body: Center(
+                    child: Text('Invalid chat arguments'),
+                  ),
                 ),
               );
-            }
-            return MaterialPageRoute(
-              builder: (context) => const Scaffold(
-                body: Center(
-                  child: Text('Invalid chat arguments'),
+            default:
+              return MaterialPageRoute(
+                builder: (context) => const Scaffold(
+                  body: Center(
+                    child: Text('Page not found'),
+                  ),
                 ),
-              ),
-            );
-          default:
-            return MaterialPageRoute(
-              builder: (context) => const Scaffold(
-                body: Center(
-                  child: Text('Page not found'),
-                ),
-              ),
-            );
-        }
-      },
+              );
+          }
+        },
       ),
     );
   }

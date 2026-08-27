@@ -73,15 +73,21 @@ service cloud.firestore {
 
       // Notifications are written by other users' actions (fan-out),
       // but only the recipient can ever read or manage them. Create is
-      // shape-validated; true sender verification requires moving fan-out
-      // to Cloud Functions.
+      // shape-validated AND type/role-allowlisted so a malicious client can't
+      // invent arbitrary routing types; true sender verification still
+      // requires moving fan-out to Cloud Functions.
       match /notifications/{notificationId} {
         allow read, update, delete: if isSelf(userId);
         allow create: if signedIn()
           && request.resource.data.get('title', '') is string
           && request.resource.data.title.size() <= 500
           && request.resource.data.get('body', '') is string
-          && request.resource.data.body.size() <= 1000;
+          && request.resource.data.body.size() <= 1000
+          && request.resource.data.get('type', '') in
+             ['event', 'event_participation', 'job', 'job_application',
+              'shop', 'recommendation', 'review', 'business_application',
+              'chat']
+          && request.resource.data.get('recipientRole', 'user') in ['user', 'business'];
       }
 
       // Per-user café lists (mirrors the top-level /lists rules below).
@@ -98,15 +104,13 @@ service cloud.firestore {
 
         match /items/{itemId} {
           allow read: if signedIn();
-          allow create: if signedIn()
-            && (!('userId' in request.resource.data)
-                || request.resource.data.userId == request.auth.uid);
+          allow create: if isAdmin() || isSelf(userId);
           allow update, delete: if isAdmin() || isSelf(userId);
         }
 
         match /participants/{participantId} {
           allow read: if signedIn();
-          allow create: if signedIn();
+          allow create: if isAdmin() || isSelf(userId);
           allow update, delete: if isAdmin() || isSelf(userId);
         }
       }
@@ -153,19 +157,14 @@ service cloud.firestore {
 
       // Staff/admin full edit — EXCEPT staff may never mark their own shop
       // verified or flip its status to approved (admin-only decisions).
-      // Everyone else may ONLY append exactly one entry to the embedded
-      // reviews array and set a valid new average.
+      // Rating aggregates are maintained by the trusted review Cloud Function.
       allow update: if isAdmin()
         || (isShopStaff(shopId)
             && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isVerified'])
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['reviews', 'ratings'])
             && !(request.resource.data.diff(resource.data).affectedKeys().hasAny(['approvalStatus'])
                  && request.resource.data.approvalStatus == 'approved'))
-        || (signedIn()
-            && onlyTouches(['reviews', 'ratings'])
-            && request.resource.data.reviews.size() == resource.data.get('reviews', []).size() + 1
-            && request.resource.data.ratings is number
-            && request.resource.data.ratings >= 0
-            && request.resource.data.ratings <= 5);
+        ;
 
       // ----- Jobs (posted and managed by shop staff) -----
       match /jobs/{jobId} {
@@ -184,6 +183,9 @@ service cloud.firestore {
           || (signedIn()
               && onlyTouches(['applications'])
               && request.resource.data.applications.size() == resource.data.get('applications', []).size() + 1
+              && request.resource.data.applications == resource.data.get('applications', []).concat([
+                   request.resource.data.applications[request.resource.data.applications.size() - 1]
+                 ])
               && request.resource.data.applications[request.resource.data.applications.size() - 1].get('applicantId', '') == request.auth.uid);
         allow delete: if isAdmin() || isShopStaff(shopId);
       }
@@ -197,17 +199,41 @@ service cloud.firestore {
         allow update: if isAdmin()
           || isShopStaff(shopId)
           || (signedIn()
-              && onlyTouches(['participants', 'participantsCount', 'participantIds',
-                              'attendees', 'rsvpCount', 'updatedAt']));
+              && onlyTouches(['participantsCount'])
+              && resource.data.get('participantsCount', 0) is int
+              && request.resource.data.participantsCount is int
+              && request.resource.data.participantsCount >= 0
+              && (
+                (request.resource.data.participantsCount == resource.data.get('participantsCount', 0) + 1
+                  && !exists(/databases/$(database)/documents/shops/$(shopId)/events/$(eventId)/participants/$(request.auth.uid))
+                  && existsAfter(/databases/$(database)/documents/shops/$(shopId)/events/$(eventId)/participants/$(request.auth.uid)))
+                ||
+                (request.resource.data.participantsCount == resource.data.get('participantsCount', 0) - 1
+                  && exists(/databases/$(database)/documents/shops/$(shopId)/events/$(eventId)/participants/$(request.auth.uid))
+                  && !existsAfter(/databases/$(database)/documents/shops/$(shopId)/events/$(eventId)/participants/$(request.auth.uid)))
+              ));
         allow delete: if isAdmin() || isShopStaff(shopId);
 
         // Comments: anyone signed-in may join the discussion;
         // authors and admins may edit/remove their own words.
         match /comments/{commentId} {
           allow read: if signedIn();
-          allow create: if signedIn();
+          allow create: if signedIn()
+            && request.resource.data.userId == request.auth.uid;
           allow update, delete: if isAdmin()
             || (signedIn() && resource.data.userId == request.auth.uid);
+        }
+
+        match /participants/{participantId} {
+          allow read: if signedIn();
+          allow create: if signedIn()
+            && participantId == request.auth.uid
+            && request.resource.data.userId == request.auth.uid;
+          allow update, delete: if isAdmin()
+            || isShopStaff(shopId)
+            || (signedIn()
+                && participantId == request.auth.uid
+                && resource.data.userId == request.auth.uid);
         }
       }
 
@@ -215,8 +241,7 @@ service cloud.firestore {
       match /visits/{visitId} {
         allow read: if signedIn();
         allow create: if signedIn()
-          && (!('userId' in request.resource.data)
-              || request.resource.data.userId == request.auth.uid);
+          && request.resource.data.userId == request.auth.uid;
         allow update, delete: if isAdmin()
           || (signedIn() && resource.data.userId == request.auth.uid);
       }
@@ -225,31 +250,24 @@ service cloud.firestore {
       match /reviews/{reviewId} {
         allow read: if signedIn();
         allow create: if signedIn()
-          && (!('userId' in request.resource.data)
-              || request.resource.data.userId == request.auth.uid);
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.rating is number
+          && request.resource.data.rating >= 1
+          && request.resource.data.rating <= 5;
         // Authors edit their own reviews; shop staff append responses.
         allow update: if isAdmin()
-          || (signedIn() && resource.data.userId == request.auth.uid)
-          || isShopStaff(shopId);
+          || (signedIn()
+              && resource.data.userId == request.auth.uid
+              && request.resource.data.userId == request.auth.uid
+              && request.resource.data.get('responses', []) == resource.data.get('responses', []))
+          || (isShopStaff(shopId) && onlyTouches(['responses']));
         allow delete: if isAdmin()
           || (signedIn() && resource.data.userId == request.auth.uid);
       }
 
       match /menuImages/{imageId} {
-        allow read, create, delete: if signedIn();
-      }
-
-      // ----- Event participants (RSVP) -----
-      // Attendees create their own participant record and may remove it
-      // (leave); staff/admin manage all.
-      match /participants/{participantId} {
         allow read: if signedIn();
-        allow create: if signedIn()
-          && (!('userId' in request.resource.data)
-              || request.resource.data.userId == request.auth.uid);
-        allow update, delete: if isAdmin()
-          || isShopStaff(shopId)
-          || (signedIn() && resource.data.userId == request.auth.uid);
+        allow create, delete: if isAdmin() || isShopStaff(shopId);
       }
     }
 
@@ -269,6 +287,7 @@ service cloud.firestore {
       allow update: if isAdmin()
         || (signedIn()
             && resource.data.get('claimantId', '') == request.auth.uid
+            && request.resource.data.get('claimantId', '') == request.auth.uid
             && resource.data.get('status', 'pending') != 'approved'
             && request.resource.data.get('status', 'pending') == 'pending'
             && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['shopId']));
@@ -306,7 +325,10 @@ service cloud.firestore {
       // Shared-collection participants may see/join, list owner manages.
       match /participants/{participantId} {
         allow read: if signedIn();
-        allow create: if signedIn();
+        allow create: if isAdmin()
+          || (signedIn()
+              && exists(/databases/$(database)/documents/lists/$(listId))
+              && get(/databases/$(database)/documents/lists/$(listId)).data.userId == request.auth.uid);
         allow update, delete: if isAdmin()
           || (signedIn()
               && exists(/databases/$(database)/documents/lists/$(listId))
@@ -318,7 +340,8 @@ service cloud.firestore {
     // ---------- Shared collections (community hub) ----------
     match /sharedCollections/{shareId} {
       allow read: if signedIn();
-      allow create: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid;
       // sharedBy holds the uid for new docs; LEGACY docs stored a display
       // name there but always carried the real owner in `userId`, so that
       // field authorizes managing old shares without a data migration.
@@ -330,41 +353,63 @@ service cloud.firestore {
 
     // ---------- Job chat ----------
     match /job_chats/{chatId} {
-      allow read: if signedIn();
-      allow create: if signedIn();
+      allow read: if isAdmin()
+        || (signedIn()
+            && (resource.data.get('participants', []).hasAny([request.auth.uid])
+                || chatId.split('_')[0] == request.auth.uid
+                || chatId.split('_')[1] == request.auth.uid));
+      // Creators must be a participant of the chat they open (via the
+      // participants array or the uids embedded in {uidA}_{uidB}_{jobId}
+      // doc ids) — otherwise anyone could fabricate arbitrary threads.
+      allow create: if signedIn()
+        && request.resource.data.get('participants', []).hasAny([request.auth.uid])
+        && request.resource.data.posterId in request.resource.data.participants
+        && request.resource.data.applicantId in request.resource.data.participants;
       // Only chat participants (via the `participants` array, or the uids
       // embedded in legacy {uidA}_{uidB}_{jobId} doc ids) and admins may
       // update a chat thread's metadata.
       allow update: if isAdmin()
         || (signedIn()
-            && (resource.data.get('participants', []).hasAny([request.auth.uid])
-                || chatId.split('_')[0] == request.auth.uid
-                || chatId.split('_')[1] == request.auth.uid));
+            && (
+              (resource.data.get('participants', []).hasAny([request.auth.uid])
+                && request.resource.data.participants == resource.data.participants)
+              || (!('participants' in resource.data)
+                && request.resource.data.participants.hasAny([request.auth.uid])
+                && chatId.split('_')[0] in request.resource.data.participants
+                && chatId.split('_')[1] in request.resource.data.participants)
+            ));
       allow delete: if isAdmin();
       match /messages/{messageId} {
-        allow read: if signedIn();
-        allow create: if signedIn();
+        allow read: if isAdmin()
+          || (signedIn()
+              && (get(/databases/$(database)/documents/job_chats/$(chatId)).data.get('participants', []).hasAny([request.auth.uid])
+                  || chatId.split('_')[0] == request.auth.uid
+                  || chatId.split('_')[1] == request.auth.uid));
+        allow create: if signedIn()
+          && getAfter(/databases/$(database)/documents/job_chats/$(chatId)).data.get('participants', []).hasAny([request.auth.uid])
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.recipientId in getAfter(/databases/$(database)/documents/job_chats/$(chatId)).data.participants
+          && request.resource.data.recipientId != request.auth.uid;
         // Senders manage their own messages; the RECIPIENT may only mark
         // their incoming messages as read (isRead/readAt keys only). LEGACY
         // messages predate recipientId, but chat ids embed both participant
         // uids ({uidA}_{uidB}_{jobId}) — that authorizes read-marking of
         // old threads without a backfill.
-        allow update, delete: if isAdmin()
-          || (signedIn() && resource.data.senderId == request.auth.uid)
+        allow update: if isAdmin()
           || (signedIn()
               && resource.data.get('recipientId', '') == request.auth.uid
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'readAt']))
           || (signedIn()
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'readAt'])
-              && (chatId.split('_')[0] == request.auth.uid
-                  || chatId.split('_')[1] == request.auth.uid));
+              && get(/databases/$(database)/documents/job_chats/$(chatId)).data.get('participants', []).hasAny([request.auth.uid]));
+        allow delete: if isAdmin()
+          || (signedIn() && resource.data.senderId == request.auth.uid);
       }
     }
 
     match /messages/{messageId} {
-      allow read, create: if signedIn();
-      allow update, delete: if isAdmin()
-        || (signedIn() && resource.data.senderId == request.auth.uid);
+      // Deprecated top-level message documents are not used by the app.
+      allow read, write: if isAdmin();
     }
 
     // ---------- Denormalized job feeds ----------

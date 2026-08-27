@@ -101,6 +101,7 @@ class CafeEvent {
 
   static DateTime? _parseDate(dynamic value) {
     if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
     if (value is String && value.isNotEmpty) {
       try {
         return DateTime.parse(value);
@@ -114,7 +115,7 @@ class CafeEvent {
       id: id,
       title: data['title'] as String? ?? 'Event',
       address: data['address'] as String? ?? 'Address not specified',
-      startDate: _parseDate(data['startDate']),
+      startDate: _parseDate(data['startDate'] ?? data['date']),
       endDate: _parseDate(data['endDate']),
       about: data['about'] as String? ?? '',
       email: data['email'] as String? ?? '',
@@ -125,9 +126,8 @@ class CafeEvent {
             data['imageUrl'] is String)
           data['imageUrl'] as String,
       ],
-      latitude: data['latitude'] is num
-          ? (data['latitude'] as num).toDouble()
-          : null,
+      latitude:
+          data['latitude'] is num ? (data['latitude'] as num).toDouble() : null,
       longitude: data['longitude'] is num
           ? (data['longitude'] as num).toDouble()
           : null,

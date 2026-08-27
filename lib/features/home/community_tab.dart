@@ -1,5 +1,4 @@
 import 'package:cofi/utils/logger.dart';
-import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/data/repositories/community_repository.dart';
@@ -169,7 +168,7 @@ class _CommunityTabState extends State<CommunityTab> {
                     decoration: BoxDecoration(
                       color: const Color(0xFF1E1E1E),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withOpacity(0.08)),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -208,7 +207,7 @@ class _CommunityTabState extends State<CommunityTab> {
                         return LinearGradient(
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
-                          colors: [Colors.white, Colors.white, Colors.white.withOpacity(0.6)],
+                          colors: [Colors.white, Colors.white, Colors.white.withValues(alpha: 0.6)],
                           stops: [0.0, 0.88, 1.0],
                         ).createShader(bounds);
                       },
@@ -341,7 +340,7 @@ class _CommunityTabState extends State<CommunityTab> {
                         return LinearGradient(
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
-                          colors: [Colors.white, Colors.white, Colors.white.withOpacity(0.6)],
+                          colors: [Colors.white, Colors.white, Colors.white.withValues(alpha: 0.6)],
                           stops: [0.0, 0.88, 1.0],
                         ).createShader(bounds);
                       },
@@ -719,7 +718,7 @@ class _CommunityTabState extends State<CommunityTab> {
         width: 240,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
-          color: Colors.white.withOpacity(0.05),
+          color: Colors.white.withValues(alpha: 0.05),
           border: Border.all(
             color: Colors.white.withValues(alpha: 0.1),
             width: 1,
@@ -752,7 +751,7 @@ class _CommunityTabState extends State<CommunityTab> {
                             for (var i = 0; i < 4; i++)
                               Container(
                                 decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.white.withOpacity(0.05), width: 0.5),
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
                                 ),
                                 child: CachedNetworkImage(
                                   imageUrl: previewLogos[i],
@@ -772,9 +771,9 @@ class _CommunityTabState extends State<CommunityTab> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.black.withOpacity(0.1),
-                      Colors.black.withOpacity(0.4),
-                      Colors.black.withOpacity(0.9),
+                      Colors.black.withValues(alpha: 0.1),
+                      Colors.black.withValues(alpha: 0.4),
+                      Colors.black.withValues(alpha: 0.9),
                     ],
                     stops: const [0.0, 0.4, 0.85],
                   ),
@@ -791,7 +790,7 @@ class _CommunityTabState extends State<CommunityTab> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: primary.withOpacity(0.1),
+                      color: primary.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: primary.withValues(alpha: 0.3),

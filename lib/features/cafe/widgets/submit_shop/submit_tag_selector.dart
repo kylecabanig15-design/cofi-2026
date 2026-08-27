@@ -52,7 +52,7 @@ class SubmitTagSelector extends StatelessWidget {
               ),
             ],
           );
-        }).toList(),
+        }),
       ],
     );
   }

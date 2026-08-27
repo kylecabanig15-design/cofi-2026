@@ -133,7 +133,7 @@ class _EventArchivesScreenState extends State<EventArchivesScreen> {
         v is String ? v : (v?.toString() ?? fallback);
     final title = asString(event['title'], 'Event');
     final address = asString(event['address'], '');
-    final startDateRaw = event['startDate'];
+    final startDateRaw = event['startDate'] ?? event['date'];
     final endDateRaw = event['endDate'];
     final imageUrl = asString(event['imageUrl'], '');
 
@@ -143,22 +143,20 @@ class _EventArchivesScreenState extends State<EventArchivesScreen> {
     DateTime? endDateTime;
 
     // Parse startDate
-    if (startDateRaw is Timestamp) {
-      startDateTime = startDateRaw.toDate();
-    } else if (startDateRaw is String && startDateRaw.isNotEmpty) {
-      try {
-        startDateTime = DateTime.parse(startDateRaw);
-      } catch (_) {}
+    final d = event['date'];
+    if (d is Timestamp) startDateTime = d.toDate();
+    else if (d is String && d.isNotEmpty) startDateTime = DateTime.tryParse(d);
+
+    final sd = event['startDate'];
+    if (startDateTime == null) {
+      if (sd is Timestamp) startDateTime = sd.toDate();
+      else if (sd is String && sd.isNotEmpty) startDateTime = DateTime.tryParse(sd);
     }
 
     // Parse endDate
-    if (endDateRaw is Timestamp) {
-      endDateTime = endDateRaw.toDate();
-    } else if (endDateRaw is String && endDateRaw.isNotEmpty) {
-      try {
-        endDateTime = DateTime.parse(endDateRaw);
-      } catch (_) {}
-    }
+    final ed = event['endDate'];
+    if (ed is Timestamp) endDateTime = ed.toDate();
+    else if (ed is String && ed.isNotEmpty) endDateTime = DateTime.tryParse(ed);
 
     if (startDateTime != null) {
       if (endDateTime != null) {
@@ -167,6 +165,9 @@ class _EventArchivesScreenState extends State<EventArchivesScreen> {
       } else {
         dateRange = _formatDate(startDateTime);
       }
+    } else {
+      if (d is String && d.isNotEmpty) dateRange = d;
+      else if (sd is String && sd.isNotEmpty) dateRange = sd;
     }
 
     return Container(

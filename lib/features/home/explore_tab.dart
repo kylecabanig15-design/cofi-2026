@@ -1,20 +1,13 @@
 import 'package:cofi/utils/logger.dart';
-import 'dart:math' as math;
 
 import 'package:cofi/features/cafe/cafe_details_screen.dart';
-import 'package:cofi/features/events/event_details_screen.dart';
-import 'package:cofi/services/google_sign_in_service.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:get_storage/get_storage.dart';
-import 'package:cofi/widgets/premium_background.dart';
-import 'package:cofi/utils/formatters.dart';
 
 import 'explore/widgets/explore_shop_card.dart';
 import 'explore/widgets/explore_featured_card.dart';
@@ -22,6 +15,7 @@ import 'explore/widgets/explore_search_bar.dart';
 import 'explore/widgets/explore_events_section.dart';
 import 'explore/utils/explore_utils.dart';
 import 'explore/services/recommendation_service.dart';
+import 'package:cofi/utils/app_signals.dart';
 
 class ExploreTab extends StatefulWidget {
   final VoidCallback? onOpenCommunity;
@@ -31,7 +25,13 @@ class ExploreTab extends StatefulWidget {
   final ScrollController? scrollController;
   final void Function(String shopId, Map<String, dynamic> data)? onFirstCafeTap;
   const ExploreTab(
-      {super.key, this.onOpenCommunity, this.searchKey, this.filterKey, this.firstCafeKey, this.scrollController, this.onFirstCafeTap});
+      {super.key,
+      this.onOpenCommunity,
+      this.searchKey,
+      this.filterKey,
+      this.firstCafeKey,
+      this.scrollController,
+      this.onFirstCafeTap});
 
   @override
   State<ExploreTab> createState() => ExploreTabState();
@@ -104,6 +104,7 @@ class ExploreTabState extends State<ExploreTab> {
   // Map of shopId -> recommendation score computed from similar users (cosine-based)
   Map<String, double> _shopRecommendationScores = {};
   final _box = GetStorage();
+  int _recommendationRequestId = 0;
 
   // Consolidated Grouped Filters
   final Set<String> _selectedFilters = {};
@@ -149,6 +150,7 @@ class ExploreTabState extends State<ExploreTab> {
   @override
   void initState() {
     super.initState();
+    recommendationVersion.addListener(_refreshRecommendations);
     _updateShopsStream();
     _featuredShopsStream = FirebaseFirestore.instance
         .collection('shops')
@@ -182,6 +184,11 @@ class ExploreTabState extends State<ExploreTab> {
     _fetchUserInterests();
   }
 
+  void _refreshRecommendations() {
+    _fetchUserInterests();
+    _loadRecommendationScores(forceRefresh: true);
+  }
+
   // New method to fetch user interests
   Future<void> _fetchUserInterests() async {
     if (_user == null) return;
@@ -194,7 +201,9 @@ class ExploreTabState extends State<ExploreTab> {
 
       if (userDoc.exists) {
         final data = userDoc.data();
-        final interests = (data?['interests'] as List?)?.cast<String>() ?? [];
+        final interests =
+            (data?['interests'] as List?)?.whereType<String>().toList() ?? [];
+        if (!mounted) return;
         setState(() {
           _userInterests = interests;
           _updateShopsStream();
@@ -210,12 +219,13 @@ class ExploreTabState extends State<ExploreTab> {
   /// This uses _findSimilarUsers(), which is based on calculateCosineSimilarity.
   /// includes Caching (24h) and optimizations.
   Future<void> _loadRecommendationScores({bool forceRefresh = false}) async {
+    final requestId = ++_recommendationRequestId;
     final scores = await RecommendationService().loadRecommendationScores(
       user: _user,
       box: _box,
       forceRefresh: forceRefresh,
     );
-    if (!mounted) return;
+    if (!mounted || requestId != _recommendationRequestId) return;
     setState(() {
       _shopRecommendationScores = scores;
     });
@@ -223,6 +233,7 @@ class ExploreTabState extends State<ExploreTab> {
 
   @override
   void dispose() {
+    recommendationVersion.removeListener(_refreshRecommendations);
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -300,7 +311,11 @@ class ExploreTabState extends State<ExploreTab> {
 
     return RefreshIndicator(
       onRefresh: () async {
-        await _loadRecommendationScores(forceRefresh: true);
+        // Firestore streams already refresh the visible feed. Re-read the
+        // user's interests and use the cached score immediately instead of
+        // blocking the pull gesture on a full collaborative recomputation.
+        await _fetchUserInterests();
+        await _loadRecommendationScores();
       },
       color: primary,
       backgroundColor: Colors.black87,
@@ -313,11 +328,11 @@ class ExploreTabState extends State<ExploreTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: _buildSearchBar(),
-                  ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: _buildSearchBar(),
+                ),
                 const SizedBox(height: 12),
                 SizedBox(
                   height: 44,
@@ -327,7 +342,11 @@ class ExploreTabState extends State<ExploreTab> {
                       return LinearGradient(
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
-                        colors: [Colors.white, Colors.white, Colors.white.withOpacity(0.6)],
+                        colors: [
+                          Colors.white,
+                          Colors.white,
+                          Colors.white.withValues(alpha: 0.6)
+                        ],
                         stops: const [0.0, 0.88, 1.0],
                       ).createShader(bounds);
                     },
@@ -341,8 +360,9 @@ class ExploreTabState extends State<ExploreTab> {
                           const SizedBox(width: 8),
                       itemBuilder: (context, i) {
                         // Automatically remove "For You" chip when searching as requested
-                        if (_query.isNotEmpty && i == 0)
+                        if (_query.isNotEmpty && i == 0) {
                           return const SizedBox.shrink();
+                        }
 
                         final isSelected = _selectedChip == i;
                         return GestureDetector(
@@ -357,9 +377,12 @@ class ExploreTabState extends State<ExploreTab> {
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 250),
                             curve: Curves.easeInOut,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 12),
                             decoration: BoxDecoration(
-                              color: isSelected ? primary : const Color(0xFF222222),
+                              color: isSelected
+                                  ? primary
+                                  : const Color(0xFF222222),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                 color: isSelected ? primary : Colors.white12,
@@ -368,7 +391,7 @@ class ExploreTabState extends State<ExploreTab> {
                               boxShadow: isSelected
                                   ? [
                                       BoxShadow(
-                                        color: primary.withOpacity(0.3),
+                                        color: primary.withValues(alpha: 0.3),
                                         blurRadius: 10,
                                         offset: const Offset(0, 2),
                                       )
@@ -391,7 +414,9 @@ class ExploreTabState extends State<ExploreTab> {
                 // Tag filters
                 // _buildTagFilters(),
                 const SizedBox(height: 18),
-                if (_query.isEmpty && _selectedFilters.isEmpty && _selectedChip == 0) ...[
+                if (_query.isEmpty &&
+                    _selectedFilters.isEmpty &&
+                    _selectedChip == 0) ...[
                   _sectionTitle('Monthly Featured Cafe Shops'),
                   const SizedBox(height: 10),
                   if (userSnap != null)
@@ -412,10 +437,10 @@ class ExploreTabState extends State<ExploreTab> {
                             List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
                           future: Future.value(_sortFeaturedShops(docs)),
                           builder: (context, sortedSnap) {
-                          if (sortedSnap.connectionState ==
-                              ConnectionState.waiting) {
-                            return const SizedBox(
-                              height: 220,
+                            if (sortedSnap.connectionState ==
+                                ConnectionState.waiting) {
+                              return const SizedBox(
+                                height: 220,
                                 child: Center(
                                   child:
                                       CircularProgressIndicator(strokeWidth: 2),
@@ -439,62 +464,69 @@ class ExploreTabState extends State<ExploreTab> {
                                     return LinearGradient(
                                       begin: Alignment.centerLeft,
                                       end: Alignment.centerRight,
-                                      colors: [Colors.white, Colors.white, Colors.white.withOpacity(0.6)],
+                                      colors: [
+                                        Colors.white,
+                                        Colors.white,
+                                        Colors.white.withValues(alpha: 0.6)
+                                      ],
                                       stops: [0.0, 0.88, 1.0],
                                     ).createShader(bounds);
                                   },
                                   blendMode: BlendMode.dstIn,
                                   child: PageView.builder(
                                     padEnds: false,
-                                    controller: PageController(viewportFraction: 0.96),
-                                physics: const BouncingScrollPhysics(),
-                                itemCount: sorted.length,
-                                itemBuilder: (context, idx) {
-                                  final d = sorted[idx];
-                                  return Padding(
-                                    padding: const EdgeInsets.only(right: 14),
-                                    child: _buildFeaturedCard(
-                                      shopData: d.data(),
-                                      id: d.id,
-                                      name: ((d.data()['name'] ?? '')
-                                              as String?) ??
-                                          '',
-                                      city: _getAddressAsString(
-                                          d.data()['address']),
-                                      hours: _hoursFromSchedule(
-                                          _getScheduleAsMap(
-                                              d.data()['schedule'])),
-                                      ratingText: TextWidget(
-                                        text: _ratingText(
-                                          d.data()['ratings'],
-                                          d.data()['reviews'],
-                                        ),
-                                        fontSize: 13,
-                                        color: Colors.white,
-                                      ),
-                                      isBookmarked: _bookmarks.contains(d.id),
-                                      onTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                CafeDetailsScreen(
-                                              shopId: d.id,
-                                              shop: d.data(),
+                                    controller:
+                                        PageController(viewportFraction: 0.96),
+                                    physics: const BouncingScrollPhysics(),
+                                    itemCount: sorted.length,
+                                    itemBuilder: (context, idx) {
+                                      final d = sorted[idx];
+                                      return Padding(
+                                        padding:
+                                            const EdgeInsets.only(right: 14),
+                                        child: _buildFeaturedCard(
+                                          shopData: d.data(),
+                                          id: d.id,
+                                          name: ((d.data()['name'] ?? '')
+                                                  as String?) ??
+                                              '',
+                                          city: _getAddressAsString(
+                                              d.data()['address']),
+                                          hours: _hoursFromSchedule(
+                                              _getScheduleAsMap(
+                                                  d.data()['schedule'])),
+                                          ratingText: TextWidget(
+                                            text: _ratingText(
+                                              d.data()['ratings'],
+                                              d.data()['reviews'],
                                             ),
+                                            fontSize: 13,
+                                            color: Colors.white,
                                           ),
-                                        );
-                                      },
-                                      onBookmark: () => _toggleBookmark(
-                                        d.id,
-                                        _bookmarks.contains(d.id),
-                                      ),
-                                      width: double.infinity,
-                                    ),
-                                  );
-                                },
-                              ),
-                              ),
+                                          isBookmarked:
+                                              _bookmarks.contains(d.id),
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    CafeDetailsScreen(
+                                                  shopId: d.id,
+                                                  shop: d.data(),
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                          onBookmark: () => _toggleBookmark(
+                                            d.id,
+                                            _bookmarks.contains(d.id),
+                                          ),
+                                          width: double.infinity,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
                               ),
                             );
                           },
@@ -520,11 +552,11 @@ class ExploreTabState extends State<ExploreTab> {
                       child: _buildCheckCommunityButton()),
                 ),
                 const SizedBox(height: 18),
-                  _sectionTitle('Shops'),
-                  const SizedBox(height: 10),
-                ],
-              ),
+                _sectionTitle('Shops'),
+                const SizedBox(height: 10),
+              ],
             ),
+          ),
           // Shops stream result
           if (shopsSnap != null) ...[
             _buildShopsSliver(shopsSnap),
@@ -564,7 +596,7 @@ class ExploreTabState extends State<ExploreTab> {
       final docs = snap.data?.docs ?? [];
       // Apply filters and sorting based on chips and bottom-sheet
       filtered = _applyFilters(docs, _userInterests);
-      
+
       // Save for programmatic access
       // Wrap in microtask to avoid state modification during build
       Future.microtask(() {
@@ -595,7 +627,8 @@ class ExploreTabState extends State<ExploreTab> {
                   key: i == 0 ? widget.firstCafeKey : null,
                   onTap: () {
                     if (i == 0 && widget.onFirstCafeTap != null) {
-                      widget.onFirstCafeTap!(filtered[i].id, filtered[i].data());
+                      widget.onFirstCafeTap!(
+                          filtered[i].id, filtered[i].data());
                     } else {
                       Navigator.push(
                         context,
@@ -616,9 +649,13 @@ class ExploreTabState extends State<ExploreTab> {
                     city: _getAddressAsString(filtered[i].data()['address']),
                     hours: _hoursFromSchedule(
                         _getScheduleAsMap(filtered[i].data()['schedule'])),
-                    ratingText: TextWidget(text: _ratingText(filtered[i].data()['ratings'], filtered[i].data()['reviews']), fontSize: 13, color: Colors.white),
+                    ratingText: TextWidget(
+                        text: _ratingText(filtered[i].data()['ratings'],
+                            filtered[i].data()['reviews']),
+                        fontSize: 13,
+                        color: Colors.white),
                     isBookmarked: _bookmarks.contains(filtered[i].id),
-                    icon: FontAwesomeIcons.coffee,
+                    icon: Icons.coffee,
                     onBookmark: () => _toggleBookmark(
                       filtered[i].id,
                       _bookmarks.contains(filtered[i].id),
@@ -672,7 +709,6 @@ class ExploreTabState extends State<ExploreTab> {
     });
     return sorted;
   }
-
 
   Stream<QuerySnapshot<Map<String, dynamic>>> _getShopsStream(
       List<String> userInterests) {
@@ -811,7 +847,7 @@ class ExploreTabState extends State<ExploreTab> {
         final sb = _shopRecommendationScores[b.id] ?? 0.0;
 
         // 2) Get Interest Bonus (Content-based)
-        double _getBonus(QueryDocumentSnapshot<Map<String, dynamic>> d,
+        double getBonus(QueryDocumentSnapshot<Map<String, dynamic>> d,
             List<String> interests) {
           if (interests.isEmpty) return 0.0;
           final tags = (d.data()['tags'] as List?)?.cast<String>() ?? [];
@@ -819,8 +855,8 @@ class ExploreTabState extends State<ExploreTab> {
           return matchCount * 1.5; // Strong bonus for direct interest matches
         }
 
-        final bonusA = _getBonus(a, interests);
-        final bonusB = _getBonus(b, interests);
+        final bonusA = getBonus(a, interests);
+        final bonusB = getBonus(b, interests);
         final scoreA = sa + bonusA;
         final scoreB = sb + bonusB;
 
@@ -926,8 +962,7 @@ class ExploreTabState extends State<ExploreTab> {
     );
   }
 
-  Widget _buildSubmissionBadge(bool isVerified, String submissionType,
-      {bool hasRankBadge = false, bool isFeatured = false}) {
+  Widget _buildSubmissionBadge(bool isVerified, String submissionType) {
     return const SizedBox.shrink();
   }
 
@@ -935,9 +970,6 @@ class ExploreTabState extends State<ExploreTab> {
     required List<String> galleryImages,
     required bool isBookmarked,
     required VoidCallback onBookmark,
-    bool isVerified = false,
-    String submissionType = 'community',
-    bool isFeatured = false,
   }) {
     return const SizedBox.shrink();
   }
@@ -970,7 +1002,7 @@ class ExploreTabState extends State<ExploreTab> {
   String _ratingText(dynamic ratings, dynamic reviewsData) {
     num r = (ratings is num) ? ratings : 0;
     int c = 0;
-    
+
     if (reviewsData is List) {
       c = reviewsData.length;
       if (r == 0 && c > 0) {
@@ -985,15 +1017,13 @@ class ExploreTabState extends State<ExploreTab> {
     } else if (reviewsData is num) {
       c = reviewsData.toInt();
     }
-    
+
     return ExploreUtils.ratingText(r, c);
   }
 
   String _hoursFromSchedule(Map<String, dynamic> schedule) {
     return ExploreUtils.hoursFromSchedule(schedule);
   }
-
-
 
   bool _isOpenTodayFromSchedule(Map<String, dynamic> schedule) {
     return ExploreUtils.isOpenTodayFromSchedule(schedule);
@@ -1247,9 +1277,6 @@ class ExploreTabState extends State<ExploreTab> {
     required List<String> galleryImages,
     required bool isBookmarked,
     required VoidCallback onBookmark,
-    bool isVerified = false,
-    String submissionType = 'community',
-    bool hasRankBadge = false,
   }) {
     return const SizedBox.shrink();
   }

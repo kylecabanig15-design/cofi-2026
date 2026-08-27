@@ -7,7 +7,7 @@ enum ToastType { success, error, info }
 
 class CustomToast {
   static void show(
-    BuildContext context, 
+    BuildContext context,
     String message, {
     ToastType type = ToastType.info,
     Duration duration = const Duration(seconds: 3),
@@ -31,7 +31,6 @@ class CustomToast {
         borderColor = Colors.red.withValues(alpha: 0.3);
         break;
       case ToastType.info:
-      default:
         icon = Icons.info_outline;
         iconColor = primary;
         backgroundColor = primary.withValues(alpha: 0.1);
@@ -52,7 +51,8 @@ class CustomToast {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: backgroundColor.withValues(alpha: 0.8), // Slightly more opaque for readability
+              color: backgroundColor.withValues(
+                  alpha: 0.8), // Slightly more opaque for readability
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: borderColor, width: 1.5),
               boxShadow: [

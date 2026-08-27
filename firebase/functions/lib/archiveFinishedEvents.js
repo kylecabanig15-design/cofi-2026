@@ -58,9 +58,8 @@ exports.archiveFinishedEvents = functions.pubsub
     for (const shop of shopsSnap.docs) {
         const eventsSnap = await shop.ref
             .collection("events")
-            .where("isArchived", "==", false)
             .get();
-        const batch = db.batch();
+        let batch = db.batch();
         let batchOps = 0;
         for (const event of eventsSnap.docs) {
             const data = event.data();
@@ -82,6 +81,7 @@ exports.archiveFinishedEvents = functions.pubsub
                 batchOps++;
                 if (batchOps >= 400) {
                     await batch.commit();
+                    batch = db.batch();
                     batchOps = 0;
                 }
             }

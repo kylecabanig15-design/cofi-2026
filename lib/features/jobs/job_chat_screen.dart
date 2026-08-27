@@ -12,6 +12,7 @@ class JobChatScreen extends StatefulWidget {
   final String posterId;
   final String applicantId;
   final String applicationId;
+  final String? conversationId;
 
   const JobChatScreen({
     super.key,
@@ -21,6 +22,7 @@ class JobChatScreen extends StatefulWidget {
     required this.posterId,
     required this.applicantId,
     required this.applicationId,
+    this.conversationId,
   });
 
   @override
@@ -35,17 +37,21 @@ class _JobChatScreenState extends State<JobChatScreen> {
 
   String? _currentUserName;
   String? _otherUserName;
+  late String _posterId;
+  late String _applicantId;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
+    _posterId = widget.posterId;
+    _applicantId = widget.applicantId;
     _fetchUserNames();
-    
+
     // Set active chat ID to suppress notifications while viewing
     final chatId = _getChatId();
     NotificationService().setActiveChat(chatId);
-    
+
     // Mark existing notifications for this chat as read
     _markChatAsRead(chatId);
   }
@@ -53,7 +59,7 @@ class _JobChatScreenState extends State<JobChatScreen> {
   Future<void> _markChatAsRead(String chatId) async {
     final user = _auth.currentUser;
     if (user == null) return;
-    
+
     try {
       final notifications = await _firestore
           .collection('users')
@@ -63,12 +69,12 @@ class _JobChatScreenState extends State<JobChatScreen> {
           .where('relatedId', isEqualTo: chatId)
           .where('isRead', isEqualTo: false)
           .get();
-          
+
       for (var doc in notifications.docs) {
         await doc.reference.update({'isRead': true});
       }
-      
-      // We don't decrement the local storage counter directly here, 
+
+      // We don't decrement the local storage counter directly here,
       // but it will be handled properly when the user checks notifications.
     } catch (e) {
       debugLog('Error marking chat as read: $e');
@@ -79,7 +85,13 @@ class _JobChatScreenState extends State<JobChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
-    NotificationService().setActiveChat(null);
+    // Only clear the suppression if THIS chat is still the active one —
+    // when chats are stacked (e.g. a notification tap opens chat B on top
+    // of chat A), popping B must not unsuppress the now-visible A.
+    final chatId = _getChatId();
+    if (NotificationService().activeChatId == chatId) {
+      NotificationService().setActiveChat(null);
+    }
     super.dispose();
   }
 
@@ -92,32 +104,79 @@ class _JobChatScreenState extends State<JobChatScreen> {
       final currentUserDoc =
           await _firestore.collection('users').doc(currentUser.uid).get();
 
-      // Determine who is the other user
-      final String otherUserId = currentUser.uid == widget.posterId
-          ? widget.applicantId
-          : widget.posterId;
+      // Prefer the participants stored on the conversation. Notification
+      // metadata can be missing on older notifications.
+      if ((_posterId.isEmpty || _applicantId.isEmpty) &&
+          widget.conversationId?.isNotEmpty == true) {
+        final chatDoc = await _firestore
+            .collection('job_chats')
+            .doc(widget.conversationId)
+            .get();
+        final chatData = chatDoc.data();
+        _posterId = (chatData?['posterId'] as String?) ?? _posterId;
+        _applicantId = (chatData?['applicantId'] as String?) ?? _applicantId;
+      }
+
+      final String otherUserId =
+          currentUser.uid == _posterId ? _applicantId : _posterId;
 
       // Get other user's name
-      final otherUserDoc =
-          await _firestore.collection('users').doc(otherUserId).get();
+      final otherUserDoc = otherUserId.isEmpty
+          ? null
+          : await _firestore.collection('users').doc(otherUserId).get();
 
+      final currentData = currentUserDoc.data();
+      final otherData = otherUserDoc?.data();
+
+      if (!mounted) return;
       setState(() {
-        _currentUserName = currentUserDoc.data()?['firstName'] ?? 'User';
-        _otherUserName = otherUserDoc.data()?['displayName'] ?? 'User';
+        _currentUserName = _userDisplayName(
+          currentData,
+          authDisplayName: currentUser.displayName,
+        );
+        _otherUserName = _userDisplayName(otherData);
         _isLoading = false;
       });
     } catch (e) {
+      debugLog('Error loading chat participant names: $e');
+      if (!mounted) return;
       setState(() {
-        _currentUserName = 'User';
+        _currentUserName = _nonEmpty(currentUser.displayName) ?? 'User';
         _otherUserName = 'User';
         _isLoading = false;
       });
     }
   }
 
+  String _userDisplayName(
+    Map<String, dynamic>? data, {
+    String? authDisplayName,
+  }) {
+    final firstName = _nonEmpty(data?['firstName']);
+    final lastName = _nonEmpty(data?['lastName']);
+    final fullNameFromParts =
+        [firstName, lastName].whereType<String>().join(' ').trim();
+
+    return _nonEmpty(data?['name']) ??
+        _nonEmpty(data?['displayName']) ??
+        _nonEmpty(fullNameFromParts) ??
+        _nonEmpty(authDisplayName) ??
+        'User';
+  }
+
+  String? _nonEmpty(Object? value) {
+    final text = value?.toString().trim();
+    return text == null || text.isEmpty ? null : text;
+  }
+
   String _getChatId() {
+    final storedConversationId = widget.conversationId?.trim();
+    if (storedConversationId != null && storedConversationId.isNotEmpty) {
+      return storedConversationId;
+    }
+
     // Create a consistent chat ID by sorting the user IDs
-    final List<String> userIds = [widget.posterId, widget.applicantId];
+    final List<String> userIds = [_posterId, _applicantId];
     userIds.sort();
     return '${userIds[0]}_${userIds[1]}_${widget.jobId}';
   }
@@ -128,6 +187,12 @@ class _JobChatScreenState extends State<JobChatScreen> {
     final currentUser = _auth.currentUser;
     if (currentUser == null) return;
 
+    // A fast reply can happen before the initial profile lookup completes.
+    // Wait for it so the recipient sees the actual sender name.
+    if (_currentUserName == null) {
+      await _fetchUserNames();
+    }
+
     final messageText = _messageController.text.trim();
     _messageController.clear();
 
@@ -135,7 +200,7 @@ class _JobChatScreenState extends State<JobChatScreen> {
       final chatId = _getChatId();
       // The other participant in the chat
       final recipientId =
-          currentUser.uid == widget.posterId ? widget.applicantId : widget.posterId;
+          currentUser.uid == _posterId ? _applicantId : _posterId;
       final message = {
         'text': messageText,
         'senderId': currentUser.uid,
@@ -145,33 +210,35 @@ class _JobChatScreenState extends State<JobChatScreen> {
         'isRead': false,
       };
 
-      // Add message to chat
-      final docRef = await _firestore
-          .collection('job_chats')
-          .doc(chatId)
-          .collection('messages')
-          .add(message);
-
+      final chatRef = _firestore.collection('job_chats').doc(chatId);
+      final docRef = chatRef.collection('messages').doc();
       final messageId = docRef.id;
 
-      // Update or create chat document
-      await _firestore.collection('job_chats').doc(chatId).set({
-        'jobId': widget.jobId,
-        'jobTitle': widget.jobTitle,
-        'shopId': widget.shopId,
-        'posterId': widget.posterId,
-        'applicantId': widget.applicantId,
-        'applicationId': widget.applicationId,
-        'lastMessage': messageText,
-        'lastMessageTime': FieldValue.serverTimestamp(),
-        'lastSenderId': currentUser.uid,
-        'participants': [widget.posterId, widget.applicantId],
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      // Create/update the thread and its message atomically. The rules use
+      // getAfter() to verify membership even for the first message.
+      final batch = _firestore.batch();
+      batch.set(
+          chatRef,
+          {
+            'jobId': widget.jobId,
+            'jobTitle': widget.jobTitle,
+            'shopId': widget.shopId,
+            'posterId': _posterId,
+            'applicantId': _applicantId,
+            'applicationId': widget.applicationId,
+            'lastMessage': messageText,
+            'lastMessageTime': FieldValue.serverTimestamp(),
+            'lastSenderId': currentUser.uid,
+            'participants': [_posterId, _applicantId],
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true));
+      batch.set(docRef, message);
+      await batch.commit();
 
       // Notify the recipient
-      final recipientRole = recipientId == widget.applicantId ? 'user' : 'business';
+      final recipientRole = recipientId == _applicantId ? 'user' : 'business';
       try {
         await NotificationService().createChatNotification(
           recipientId,
@@ -181,8 +248,8 @@ class _JobChatScreenState extends State<JobChatScreen> {
           widget.jobId,
           widget.jobTitle,
           widget.shopId,
-          widget.posterId,
-          widget.applicantId,
+          _posterId,
+          _applicantId,
           widget.applicationId,
           messageId,
           Timestamp.now(),
@@ -193,8 +260,10 @@ class _JobChatScreenState extends State<JobChatScreen> {
       }
 
       // Scroll to bottom
+      if (!mounted) return;
       _scrollToBottom();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to send message: $e'),
@@ -219,7 +288,8 @@ class _JobChatScreenState extends State<JobChatScreen> {
   /// Marks incoming unread messages as read while the chat screen is open.
   /// Only touches the 'isRead'/'readAt' keys, matching the security rules
   /// that allow recipients to mark their own messages read.
-  Future<void> _markIncomingMessagesRead(List<QueryDocumentSnapshot> docs) async {
+  Future<void> _markIncomingMessagesRead(
+      List<QueryDocumentSnapshot> docs) async {
     final currentUser = _auth.currentUser;
     if (currentUser == null) return;
 
@@ -264,18 +334,19 @@ class _JobChatScreenState extends State<JobChatScreen> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(80),
         child: Container(
-          padding: const EdgeInsets.only(top: 40, left: 8, right: 16, bottom: 12),
+          padding:
+              const EdgeInsets.only(top: 40, left: 8, right: 16, bottom: 12),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.8),
+            color: Colors.black.withValues(alpha: 0.8),
             border: Border(
               bottom: BorderSide(
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
                 width: 1,
               ),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.5),
+                color: Colors.black.withValues(alpha: 0.5),
                 blurRadius: 10,
               ),
             ],
@@ -283,15 +354,21 @@ class _JobChatScreenState extends State<JobChatScreen> {
           child: Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white70, size: 20),
+                icon: const Icon(Icons.arrow_back_ios_new,
+                    color: Colors.white70, size: 20),
                 onPressed: () => Navigator.pop(context),
               ),
               CircleAvatar(
                 radius: 20,
-                backgroundColor: primary.withOpacity(0.2),
+                backgroundColor: primary.withValues(alpha: 0.2),
                 child: Text(
-                  _isLoading ? '...' : (_otherUserName ?? 'U').substring(0, 1).toUpperCase(),
-                  style: const TextStyle(color: primary, fontWeight: FontWeight.bold, fontSize: 18),
+                  _isLoading
+                      ? '...'
+                      : (_otherUserName ?? 'U').substring(0, 1).toUpperCase(),
+                  style: const TextStyle(
+                      color: primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18),
                 ),
               ),
               const SizedBox(width: 12),
@@ -345,6 +422,18 @@ class _JobChatScreenState extends State<JobChatScreen> {
                   .orderBy('timestamp', descending: false)
                   .snapshots(),
               builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  debugLog(
+                      'Error loading chat ${_getChatId()}: ${snapshot.error}');
+                  return Center(
+                    child: Text(
+                      'Unable to load messages',
+                      style:
+                          TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+                    ),
+                  );
+                }
+
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator(color: primary),
@@ -356,16 +445,22 @@ class _JobChatScreenState extends State<JobChatScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.chat_bubble_outline, size: 48, color: Colors.white.withOpacity(0.2)),
+                        Icon(Icons.chat_bubble_outline,
+                            size: 48,
+                            color: Colors.white.withValues(alpha: 0.2)),
                         const SizedBox(height: 16),
                         Text(
                           'No messages yet',
-                          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 16),
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.5),
+                              fontSize: 16),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Say hi to ${_otherUserName ?? 'them'}!',
-                          style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 14),
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.3),
+                              fontSize: 14),
                         ),
                       ],
                     ),
@@ -390,7 +485,8 @@ class _JobChatScreenState extends State<JobChatScreen> {
 
                 return ListView.builder(
                   controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final message =
@@ -400,12 +496,14 @@ class _JobChatScreenState extends State<JobChatScreen> {
                     final time = timestamp != null
                         ? '${timestamp.toDate().hour.toString().padLeft(2, '0')}:${timestamp.toDate().minute.toString().padLeft(2, '0')}'
                         : '';
-                    
+
                     // Add subtle spacing between messages from different senders
                     bool isFirstInGroup = true;
                     if (index > 0) {
-                      final prevMessage = messages[index - 1].data() as Map<String, dynamic>;
-                      isFirstInGroup = prevMessage['senderId'] != message['senderId'];
+                      final prevMessage =
+                          messages[index - 1].data() as Map<String, dynamic>;
+                      isFirstInGroup =
+                          prevMessage['senderId'] != message['senderId'];
                     }
 
                     return Padding(
@@ -420,8 +518,12 @@ class _JobChatScreenState extends State<JobChatScreen> {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           if (!isFromMe) ...[
-                            if (isFirstInGroup || index == messages.length - 1 || 
-                                (index < messages.length - 1 && (messages[index + 1].data() as Map<String, dynamic>)['senderId'] == currentUser.uid))
+                            if (isFirstInGroup ||
+                                index == messages.length - 1 ||
+                                (index < messages.length - 1 &&
+                                    (messages[index + 1].data() as Map<String,
+                                            dynamic>)['senderId'] ==
+                                        currentUser.uid))
                               CircleAvatar(
                                 radius: 14,
                                 backgroundColor: Colors.grey[800],
@@ -457,12 +559,14 @@ class _JobChatScreenState extends State<JobChatScreen> {
                                 borderRadius: BorderRadius.only(
                                   topLeft: const Radius.circular(20),
                                   topRight: const Radius.circular(20),
-                                  bottomLeft: Radius.circular(isFromMe ? 20 : 4),
-                                  bottomRight: Radius.circular(isFromMe ? 4 : 20),
+                                  bottomLeft:
+                                      Radius.circular(isFromMe ? 20 : 4),
+                                  bottomRight:
+                                      Radius.circular(isFromMe ? 4 : 20),
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
+                                    color: Colors.black.withValues(alpha: 0.1),
                                     blurRadius: 5,
                                     offset: const Offset(0, 2),
                                   ),
@@ -476,7 +580,9 @@ class _JobChatScreenState extends State<JobChatScreen> {
                                   Text(
                                     message['text'] as String? ?? '',
                                     style: TextStyle(
-                                      color: isFromMe ? Colors.white : Colors.white.withOpacity(0.9),
+                                      color: isFromMe
+                                          ? Colors.white
+                                          : Colors.white.withValues(alpha: 0.9),
                                       fontSize: 15,
                                       height: 1.3,
                                     ),
@@ -485,7 +591,9 @@ class _JobChatScreenState extends State<JobChatScreen> {
                                   Text(
                                     time,
                                     style: TextStyle(
-                                      color: isFromMe ? Colors.white.withOpacity(0.7) : Colors.white54,
+                                      color: isFromMe
+                                          ? Colors.white.withValues(alpha: 0.7)
+                                          : Colors.white54,
                                       fontSize: 10,
                                     ),
                                   ),
@@ -493,7 +601,10 @@ class _JobChatScreenState extends State<JobChatScreen> {
                               ),
                             ),
                           ),
-                          if (isFromMe) const SizedBox(width: 12), // Give some breathing room on the right
+                          if (isFromMe)
+                            const SizedBox(
+                                width:
+                                    12), // Give some breathing room on the right
                         ],
                       ),
                     );
@@ -511,10 +622,10 @@ class _JobChatScreenState extends State<JobChatScreen> {
               bottom: MediaQuery.of(context).padding.bottom + 12,
             ),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.6),
+              color: Colors.black.withValues(alpha: 0.6),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   blurRadius: 10,
                   offset: const Offset(0, -5),
                 ),
@@ -528,7 +639,7 @@ class _JobChatScreenState extends State<JobChatScreen> {
                       color: Colors.grey[900],
                       borderRadius: BorderRadius.circular(25),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                       ),
                     ),
                     child: Row(
@@ -537,15 +648,18 @@ class _JobChatScreenState extends State<JobChatScreen> {
                         Expanded(
                           child: TextField(
                             controller: _messageController,
-                            style: const TextStyle(color: Colors.white, fontSize: 15),
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 15),
                             maxLines: 4,
                             minLines: 1,
                             decoration: InputDecoration(
                               hintText: 'Type a message...',
-                              hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+                              hintStyle: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.4)),
                               border: InputBorder.none,
                               isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                              contentPadding:
+                                  const EdgeInsets.symmetric(vertical: 12),
                             ),
                             textInputAction: TextInputAction.send,
                             onSubmitted: (_) => _sendMessage(),

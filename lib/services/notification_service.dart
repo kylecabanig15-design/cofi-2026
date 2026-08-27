@@ -3,12 +3,15 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cofi/features/cafe/cafe_details_screen.dart';
+import 'package:cofi/features/events/event_details_screen.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:flutter/material.dart' show MaterialPageRoute;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:timezone/data/latest_all.dart' as tzdata;
+import 'package:timezone/timezone.dart' as tz;
 import 'dart:math' as dart_math;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:cofi/models/notification_model.dart';
@@ -23,49 +26,62 @@ class NotificationService {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GetStorage _storage = GetStorage();
-  
+
   // ========================================================================
   // AUDITORY ALERT CONFIGURATION (Panel Requirement)
   // ========================================================================
   // Sound triggers ONLY when similarity score exceeds this threshold.
   // This ensures alerts are preference-matched, not for every notification.
   static const double _soundThreshold = 0.7;
-  
+
   // Flutter Local Notifications plugin for auditory alerts
-  final FlutterLocalNotificationsPlugin _localNotifications = 
+  final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
-  
+
   bool _isInitialized = false;
   String? _activeChatId;
-  
+
   // Track which chat is currently open to suppress banners
   void setActiveChat(String? chatId) {
     _activeChatId = chatId;
   }
-  
-  String? get activeChatId => _activeChatId;
-  
-  // Stream for in-app banners
-  final StreamController<NotificationModel> _inAppBannerController = StreamController<NotificationModel>.broadcast();
-  Stream<NotificationModel> get inAppBannerStream => _inAppBannerController.stream;
 
-  final DateTime _listenerStartTime = DateTime.now();
+  String? get activeChatId => _activeChatId;
+
+  // Stream for in-app banners
+  final StreamController<NotificationModel> _inAppBannerController =
+      StreamController<NotificationModel>.broadcast();
+  Stream<NotificationModel> get inAppBannerStream =>
+      _inAppBannerController.stream;
+
+  // Freshness gate for banners/alerts. Reset every time the Firestore
+  // listener is (re)attached so notifications created while no listener
+  // was running are still treated as new.
+  DateTime _listenerStartTime = DateTime.now();
+
+  // Monotonic local-notification ID counter. Timestamps truncated to
+  // seconds collided when multiple alerts fired within the same second,
+  // silently replacing each other.
+  int _localNotificationId = 0;
 
   // Initialize the service with local notifications and PH locale
   Future<void> init() async {
     if (_isInitialized) return;
-    
-    await GetStorage.init();
+
+    // GetStorage is initialized once in main() before this call; do not
+    // repeat it here (double await on startup).
+    tzdata.initializeTimeZones();
     await initializeDateFormatting('en_PH', null);
-    
+
     // Initialize local notifications for auditory alerts
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestSoundPermission: true,
       requestAlertPermission: true,
       requestBadgePermission: true,
     );
-    
+
     await _localNotifications.initialize(
       const InitializationSettings(android: androidSettings, iOS: iosSettings),
       onDidReceiveNotificationResponse: (NotificationResponse response) {
@@ -75,7 +91,12 @@ class NotificationService {
           final navigator = Globals.navigatorKey.currentState;
           switch (payloadData['type']) {
             case 'chat':
-              navigator?.pushNamed('/jobChat', arguments: payloadData['args']);
+              final rawArgs = payloadData['args'];
+              final args = rawArgs is Map
+                  ? Map<String, dynamic>.from(rawArgs)
+                  : <String, dynamic>{};
+              args['conversationId'] ??= payloadData['relatedId'];
+              navigator?.pushNamed('/jobChat', arguments: args);
               break;
             case 'shop':
             case 'recommendation':
@@ -91,11 +112,39 @@ class NotificationService {
               }
               break;
             case 'event':
-              // Payload only carries the eventId; EventDetailsScreen needs
-              // the full event map plus its parent shopId, neither of which
-              // is available in a local-notification payload. Log and no-op.
-              debugLog(
-                  'System notification tapped for event ${payloadData['relatedId']}: insufficient payload data to route');
+              // The notification metadata carries the parent shopId (set at
+              // creation time in _checkForNewEvents). Fetch the full event
+              // doc and open its details screen.
+              final rawArgs = payloadData['args'];
+              final args =
+                  rawArgs is Map ? Map<String, dynamic>.from(rawArgs) : null;
+              final shopId = args?['shopId'] as String?;
+              final eventId = payloadData['relatedId'] as String?;
+              if (navigator != null &&
+                  shopId != null &&
+                  shopId.isNotEmpty &&
+                  eventId != null &&
+                  eventId.isNotEmpty) {
+                FirebaseFirestore.instance
+                    .collection('shops')
+                    .doc(shopId)
+                    .collection('events')
+                    .doc(eventId)
+                    .get()
+                    .then((doc) {
+                  if (!doc.exists || navigator == null) return;
+                  final data = doc.data();
+                  if (data == null) return;
+                  navigator.push(MaterialPageRoute(
+                    builder: (_) => EventDetailsScreen(event: {
+                      ...data,
+                      'id': eventId,
+                    }),
+                  ));
+                }).catchError((e) {
+                  debugLog('Error opening event $eventId: $e');
+                });
+              }
               break;
             default:
               break;
@@ -114,14 +163,15 @@ class NotificationService {
       await androidPlugin.createNotificationChannel(AndroidNotificationChannel(
         'cofi_high_importance',
         'CoFi High Importance',
-        description: 'High priority notifications for preference-matched recommendations',
+        description:
+            'High priority notifications for preference-matched recommendations',
         importance: Importance.max,
         playSound: true,
         enableVibration: true,
         vibrationPattern: Int64List.fromList([0, 500, 200, 500]),
       ));
     }
-    
+
     _isInitialized = true;
     _setupNotificationListener();
   }
@@ -139,6 +189,9 @@ class NotificationService {
   StreamSubscription<User?>? _authSub;
 
   void _setupNotificationListener() {
+    // Reset the freshness gate on every (re)attach so anything created
+    // while no listener was running still triggers banners/alerts.
+    _listenerStartTime = DateTime.now();
     // Cancel previous subscriptions so repeated auth events never leak
     // nested Firestore listeners (pre-existing leak).
     _authSub?.cancel();
@@ -160,52 +213,67 @@ class NotificationService {
           .where('isRead', isEqualTo: false)
           .snapshots()
           .listen((snapshot) async {
-          for (var change in snapshot.docChanges) {
-            if (change.type == DocumentChangeType.added) {
-              final data = change.doc.data();
-              if (data == null) continue;
-              final notification = NotificationModel.fromFirestore(data, change.doc.id);
-              
-              // Skip if it's for the currently active chat
-              if (notification.type == 'chat' && _activeChatId == notification.relatedId) {
-                // Automatically mark as read
-                markAsRead(notification.id);
-                continue;
-              }
+        for (var change in snapshot.docChanges) {
+          if (change.type == DocumentChangeType.added) {
+            final data = change.doc.data();
+            if (data == null) continue;
+            final notification =
+                NotificationModel.fromFirestore(data, change.doc.id);
 
-              // Only trigger in-app banners/alerts for TRULY new notifications
-              // (created after the listener initialized, minus a small 5-second buffer)
-              if (notification.createdAt.isBefore(_listenerStartTime.subtract(const Duration(seconds: 5)))) {
-                continue;
-              }
+            // Skip if it's for the currently active chat
+            if (notification.type == 'chat' &&
+                _activeChatId == notification.relatedId) {
+              // Automatically mark as read
+              markAsRead(notification.id);
+              continue;
+            }
 
-              // Broadcast to in-app banners
-              _inAppBannerController.add(notification);
+            // Only trigger in-app banners/alerts for TRULY new notifications
+            // (created after the listener initialized, minus a small 5-second buffer)
+            if (notification.createdAt.isBefore(
+                _listenerStartTime.subtract(const Duration(seconds: 5)))) {
+              continue;
+            }
 
-              // Only show local push for alerts
-              if (notification.isAlert) {
-                // Every system notification must carry a payload with at
-                // least {type, relatedId} so taps can route (chat also gets
-                // its full metadata args).
-                final payloadMap = <String, dynamic>{
-                  'type': notification.type,
-                  if (notification.relatedId != null)
-                    'relatedId': notification.relatedId,
-                  if (notification.type == 'chat' &&
-                      notification.metadata != null)
-                    'args': notification.metadata,
-                };
-                final payload = jsonEncode(payloadMap);
-                
-                await _showLocalNotificationWithSound(
-                  title: notification.title,
-                  body: notification.body,
-                  payload: payload,
-                );
-              }
+            // Inbox records may still be retained, but disabled categories
+            // must never interrupt the user with a banner, sound, or push.
+            if (!await _isNotificationTypeEnabled(
+                user.uid, notification.type)) {
+              continue;
+            }
+
+            // Broadcast to in-app banners
+            _inAppBannerController.add(notification);
+
+            // Only show local push for alerts
+            if (notification.isAlert) {
+              // Every system notification must carry a payload with at
+              // least {type, relatedId} so taps can route (chat also gets
+              // its full metadata args).
+              final payloadMap = <String, dynamic>{
+                'type': notification.type,
+                if (notification.relatedId != null)
+                  'relatedId': notification.relatedId,
+                if ((notification.type == 'chat' ||
+                        notification.type == 'event') &&
+                    notification.metadata != null)
+                  'args': {
+                    ...notification.metadata!,
+                    if (notification.type == 'chat')
+                      'conversationId': notification.relatedId,
+                  },
+              };
+              final payload = jsonEncode(payloadMap);
+
+              await _showLocalNotificationWithSound(
+                title: notification.title,
+                body: notification.body,
+                payload: payload,
+              );
             }
           }
-        });
+        }
+      });
     });
   }
 
@@ -223,50 +291,60 @@ class NotificationService {
         .collection('notifications')
         .snapshots()
         .map((snapshot) {
-          final notifications = snapshot.docs
-              .map((doc) => NotificationModel.fromFirestore(doc.data(), doc.id))
-              .where((n) => n.recipientRole == role)
-              .toList();
-          
-          // Sort: Alerts first, then by creation date
-          notifications.sort((a, b) {
-            // Alerts come first
-            if (a.isAlert != b.isAlert) {
-              return a.isAlert ? -1 : 1;
-            }
-            // Within same alert status, newer first
-            return b.createdAt.compareTo(a.createdAt);
-          });
-          
-          return notifications;
-        });
+      final notifications = snapshot.docs
+          .map((doc) => NotificationModel.fromFirestore(doc.data(), doc.id))
+          // A chat document already lives inside the recipient's private
+          // inbox, so it always belongs to that recipient. Older chat
+          // notifications sometimes carried the wrong inferred role and
+          // were consequently hidden from business accounts.
+          .where((n) => n.type == 'chat' || n.recipientRole == role)
+          .toList();
+
+      // Sort: Alerts first, then by creation date
+      notifications.sort((a, b) {
+        // Alerts come first
+        if (a.isAlert != b.isAlert) {
+          return a.isAlert ? -1 : 1;
+        }
+        // Within same alert status, newer first
+        return b.createdAt.compareTo(a.createdAt);
+      });
+
+      return notifications;
+    });
   }
 
-  // Create a notification for a new event
-  Future<void> createEventNotification(
-      String userId, String eventId, String eventTitle, String? imageUrl, Timestamp originalTimestamp) async {
+  // Create a notification for a new event. [shopId] is the parent shop's
+  // id and is stored in metadata so notification taps can locate and open
+  // the full event document.
+  Future<void> createEventNotification(String userId, String eventId,
+      String eventTitle, String? imageUrl, Timestamp originalTimestamp,
+      {String? shopId}) async {
     final notification = NotificationModel(
       id: 'event_$eventId',
       title: '🎉 Happening Soon in Davao',
-      body: '$eventTitle is now live! Don\'t miss out on this exciting café experience.',
+      body:
+          '$eventTitle is now live! Don\'t miss out on this exciting café experience.',
       type: 'event',
       relatedId: eventId,
       imageUrl: imageUrl,
       createdAt: originalTimestamp.toDate(),
       isRead: false,
       recipientRole: 'user',
+      metadata: shopId != null && shopId.isNotEmpty ? {'shopId': shopId} : null,
     );
 
     await _saveNotification(userId, notification);
   }
 
   // Create a notification for a new job posting
-  Future<void> createJobNotification(
-      String userId, String jobId, String jobTitle, String shopName, Timestamp originalTimestamp) async {
+  Future<void> createJobNotification(String userId, String jobId,
+      String jobTitle, String shopName, Timestamp originalTimestamp) async {
     final notification = NotificationModel(
       id: 'job_$jobId',
       title: '💼 Career Opportunity Available',
-      body: '$shopName is looking for a $jobTitle. Join their team and brew your future!',
+      body:
+          '$shopName is looking for a $jobTitle. Join their team and brew your future!',
       type: 'job',
       relatedId: jobId,
       createdAt: originalTimestamp.toDate(),
@@ -278,12 +356,13 @@ class NotificationService {
   }
 
   // Create a notification for a new shop submission
-  Future<void> createShopNotification(
-      String userId, String shopId, String shopName, String? imageUrl, Timestamp originalTimestamp, {bool isAlert = false}) async {
+  Future<void> createShopNotification(String userId, String shopId,
+      String shopName, String? imageUrl, Timestamp originalTimestamp,
+      {bool isAlert = false}) async {
     final notification = NotificationModel(
       id: 'shop_$shopId',
       title: isAlert ? '🎯 Taste Match Discovery!' : '☕ New Discovery in Davao',
-      body: isAlert 
+      body: isAlert
           ? 'We found a new café that matches your interests: $shopName! Check it out.'
           : '$shopName has joined the CoFi community. Be among the first to explore their unique brew!',
       type: 'shop',
@@ -298,14 +377,8 @@ class NotificationService {
 
     await _saveNotification(userId, notification);
 
-    if (isAlert) {
-      final formattedTime = formatPhilippinesDate(DateTime.now());
-      await _showLocalNotificationWithSound(
-        title: '🎯 Taste Match Discovery!',
-        body: '$shopName perfectly matches your coffee interests • $formattedTime',
-        payload: jsonEncode({'type': 'shop', 'relatedId': shopId}),
-      );
-    }
+    // The unread-notification listener is the single push/banner dispatcher.
+    // Dispatching here as well caused duplicate alerts for the same café.
   }
 
   // ========================================================================
@@ -320,17 +393,26 @@ class NotificationService {
       if (!masterToggle) return false;
 
       switch (type) {
-        case 'chat': return data['chatsEnabled'] ?? true;
+        case 'chat':
+          return data['chatsEnabled'] ?? true;
         case 'job':
         case 'job_application':
-        case 'business_application':
           return data['jobUpdatesEnabled'] ?? true;
-        case 'review': return data['reviewsEnabled'] ?? true;
-        case 'event': return data['cafeEventsEnabled'] ?? true;
-        case 'event_participation': return data['eventParticipationEnabled'] ?? true;
-        case 'recommendation': return data['tasteTwinsEnabled'] ?? true;
-        case 'shop': return data['communityActivityEnabled'] ?? true;
-        default: return true;
+        case 'business_application':
+          return (data['jobUpdatesEnabled'] ?? true) &&
+              (data['applicantAlertsEnabled'] ?? true);
+        case 'review':
+          return data['reviewsEnabled'] ?? true;
+        case 'event':
+          return data['cafeEventsEnabled'] ?? true;
+        case 'event_participation':
+          return data['eventParticipationEnabled'] ?? true;
+        case 'recommendation':
+          return data['tasteTwinsEnabled'] ?? true;
+        case 'shop':
+          return data['communityActivityEnabled'] ?? true;
+        default:
+          return true;
       }
     } catch (e) {
       return true; // Default true on error
@@ -341,20 +423,40 @@ class NotificationService {
   // Uses deterministic checking to prevent recreating old read notifications
   Future<void> _saveNotification(
       String userId, NotificationModel notification) async {
+    final recipientId = userId.trim();
+    final notificationId = notification.id.trim();
+
+    // Firestore rejects empty document IDs. Some legacy shop/application
+    // records can be missing their owner/recipient ID, so stop here instead
+    // of attempting to build an invalid users/{id} path.
+    if (recipientId.isEmpty || notificationId.isEmpty) {
+      debugLog(
+          'Skipping notification with invalid IDs: recipientId=${recipientId.isEmpty ? '<empty>' : recipientId}, notificationId=${notificationId.isEmpty ? '<empty>' : notificationId}, type=${notification.type}');
+      return;
+    }
+
     try {
       // Check user preferences
-      if (!await _isNotificationTypeEnabled(userId, notification.type)) return;
+      if (!await _isNotificationTypeEnabled(recipientId, notification.type)) {
+        return;
+      }
 
       final docRef = _firestore
           .collection('users')
-          .doc(userId)
+          .doc(recipientId)
           .collection('notifications')
-          .doc(notification.id);
+          .doc(notificationId);
 
-      final docSnapshot = await docRef.get();
-      if (docSnapshot.exists) {
-        // Do not overwrite existing notification read-state or readAt timestamps!
-        return;
+      // Notification documents are private to their recipient. A sender may
+      // create a notification for another user, but must not read that user's
+      // notification inbox merely to check for duplicates.
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == recipientId) {
+        final docSnapshot = await docRef.get();
+        if (docSnapshot.exists) {
+          // Do not overwrite existing notification read-state or timestamps.
+          return;
+        }
       }
 
       await docRef.set(notification.toFirestore());
@@ -380,15 +482,18 @@ class NotificationService {
           .collection('notifications')
           .doc(notificationId)
           .update({
-            'isRead': true,
-            'readAt': FieldValue.serverTimestamp(),
-          });
+        'isRead': true,
+        'readAt': FieldValue.serverTimestamp(),
+      });
     } catch (e) {
       debugLog('Error marking notification as read: $e');
     }
   }
 
-  // Mark all notifications as read for the current role
+  // Mark all notifications as read. NOTE: intentionally clears ALL unread
+  // docs regardless of recipientRole — this must match what watchUnreadCount()
+  // counts, otherwise the unread badge can never be driven to zero when a
+  // user's inbox contains stray legacy-role docs.
   Future<void> markAllAsRead({required String role}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -401,18 +506,12 @@ class NotificationService {
           .where('isRead', isEqualTo: false)
           .get();
 
-      final matching = notifications.docs.where((doc) {
-        final data = doc.data();
-        final docRole = data['recipientRole'] ?? 'user';
-        return docRole == role;
-      }).toList();
-
       // Firestore batches cap at 500 writes — chunk into batches of 450 and
       // commit each sequentially.
       const chunkSize = 450;
-      for (var i = 0; i < matching.length; i += chunkSize) {
+      for (var i = 0; i < notifications.docs.length; i += chunkSize) {
         final batch = _firestore.batch();
-        for (final doc in matching.skip(i).take(chunkSize)) {
+        for (final doc in notifications.docs.skip(i).take(chunkSize)) {
           batch.update(doc.reference, {
             'isRead': true,
             'readAt': FieldValue.serverTimestamp(),
@@ -499,26 +598,26 @@ class NotificationService {
     }
   }
 
-  // Delete all notifications for the current user
+  // Delete all notifications for the current user. Chunks into batches of
+  // 450 (Firestore batches cap at 500 writes) and RETHROWS on failure so
+  // callers can show a real error instead of a false success toast.
   Future<void> deleteAllNotifications() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    try {
-      final batch = _firestore.batch();
-      final notifications = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('notifications')
-          .get();
+    final notifications = await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .collection('notifications')
+        .get();
 
-      for (final doc in notifications.docs) {
+    const chunkSize = 450;
+    for (var i = 0; i < notifications.docs.length; i += chunkSize) {
+      final batch = _firestore.batch();
+      for (final doc in notifications.docs.skip(i).take(chunkSize)) {
         batch.delete(doc.reference);
       }
-
       await batch.commit();
-    } catch (e) {
-      debugLog('Error deleting all notifications: $e');
     }
   }
 
@@ -574,8 +673,7 @@ class NotificationService {
 
       // One user-doc fetch shared by every stage of this run (previously
       // fetched separately in _checkForNewShops AND the taste-twin pass).
-      final userDoc =
-          await _firestore.collection('users').doc(user.uid).get();
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
 
       // Jobs are fetched ONCE per shop; the same docs feed BOTH the new-job
       // notification check and the job-application status check.
@@ -591,9 +689,9 @@ class NotificationService {
       // Check for new events
       await _checkForNewEvents(user.uid, lastCheckTimestamp, verifiedShops);
 
-    // FIRST TIME / STARTUP RECOMMENDATIONS:
-    // This ensures new accounts see recommendations even if no shops were "just posted"
-    await createRecommendationsBasedOnInterests(userDocCache: userDoc);
+      // FIRST TIME / STARTUP RECOMMENDATIONS:
+      // This ensures new accounts see recommendations even if no shops were "just posted"
+      await createRecommendationsBasedOnInterests(userDocCache: userDoc);
 
       // Update the last check time
       _storage.write(lastCheckKey, nowMs);
@@ -611,14 +709,18 @@ class NotificationService {
   //   - new-job notifications: type 'job' keyed by jobId
   //   - application updates: type 'job_application' keyed by applicationId,
   //     only for applications whose applicantId matches this user
-  Future<void> _checkForNewJobsAndApplications(String userId,
-      Timestamp? lastCheck, QuerySnapshot<Map<String, dynamic>> verifiedShops) async {
+  Future<void> _checkForNewJobsAndApplications(
+      String userId,
+      Timestamp? lastCheck,
+      QuerySnapshot<Map<String, dynamic>> verifiedShops) async {
     try {
       // Hoisted out of loops: shared refs/constants are built once, not per
       // shop / per doc. Per-shop query objects themselves necessarily differ
       // by shopId so they cannot be shared across iterations.
-      final userNotificationsRef =
-          _firestore.collection('users').doc(userId).collection('notifications');
+      final userNotificationsRef = _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('notifications');
       final fallbackNow = Timestamp.now();
 
       for (final shopDoc in verifiedShops.docs) {
@@ -652,7 +754,8 @@ class NotificationService {
               .get();
 
           if (existingJobNotification.docs.isEmpty) {
-            await createJobNotification(userId, jobId, jobTitle, shopName, createdAt);
+            await createJobNotification(
+                userId, jobId, jobTitle, shopName, createdAt);
           }
 
           // ---- JOB APPLICATION STATUS CHECK (same docs, no re-query) ----
@@ -669,10 +772,11 @@ class NotificationService {
                   final appliedAt = application['appliedAt'] as Timestamp?;
 
                   // Check if notification already exists for this application
-                  final existingApplicationNotification = await userNotificationsRef
-                      .where('type', isEqualTo: 'job_application')
-                      .where('relatedId', isEqualTo: applicationId)
-                      .get();
+                  final existingApplicationNotification =
+                      await userNotificationsRef
+                          .where('type', isEqualTo: 'job_application')
+                          .where('relatedId', isEqualTo: applicationId)
+                          .get();
 
                   if (existingApplicationNotification.docs.isEmpty) {
                     await createJobApplicationNotification(
@@ -714,18 +818,21 @@ class NotificationService {
     }
 
     String statusTitle = 'Job Application Update';
-    String statusBody = '$applicantName\'s application for $jobTitle at $shopName is $statusText';
+    String statusBody =
+        '$applicantName\'s application for $jobTitle at $shopName is $statusText';
 
     if (status == 'accepted') {
       statusTitle = '🎊 Application Accepted!';
-      statusBody = 'Congratulations! Your application for $jobTitle at $shopName has been accepted. Check your email for next steps!';
+      statusBody =
+          'Congratulations! Your application for $jobTitle at $shopName has been accepted. Check your email for next steps!';
     } else if (status == 'rejected') {
       statusTitle = '📋 Application Status Update';
-      statusBody = 'Your application for $jobTitle at $shopName has been reviewed. Thank you for your interest in joining the community.';
+      statusBody =
+          'Your application for $jobTitle at $shopName has been reviewed. Thank you for your interest in joining the community.';
     }
 
     final notification = NotificationModel(
-      id: 'job_app_status_${applicationId}_${status}',
+      id: 'job_app_status_${applicationId}_$status',
       title: statusTitle,
       body: statusBody,
       type: 'job_application',
@@ -750,31 +857,30 @@ class NotificationService {
     double recommendationScore,
     String? imageUrl,
   ) async {
-    debugLog('🚀 [NOTIFICATIONS] Creating recommendation notification: $shopName (Score: $recommendationScore)');
+    debugLog(
+        '🚀 [NOTIFICATIONS] Creating recommendation notification: $shopName (Score: $recommendationScore)');
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     // Only create notification if recommendation score is high enough (> 0.5)
     if (recommendationScore <= 0.5) return;
 
-    // Format timestamp in Philippines (PH) locale
-    final formattedTime = formatPhilippinesDate(DateTime.now());
-    
     // Determine if this is an ALERT (sound-enabled) based on score
     final isAlert = recommendationScore >= _soundThreshold; // 0.7 or higher
-    
+
     if (isAlert) {
-      debugLog('🎯 [NOTIFICATION LOGIC] PERFECT MATCH: $recommendationScore >= 0.7');
+      debugLog(
+          '🎯 [NOTIFICATION LOGIC] PERFECT MATCH: $recommendationScore >= 0.7');
     } else {
       debugLog('⚖️ [NOTIFICATION LOGIC] STANDARD: $recommendationScore < 0.7');
     }
-    
+
     final priority = isAlert ? 'high' : 'medium';
-    
+
     final notification = NotificationModel(
       id: 'rec_$shopId',
       title: isAlert ? '🎯 Perfect Match Found!' : 'Recommended Café',
-      body: isAlert 
+      body: isAlert
           ? 'We think you\'ll love $shopName! ${(recommendationScore * 100).toInt()}% match'
           : 'We think you\'ll love $shopName based on your preferences',
       type: 'recommendation',
@@ -788,19 +894,11 @@ class NotificationService {
     );
 
     await _saveNotification(user.uid, notification);
-    
-    // ========================================================================
-    // AUDITORY ALERT: Only trigger sound if preference match is high (>= 0.7)
-    // ========================================================================
-    if (isAlert) {
-      await _showLocalNotificationWithSound(
-        title: '🎯 Perfect Match Found!',
-        body: '$shopName matches ${(recommendationScore * 100).toInt()}% of your preferences • $formattedTime',
-        payload: jsonEncode({'type': 'recommendation', 'relatedId': shopId}),
-      );
-    }
+
+    // The unread-notification listener dispatches the alert once after it has
+    // applied the user's current notification preferences.
   }
-  
+
   // ========================================================================
   // LOCAL NOTIFICATION WITH SOUND
   // ========================================================================
@@ -815,7 +913,8 @@ class NotificationService {
     final androidDetails = AndroidNotificationDetails(
       'cofi_high_importance',
       'CoFi High Importance',
-      channelDescription: 'High priority notifications for preference-matched recommendations',
+      channelDescription:
+          'High priority notifications for preference-matched recommendations',
       importance: Importance.max,
       priority: Priority.max,
       showWhen: true,
@@ -823,7 +922,7 @@ class NotificationService {
       enableVibration: true,
       vibrationPattern: Int64List.fromList([0, 500, 200, 500]),
     );
-    
+
     final iosDetails = DarwinNotificationDetails(
       presentSound: true,
       presentAlert: true,
@@ -831,25 +930,28 @@ class NotificationService {
       // Uses default system sound for compatibility
       // To use custom sound: sound: 'notification_sound.aiff',
     );
-    
+
     await _localNotifications.show(
-      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      ++_localNotificationId,
       title,
       body,
       NotificationDetails(android: androidDetails, iOS: iosDetails),
       payload: payload,
     );
   }
-  
+
   // ========================================================================
   // PHILIPPINES DATE FORMATTING (Panel Requirement)
   // ========================================================================
-  // All timestamps must follow PH format: "January 27, 2026 3:00 PM"
+  // All timestamps must follow PH format: "January 27, 2026 3:00 PM".
+  // Converts to Asia/Manila first — otherwise devices set to other
+  // timezones display their local wall-clock time mislabeled as PH time.
   String formatPhilippinesDate(DateTime dateTime) {
+    final manilaTime =
+        tz.TZDateTime.from(dateTime, tz.getLocation('Asia/Manila'));
     final formatter = DateFormat('MMMM d, y h:mm a', 'en_PH');
-    return formatter.format(dateTime);
+    return formatter.format(manilaTime);
   }
-
 
   // Check for and create recommendation notifications based on user interests.
   // Pass [userDocCache] to reuse a user-doc snapshot already fetched during
@@ -956,7 +1058,6 @@ class NotificationService {
       final randomHours = 12 + random.nextInt(37); // 12 to 48 hours
       final nextTime = nowMs + (randomHours * 3600 * 1000);
       await prefs.setInt(nextGenKey, nextTime);
-
     } catch (e) {
       debugLog('Error creating recommendation notifications: $e');
     }
@@ -984,8 +1085,10 @@ class NotificationService {
           .get();
 
       final fallbackNow = Timestamp.now();
-      final userNotificationsRef =
-          _firestore.collection('users').doc(userId).collection('notifications');
+      final userNotificationsRef = _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('notifications');
 
       for (final shopDoc in shopsSnapshot.docs) {
         final shopData = shopDoc.data() as Map<String, dynamic>?;
@@ -996,13 +1099,14 @@ class NotificationService {
         final shopTags = (shopData['tags'] as List? ?? []).cast<String>();
 
         // TASTE MATCH CHECK: Trigger sound alert if tags match user interests
-      final isTasteMatch = shopTags.any((tag) => userInterests.contains(tag));
-      
-      if (isTasteMatch) {
-        debugLog('🎯 [DISCOVERY LOGIC] NEW SHOP INTEREST MATCH: $shopName matches interests');
-      } else {
-        debugLog('☕ [DISCOVERY LOGIC] NEW SHOP DISCOVERY: $shopName');
-      }
+        final isTasteMatch = shopTags.any((tag) => userInterests.contains(tag));
+
+        if (isTasteMatch) {
+          debugLog(
+              '🎯 [DISCOVERY LOGIC] NEW SHOP INTEREST MATCH: $shopName matches interests');
+        } else {
+          debugLog('☕ [DISCOVERY LOGIC] NEW SHOP DISCOVERY: $shopName');
+        }
 
         final createdAt = shopData['postedAt'] as Timestamp? ?? fallbackNow;
         // Check if notification already exists for this shop
@@ -1011,7 +1115,9 @@ class NotificationService {
             .where('relatedId', isEqualTo: shopId)
             .get();
         if (existingNotification.docs.isEmpty) {
-          await createShopNotification(userId, shopId, shopName, imageUrl, createdAt, isAlert: isTasteMatch);
+          await createShopNotification(
+              userId, shopId, shopName, imageUrl, createdAt,
+              isAlert: isTasteMatch);
         }
       }
     } catch (e) {
@@ -1024,8 +1130,10 @@ class NotificationService {
       QuerySnapshot<Map<String, dynamic>> verifiedShops) async {
     try {
       final fallbackNow = Timestamp.now();
-      final userNotificationsRef =
-          _firestore.collection('users').doc(userId).collection('notifications');
+      final userNotificationsRef = _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('notifications');
 
       for (final shopDoc in verifiedShops.docs) {
         final shopId = shopDoc.id;
@@ -1054,7 +1162,9 @@ class NotificationService {
               .get();
 
           if (existingNotification.docs.isEmpty) {
-            await createEventNotification(userId, eventId, eventTitle, imageUrl, createdAt);
+            await createEventNotification(
+                userId, eventId, eventTitle, imageUrl, createdAt,
+                shopId: shopId);
           }
         }
       }
@@ -1072,11 +1182,11 @@ class NotificationService {
       String jobTitle,
       Timestamp appliedAt,
       String shopId) async {
-    
     final notification = NotificationModel(
       id: 'job_app_business_$applicationId',
       title: 'New Job Application!',
-      body: '$applicantName just applied for $jobTitle. Tap to view their application.',
+      body:
+          '$applicantName just applied for $jobTitle. Tap to view their application.',
       type: 'business_application',
       relatedId: applicationId,
       createdAt: appliedAt.toDate(),
@@ -1108,11 +1218,23 @@ class NotificationService {
       String messageId,
       Timestamp sentAt,
       {required String recipientRole}) async {
+    var resolvedRecipientRole = recipientRole;
+    try {
+      final recipientDoc =
+          await _firestore.collection('users').doc(recipientId).get();
+      final accountType =
+          recipientDoc.data()?['accountType']?.toString().trim().toLowerCase();
+      if (accountType == 'business' || accountType == 'user') {
+        resolvedRecipientRole = accountType!;
+      }
+    } catch (e) {
+      debugLog('Could not resolve chat recipient role for $recipientId: $e');
+    }
 
-    final displayBody = messageText.length > 60 
-        ? '${messageText.substring(0, 57)}...' 
+    final displayBody = messageText.length > 60
+        ? '${messageText.substring(0, 57)}...'
         : messageText;
-        
+
     final notification = NotificationModel(
       id: 'chat_msg_$messageId',
       title: 'New Message from $senderName',
@@ -1123,7 +1245,7 @@ class NotificationService {
       isRead: false,
       isAlert: true,
       priority: 'high',
-      recipientRole: recipientRole,
+      recipientRole: resolvedRecipientRole,
       metadata: {
         'userId': recipientId,
         'jobId': jobId,
@@ -1153,8 +1275,8 @@ class NotificationService {
     Timestamp createdAt,
   ) async {
     // Truncate review text for the body
-    final displayBody = reviewText.length > 60 
-        ? '${reviewText.substring(0, 57)}...' 
+    final displayBody = reviewText.length > 60
+        ? '${reviewText.substring(0, 57)}...'
         : reviewText;
 
     final notification = NotificationModel(
@@ -1186,7 +1308,6 @@ class NotificationService {
       String participantName,
       String participantId,
       Timestamp joinedAt) async {
-    
     final notification = NotificationModel(
       id: 'event_join_${eventId}_$participantId',
       title: '🎉 New Participant!',

@@ -16,4 +16,5 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./syncJobsToAllJobs"), exports);
 __exportStar(require("./archiveFinishedEvents"), exports);
+__exportStar(require("./syncReviewAggregates"), exports);
 //# sourceMappingURL=index.js.map
