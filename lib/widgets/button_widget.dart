@@ -17,13 +17,13 @@ class ButtonWidget extends StatefulWidget {
 
   const ButtonWidget({
     super.key,
-    this.radius = 100,
+    this.radius = 16,
     required this.label,
     this.textColor = Colors.white,
     required this.onPressed,
     this.width = 275,
-    this.fontSize = 18,
-    this.height = 60,
+    this.fontSize = 15,
+    this.height = 52,
     this.color = primary,
     this.isLoading = false,
     this.icon,
@@ -101,69 +101,89 @@ class _ButtonWidgetState extends State<ButtonWidget>
       builder: (context, child) {
         return Transform.scale(
           scale: _scaleAnimation.value,
-          child: Container(
-            width: widget.width,
-            height: widget.height,
-            decoration: BoxDecoration(
-              color: widget.isOutlined! ? Colors.transparent : widget.color,
-              borderRadius: BorderRadius.circular(widget.radius!),
-              border: widget.isOutlined!
-                  ? Border.all(
-                      color: widget.color,
-                      width: 2.0,
-                    )
-                  : null,
-              boxShadow: [
-                BoxShadow(
-                  color: widget.isOutlined!
-                      ? Colors.transparent
-                      : widget.color.withValues(alpha: 0.3),
-                  blurRadius: _isPressed ? 4 : 8,
-                  offset: Offset(0, _isPressed ? 2 : 4),
-                  spreadRadius: _isPressed ? 0 : 1,
-                ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: widget.isLoading! ? null : widget.onPressed,
-                onTapDown: widget.isLoading! ? null : _handleTapDown,
-                onTapUp: widget.isLoading! ? null : _handleTapUp,
-                onTapCancel: widget.isLoading! ? null : _handleTapCancel,
+          child: Semantics(
+            button: true,
+            enabled: !widget.isLoading!,
+            label: widget.isLoading!
+                ? '${widget.label}, in progress'
+                : widget.label,
+            child: Container(
+              width: widget.width,
+              height: widget.height,
+              decoration: BoxDecoration(
+                color: widget.isOutlined! ? Colors.transparent : widget.color,
                 borderRadius: BorderRadius.circular(widget.radius!),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: double.infinity,
-                  child: Center(
-                    child: widget.isLoading!
-                        ? SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              color: widget.isOutlined!
-                                  ? widget.color
-                                  : widget.textColor,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              if (widget.icon != null) ...[
-                                widget.icon!,
-                                const SizedBox(width: 8),
+                border: widget.isOutlined!
+                    ? Border.all(
+                        color: widget.color,
+                        width: 2.0,
+                      )
+                    : null,
+                boxShadow: widget.isOutlined!
+                    ? null
+                    : [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: _isPressed ? 4 : 12,
+                          offset: Offset(0, _isPressed ? 2 : 6),
+                        ),
+                      ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: widget.isLoading! ? null : widget.onPressed,
+                  onTapDown: widget.isLoading! ? null : _handleTapDown,
+                  onTapUp: widget.isLoading! ? null : _handleTapUp,
+                  onTapCancel: widget.isLoading! ? null : _handleTapCancel,
+                  borderRadius: BorderRadius.circular(widget.radius!),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: double.infinity,
+                    child: Center(
+                      child: widget.isLoading!
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 19,
+                                  height: 19,
+                                  child: CircularProgressIndicator(
+                                    color: widget.isOutlined!
+                                        ? Colors.white
+                                        : widget.textColor,
+                                    strokeWidth: 2.2,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                TextWidget(
+                                  text: 'Please wait…',
+                                  fontSize: widget.fontSize!,
+                                  color: widget.isOutlined!
+                                      ? Colors.white
+                                      : widget.textColor,
+                                  fontFamily: 'Bold',
+                                ),
                               ],
-                              TextWidget(
-                                text: widget.label,
-                                fontSize: widget.fontSize!,
-                                color: widget.isOutlined!
-                                    ? widget.color
-                                    : widget.textColor,
-                                fontFamily: 'Bold',
-                              ),
-                            ],
-                          ),
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (widget.icon != null) ...[
+                                  widget.icon!,
+                                  const SizedBox(width: 8),
+                                ],
+                                TextWidget(
+                                  text: widget.label,
+                                  fontSize: widget.fontSize!,
+                                  color: widget.isOutlined!
+                                      ? Colors.white
+                                      : widget.textColor,
+                                  fontFamily: 'Bold',
+                                ),
+                              ],
+                            ),
+                    ),
                   ),
                 ),
               ),

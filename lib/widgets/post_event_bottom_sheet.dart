@@ -11,6 +11,8 @@ import 'package:cofi/features/map/custom_location_screen.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/utils/colors.dart';
+import 'package:cofi/features/business/widgets/business_workspace_ui.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class PostEventBottomSheet extends StatefulWidget {
   const PostEventBottomSheet({super.key, required this.shopId});
@@ -23,7 +25,10 @@ class PostEventBottomSheet extends StatefulWidget {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (context) => PostEventBottomSheet(shopId: shopId),
+      builder: (context) => BusinessWorkspaceTheme(
+        accentColor: Colors.purpleAccent,
+        child: PostEventBottomSheet(shopId: shopId),
+      ),
     );
   }
 
@@ -50,7 +55,6 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
 
   final List<File> _selectedImages = [];
 
-
   // Map related variables
   // double _latitude = 37.7749; // Default to San Francisco
   // double _longitude = -122.4194;
@@ -62,7 +66,6 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
   bool _locationReady = false;
 
   // Autocomplete related variables
-
 
   @override
   void initState() {
@@ -81,10 +84,10 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
     final link = _linkController.text.trim();
 
     if (title.isEmpty || _startDate == null || _endDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text(
-                'Please enter Event Name and select both start and end dates.')),
+      CustomToast.showWarning(
+        context,
+        'Add an event name, start date, and end date before saving.',
+        title: 'Event details incomplete',
       );
       return;
     }
@@ -106,10 +109,11 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
 
       // Check if location is valid
       if (latitude == null || longitude == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text(
-                  'Location required. Please enable location or select a custom location.')),
+        if (!mounted) return;
+        CustomToast.showWarning(
+          context,
+          'Enable location access or choose a custom location.',
+          title: 'Location required',
         );
         if (mounted) setState(() => _saving = false);
         return;
@@ -160,15 +164,21 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
           .add(data);
 
       if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Event posted.')),
+        CustomToast.showFromMessenger(
+          messenger,
+          'The event is now available to your community.',
+          type: ToastType.success,
+          title: 'Event published',
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to post event: $e')),
+        CustomToast.showError(
+          context,
+          'We could not publish the event. Please try again.',
+          title: 'Event not published',
         );
       }
     } finally {
@@ -369,9 +379,9 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
   Widget build(BuildContext context) {
     return Container(
       height: MediaQuery.of(context).size.height * 0.95,
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: const BorderRadius.only(
+      decoration: const BoxDecoration(
+        color: BusinessWorkspaceColors.canvas,
+        borderRadius: BorderRadius.only(
           topLeft: Radius.circular(25),
           topRight: Radius.circular(25),
         ),
@@ -379,28 +389,10 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
       child: SafeArea(
         child: Column(
           children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: const Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  TextWidget(
-                    text: 'Post an Event',
-                    fontSize: 18,
-                    color: Colors.white,
-                    isBold: true,
-                  ),
-                ],
-              ),
+            const BusinessSheetHeader(
+              title: 'Plan a gathering',
+              subtitle: 'Create the moment customers will see in Community',
+              icon: Icons.celebration_outlined,
             ),
 
             // Form Content
@@ -411,11 +403,23 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const BusinessSectionLabel(
+                        step: '01',
+                        title: 'Event identity',
+                        description:
+                            'Give customers one clear reason to join the gathering.',
+                      ),
                       // Event Name
                       _buildField('Event Name', _eventNameController),
 
                       const SizedBox(height: 20),
 
+                      const BusinessSectionLabel(
+                        step: '02',
+                        title: 'Visual preview',
+                        description:
+                            'The first image becomes the event cover in Community.',
+                      ),
                       // Image Carousel
                       SizedBox(
                         height: 200,
@@ -515,6 +519,12 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
 
                       const SizedBox(height: 20),
 
+                      const BusinessSectionLabel(
+                        step: '03',
+                        title: 'Schedule',
+                        description:
+                            'Set the full start and end so ongoing status stays accurate.',
+                      ),
                       // Start Date
                       _buildDateField('Start Date', _startDate, (date) {
                         setState(() {
@@ -561,6 +571,12 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
 
                       const SizedBox(height: 20),
 
+                      const BusinessSectionLabel(
+                        step: '04',
+                        title: 'Place',
+                        description:
+                            'Use the café location or pin a different venue.',
+                      ),
                       // Shop Location Section (moved above Address)
                       TextWidget(
                         text: 'Location',
@@ -571,11 +587,10 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
                       const SizedBox(height: 12),
 
                       // Location Type Selection
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey[900],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                      Material(
+                        color: Colors.grey[900],
+                        borderRadius: BorderRadius.circular(8),
+                        clipBehavior: Clip.antiAlias,
                         child: Column(
                           children: [
                             RadioListTile<String>(
@@ -667,7 +682,6 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
                           child: ElevatedButton(
                             onPressed: _selectCustomLocation,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: primary,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(100),
                               ),
@@ -746,6 +760,12 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
 
                       const SizedBox(height: 20),
 
+                      const BusinessSectionLabel(
+                        step: '05',
+                        title: 'Guest details',
+                        description:
+                            'Answer what customers need to know before attending.',
+                      ),
                       // About
                       _buildField('About', _aboutController),
 
@@ -765,15 +785,8 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
                       SizedBox(
                         width: double.infinity,
                         height: 50,
-                        child: ElevatedButton(
+                        child: FilledButton(
                           onPressed: _saving ? null : _saveEvent,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                const Color(0xFFE53E3E), // Red color
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
                           child: _saving
                               ? const SizedBox(
                                   width: 22,
@@ -806,38 +819,10 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
   }
 
   Widget _buildField(String label, TextEditingController controller) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextWidget(
-          text: label,
-          fontSize: 16,
-          color: Colors.white,
-          isBold: true,
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.grey[800],
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: TextField(
-            controller: controller,
-            style: const TextStyle(
-              color: Colors.grey,
-              fontSize: 14,
-            ),
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.all(12),
-              hintStyle: TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-              ),
-            ),
-          ),
-        ),
-      ],
+    return TextField(
+      controller: controller,
+      style: const TextStyle(color: Colors.white, fontSize: 14),
+      decoration: InputDecoration(labelText: label),
     );
   }
 
@@ -867,10 +852,11 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
           },
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.grey[800],
-              borderRadius: BorderRadius.circular(8),
+              color: BusinessWorkspaceColors.surface,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: BusinessWorkspaceColors.line),
             ),
             child: Row(
               children: [
@@ -885,8 +871,7 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
                       ? _formatDate(selectedDate)
                       : 'Select $label',
                   style: TextStyle(
-                    color:
-                        selectedDate != null ? Colors.grey : Colors.grey[600],
+                    color: selectedDate != null ? Colors.white : Colors.white38,
                     fontSize: 14,
                   ),
                 ),
@@ -932,10 +917,11 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
           },
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.grey[800],
-              borderRadius: BorderRadius.circular(8),
+              color: BusinessWorkspaceColors.surface,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: BusinessWorkspaceColors.line),
             ),
             child: Row(
               children: [
@@ -950,8 +936,7 @@ class _PostEventBottomSheetState extends State<PostEventBottomSheet> {
                       ? '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}'
                       : 'Select $label',
                   style: TextStyle(
-                    color:
-                        selectedTime != null ? Colors.grey : Colors.grey[600],
+                    color: selectedTime != null ? Colors.white : Colors.white38,
                     fontSize: 14,
                   ),
                 ),
@@ -1109,10 +1094,10 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
     final link = _linkController.text.trim();
 
     if (title.isEmpty || _startDate == null || _endDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text(
-                'Please enter Event Name and select both start and end dates.')),
+      CustomToast.showWarning(
+        context,
+        'Add an event name, start date, and end date before saving.',
+        title: 'Event details incomplete',
       );
       return;
     }
@@ -1133,10 +1118,11 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
 
       // Check if location is valid
       if (latitude == null || longitude == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text(
-                  'Location required. Please enable location or select a custom location.')),
+        if (!mounted) return;
+        CustomToast.showWarning(
+          context,
+          'Enable location access or choose a custom location.',
+          title: 'Location required',
         );
         if (mounted) setState(() => _saving = false);
         return;
@@ -1187,15 +1173,23 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
       });
 
       if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Event updated.')),
+        CustomToast.showFromMessenger(
+          messenger,
+          'Guests will now see the latest event details.',
+          type: ToastType.success,
+          title: 'Event updated',
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update event: $e')),
-      );
+    } catch (_) {
+      if (mounted) {
+        CustomToast.showError(
+          context,
+          'We could not update the event. Please try again.',
+          title: 'Changes not saved',
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -1434,9 +1428,21 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const BusinessSectionLabel(
+                        step: '01',
+                        title: 'Event identity',
+                        description:
+                            'Keep the title focused on why customers should join.',
+                      ),
                       _buildField('Event Name', _eventNameController),
                       const SizedBox(height: 20),
 
+                      const BusinessSectionLabel(
+                        step: '02',
+                        title: 'Visual preview',
+                        description:
+                            'Reorder the cover customers see in Community.',
+                      ),
                       // Image Carousel
                       TextWidget(
                         text: 'Event Images (Max 5)',
@@ -1611,6 +1617,12 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                               ),
                       ),
                       const SizedBox(height: 20),
+                      const BusinessSectionLabel(
+                        step: '03',
+                        title: 'Schedule',
+                        description:
+                            'Accurate times keep upcoming and ongoing states correct.',
+                      ),
                       _buildDateField('Start Date', _startDate, (date) {
                         setState(() {
                           _startDate = date;
@@ -1643,6 +1655,11 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                         });
                       }),
                       const SizedBox(height: 20),
+                      const BusinessSectionLabel(
+                        step: '04',
+                        title: 'Place',
+                        description: 'Confirm where customers should arrive.',
+                      ),
                       // Shop Location Section (moved above Address)
                       TextWidget(
                         text: 'Location',
@@ -1653,11 +1670,10 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                       const SizedBox(height: 12),
 
                       // Location Type Selection
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey[900],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                      Material(
+                        color: Colors.grey[900],
+                        borderRadius: BorderRadius.circular(8),
+                        clipBehavior: Clip.antiAlias,
                         child: Column(
                           children: [
                             RadioListTile<String>(
@@ -1749,7 +1765,6 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                           child: ElevatedButton(
                             onPressed: _selectCustomLocation,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: primary,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(100),
                               ),
@@ -1826,6 +1841,12 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                       // Address Field (Below location logic)
                       _buildField('Address', _addressController),
                       const SizedBox(height: 20),
+                      const BusinessSectionLabel(
+                        step: '05',
+                        title: 'Guest details',
+                        description:
+                            'Keep attendance information useful and current.',
+                      ),
                       _buildField('About', _aboutController),
                       const SizedBox(height: 20),
                       _buildField('Email', _emailController),
@@ -1837,14 +1858,8 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                       SizedBox(
                         width: double.infinity,
                         height: 50,
-                        child: ElevatedButton(
+                        child: FilledButton(
                           onPressed: _saving ? null : _saveEvent,
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: primary,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
                           child: _saving
                               ? const SizedBox(
                                   width: 22,
@@ -1877,38 +1892,10 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
   }
 
   Widget _buildField(String label, TextEditingController controller) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextWidget(
-          text: label,
-          fontSize: 16,
-          color: Colors.white,
-          isBold: true,
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.grey[800],
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: TextField(
-            controller: controller,
-            style: const TextStyle(
-              color: Colors.grey,
-              fontSize: 14,
-            ),
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.all(12),
-              hintStyle: TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-              ),
-            ),
-          ),
-        ),
-      ],
+    return TextField(
+      controller: controller,
+      style: const TextStyle(color: Colors.white, fontSize: 14),
+      decoration: InputDecoration(labelText: label),
     );
   }
 
@@ -1938,10 +1925,11 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
           },
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.grey[800],
-              borderRadius: BorderRadius.circular(8),
+              color: BusinessWorkspaceColors.surface,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: BusinessWorkspaceColors.line),
             ),
             child: Row(
               children: [
@@ -1956,8 +1944,7 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                       ? _formatDate(selectedDate)
                       : 'Select $label',
                   style: TextStyle(
-                    color:
-                        selectedDate != null ? Colors.grey : Colors.grey[600],
+                    color: selectedDate != null ? Colors.white : Colors.white38,
                     fontSize: 14,
                   ),
                 ),
@@ -1999,10 +1986,11 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
           },
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.grey[800],
-              borderRadius: BorderRadius.circular(8),
+              color: BusinessWorkspaceColors.surface,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: BusinessWorkspaceColors.line),
             ),
             child: Row(
               children: [
@@ -2017,8 +2005,7 @@ class _EditEventBottomSheetState extends State<EditEventBottomSheet> {
                       ? '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}'
                       : 'Select $label',
                   style: TextStyle(
-                    color:
-                        selectedTime != null ? Colors.grey : Colors.grey[600],
+                    color: selectedTime != null ? Colors.white : Colors.white38,
                     fontSize: 14,
                   ),
                 ),

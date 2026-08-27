@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/utils/colors.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class EventCommentsScreen extends StatefulWidget {
   final String eventId;
@@ -37,8 +38,10 @@ class _EventCommentsScreenState extends State<EventCommentsScreen> {
   Future<void> _postComment() async {
     if (_commentController.text.trim().isEmpty) return;
     if (_currentUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please sign in to comment')),
+      CustomToast.showWarning(
+        context,
+        'Sign in to join the event conversation.',
+        title: 'Sign-in required',
       );
       return;
     }
@@ -65,10 +68,14 @@ class _EventCommentsScreenState extends State<EventCommentsScreen> {
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to post comment: $e')),
-      );
+    } catch (_) {
+      if (mounted) {
+        CustomToast.showError(
+          context,
+          'Your comment was not posted. Please try again.',
+          title: 'Comment not posted',
+        );
+      }
     } finally {
       if (mounted) setState(() => _isPosting = false);
     }

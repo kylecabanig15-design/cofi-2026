@@ -1,5 +1,5 @@
 import 'package:cofi/features/admin/admin_dashboard_screen.dart';
-import 'package:cofi/utils/colors.dart';
+import 'package:cofi/utils/app_theme.dart';
 import 'package:flutter/material.dart';
 
 class AdminApp extends StatelessWidget {
@@ -10,10 +10,7 @@ class AdminApp extends StatelessWidget {
     return MaterialApp(
       title: 'CoFi Admin',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: primary),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.dark(),
       home: const AdminDashboardScreen(),
     );
   }

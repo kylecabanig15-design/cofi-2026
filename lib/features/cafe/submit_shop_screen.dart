@@ -14,6 +14,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:cofi/features/business/shop_verification_sheet.dart';
+import 'package:cofi/features/business/widgets/business_workspace_ui.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class SubmitShopScreen extends StatefulWidget {
   const SubmitShopScreen({super.key});
@@ -238,14 +240,14 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
       // the user hit save would overwrite the shop with empty fields.
       debugPrint('Failed to load existing shop $id: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'Could not load shop details. Please check your connection and try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
+        CustomToast.showFromMessenger(
+          messenger,
+          'Check your connection, reopen the café, and try again.',
+          type: ToastType.error,
+          title: 'Café details did not load',
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoadingExisting = false);
@@ -380,36 +382,34 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
     }
   }
 
-  Future<void> _getAddressFromCoordinates(double latitude, double longitude) async {
+  Future<void> _getAddressFromCoordinates(
+      double latitude, double longitude) async {
     try {
       // Injected at build time — see custom_location_screen.dart.
-      const googleMapsApiKey = String.fromEnvironment('GOOGLE_GEOCODING_API_KEY');
-      if (googleMapsApiKey.isEmpty) {
-        debugLog('GOOGLE_GEOCODING_API_KEY not set; skipping geocode lookup');
-        return;
-      }
-      
-      // Try Google Geocoding API first
-      final String googleUrl =
-          'https://maps.googleapis.com/maps/api/geocode/json?latlng=$latitude,$longitude&key=$googleMapsApiKey';
-      final googleResponse = await http.get(Uri.parse(googleUrl));
+      const googleMapsApiKey =
+          String.fromEnvironment('GOOGLE_GEOCODING_API_KEY');
+      if (googleMapsApiKey.isNotEmpty) {
+        // Prefer Google when the optional server key is supplied.
+        final String googleUrl =
+            'https://maps.googleapis.com/maps/api/geocode/json?latlng=$latitude,$longitude&key=$googleMapsApiKey';
+        final googleResponse = await http.get(Uri.parse(googleUrl));
 
-      if (googleResponse.statusCode == 200) {
-        final json = jsonDecode(googleResponse.body);
-        final results = json['results'] as List? ?? [];
+        if (googleResponse.statusCode == 200) {
+          final json = jsonDecode(googleResponse.body);
+          final results = json['results'] as List? ?? [];
 
-        if (results.isNotEmpty) {
-          final address = results[0]['formatted_address'] as String? ?? '';
-          if (address.isNotEmpty) {
-            setState(() {
-              addressController.text = address;
-            });
-            return;
+          if (results.isNotEmpty) {
+            final address = results[0]['formatted_address'] as String? ?? '';
+            if (address.isNotEmpty && mounted) {
+              setState(() => addressController.text = address);
+              return;
+            }
           }
         }
       }
 
-      // Fallback to Nominatim
+      // Nominatim is the normal fallback, including builds without a Google
+      // Geocoding key. A missing optional key is not an application error.
       final String nominatimUrl =
           'https://nominatim.openstreetmap.org/reverse?format=json&lat=$latitude&lon=$longitude';
       final nominatimResponse = await http.get(
@@ -420,10 +420,8 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
       if (nominatimResponse.statusCode == 200) {
         final json = jsonDecode(nominatimResponse.body);
         final address = json['display_name'] as String? ?? '';
-        if (address.isNotEmpty) {
-          setState(() {
-            addressController.text = address;
-          });
+        if (address.isNotEmpty && mounted) {
+          setState(() => addressController.text = address);
         }
       }
     } catch (e) {
@@ -441,8 +439,10 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
       try {
         final position = await _getCurrentPosition();
         if (position != null) {
-          await _getAddressFromCoordinates(position.latitude, position.longitude);
-          address = addressController.text.trim(); // Re-read after potential update
+          await _getAddressFromCoordinates(
+              position.latitude, position.longitude);
+          address =
+              addressController.text.trim(); // Re-read after potential update
         }
       } catch (_) {}
     }
@@ -552,7 +552,7 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Shop updated successfully.')),
           );
-          // If editing an existing shop, we can go to details or back. 
+          // If editing an existing shop, we can go to details or back.
           // For business owners, /businessProfile is appropriate.
           Navigator.pop(context);
         }
@@ -563,11 +563,11 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
         // - 'user' accounts create 'community' submissions
         // - 'business' accounts create 'business' submissions with ownerId link
         // - All submissions start as 'pending_approval' until admin approves
-        
+
         // Fetch user's account type from Firestore
         String submissionType = 'community'; // Default for regular users
         String? ownerId;
-        
+
         if (user != null) {
           try {
             final userDoc = await FirebaseFirestore.instance
@@ -576,16 +576,18 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
                 .get();
             final userData = userDoc.data();
             final accountType = userData?['accountType'] as String? ?? 'user';
-            
+
             // DEBUG: Log the account type
             debugLog('🔍 [SHOP SUBMISSION] User accountType: $accountType');
-            
+
             if (accountType == 'business') {
               submissionType = 'business';
               ownerId = user.uid; // Link shop to business owner
-              debugLog('✅ [SHOP SUBMISSION] Setting submissionType to BUSINESS');
+              debugLog(
+                  '✅ [SHOP SUBMISSION] Setting submissionType to BUSINESS');
             } else {
-              debugLog('ℹ️ [SHOP SUBMISSION] Setting submissionType to COMMUNITY (accountType was: $accountType)');
+              debugLog(
+                  'ℹ️ [SHOP SUBMISSION] Setting submissionType to COMMUNITY (accountType was: $accountType)');
             }
           } catch (e) {
             // Default to community if fetch fails
@@ -593,9 +595,9 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
             submissionType = 'community';
           }
         }
-        
+
         debugLog('📤 [SHOP SUBMISSION] Final submissionType: $submissionType');
-        
+
         // Create new shop
         final data = {
           'name': name,
@@ -629,7 +631,9 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
           // ================================================================
           'isVerified': false,
           'submissionType': submissionType, // 'community' or 'business'
-          'approvalStatus': submissionType == 'business' ? 'awaiting_verification' : 'pending_approval', 
+          'approvalStatus': submissionType == 'business'
+              ? 'awaiting_verification'
+              : 'pending_approval',
           if (ownerId != null) 'ownerId': ownerId, // Link for business accounts
         };
 
@@ -638,7 +642,7 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
 
         // Create updates map to batch changes
         final Map<String, dynamic> imageUpdates = {};
-        
+
         // Execute uploads in parallel
         await Future.wait([
           // Logo Upload
@@ -648,7 +652,7 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
               if (imageUrl != null) imageUpdates['logoUrl'] = imageUrl;
             }
           }(),
-          
+
           // Gallery Uploads
           () async {
             if (_galleryImages.isNotEmpty) {
@@ -656,12 +660,14 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
               if (galleryUrls.isNotEmpty) imageUpdates['gallery'] = galleryUrls;
             }
           }(),
-          
+
           // Menu/Price Uploads
           () async {
             if (_menuPriceImages.isNotEmpty) {
-              final menuPriceUrls = await _uploadMenuPriceImagesToFirebase(ref.id);
-              if (menuPriceUrls.isNotEmpty) imageUpdates['menuPricePhotos'] = menuPriceUrls;
+              final menuPriceUrls =
+                  await _uploadMenuPriceImagesToFirebase(ref.id);
+              if (menuPriceUrls.isNotEmpty)
+                imageUpdates['menuPricePhotos'] = menuPriceUrls;
             }
           }(),
         ]);
@@ -752,23 +758,25 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
                                   isVerificationFlow: true,
                                 ),
                               ).then((_) {
-                                // After sheet is closed (submitted or cancelled), 
+                                // After sheet is closed (submitted or cancelled),
                                 // navigate to profile/business dashboard
-                                Navigator.pop(context); 
+                                Navigator.pop(context);
                               });
                             } else {
-                              Navigator.of(context).pop(); // Go back to Home/Profile
+                              Navigator.of(context)
+                                  .pop(); // Go back to Home/Profile
                             }
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: primary,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(30),
                             ),
                           ),
                           child: TextWidget(
-                            text: isBusiness ? 'Upload Requirements' : 'Back to Profile',
+                            text: isBusiness
+                                ? 'Upload Requirements'
+                                : 'Back to Profile',
                             fontSize: 16,
                             color: Colors.white,
                             isBold: true,
@@ -789,9 +797,9 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: BusinessWorkspaceColors.canvas,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: BusinessWorkspaceColors.canvas,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
@@ -799,904 +807,968 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
         ),
         centerTitle: false,
         title: TextWidget(
-          text: _isEditing ? 'Edit Shop' : 'Submit Shop',
-          fontSize: 16,
-          color: Colors.white,
+          text: _isEditing ? 'Shop profile' : 'Create shop profile',
+          fontSize: 18,
+          color: BusinessWorkspaceColors.paper,
           isBold: true,
         ),
       ),
-      body: SafeArea(
-        child: _isLoadingExisting
-            ? const Center(
-                child: SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              )
-            : Stack(
-                children: [
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 16),
+      body: BusinessWorkspaceTheme(
+        accentColor: primary,
+        child: SafeArea(
+          child: _isLoadingExisting
+              ? const Center(
+                  child: SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : Stack(
+                  children: [
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 16),
 
-                        // Posting as indicator
-                        if (_currentUser != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.account_circle,
-                                    color: Colors.white70, size: 18),
-                                const SizedBox(width: 8),
-                                TextWidget(
-                                  text:
-                                      'Posting as ${_currentUser!.displayName?.isNotEmpty == true ? _currentUser!.displayName! : (_currentUser!.email ?? 'Anonymous')}',
-                                  fontSize: 13,
-                                  color: Colors.white70,
-                                  isBold: false,
-                                ),
-                              ],
-                            ),
+                          BusinessPageIntro(
+                            eyebrow: _isEditing
+                                ? 'Customer storefront'
+                                : 'Business setup',
+                            title: _isEditing
+                                ? 'Shape your café story'
+                                : 'Introduce your café',
+                            description: _isEditing
+                                ? 'Keep the details, photos, hours, and atmosphere customers see up to date.'
+                                : 'Build a complete profile customers can trust before they visit.',
+                            icon: Icons.storefront_rounded,
                           ),
+                          const SizedBox(height: 20),
 
-                        // Shop Logo Section
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            TextWidget(
-                              text: 'Shop Logo',
-                              fontSize: 16,
-                              color: Colors.white,
-                              isBold: true,
-                            ),
-                            GestureDetector(
-                              onTap: _isUploading ? null : _pickImage,
-                              child: Container(
-                                width: 60,
-                                height: 60,
-                                decoration: BoxDecoration(
-                                  color: primary,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: _isUploading
-                                    ? const Center(
-                                        child: SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            valueColor:
-                                                AlwaysStoppedAnimation<Color>(
-                                                    Colors.white),
-                                          ),
-                                        ),
-                                      )
-                                    : _selectedImage != null
-                                        ? ClipRRect(
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                            child: Image.file(
-                                              _selectedImage!,
-                                              width: 60,
-                                              height: 60,
-                                              fit: BoxFit.cover,
-                                            ),
-                                          )
-                                        : _existingLogoUrl != null &&
-                                                _existingLogoUrl!.isNotEmpty
-                                            ? ClipRRect(
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                                child: CachedNetworkImage(
-                                                  imageUrl: _existingLogoUrl!,
-                                                  width: 60,
-                                                  height: 60,
-                                                  fit: BoxFit.cover,
-                                                  placeholder: (context, url) =>
-                                                      Container(
-                                                          color:
-                                                              Colors.grey[800]),
-                                                  errorWidget:
-                                                      (context, url, error) =>
-                                                          const Icon(
-                                                              Icons.error,
-                                                              color:
-                                                                  Colors.white),
-                                                ),
-                                              )
-                                            : Center(
-                                                child: Icon(
-                                                  Icons.add_a_photo,
-                                                  color: Colors.white,
-                                                  size: 24,
-                                                ),
-                                              ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Shop Name
-                        TextWidget(
-                          text: 'Shop Name',
-                          fontSize: 16,
-                          color: Colors.white,
-                          isBold: true,
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          height: 50,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[900],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: TextField(
-                            controller: shopNameController,
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 14),
-                            decoration: InputDecoration(
-                              hintText: 'Sample Cafe Name',
-                              hintStyle: TextStyle(
-                                  color: Colors.grey[500], fontSize: 14),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 16),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Shop Location Section (moved above Address)
-                        TextWidget(
-                          text: 'Shop Location',
-                          fontSize: 16,
-                          color: Colors.white,
-                          isBold: true,
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Location Type Selection
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.grey[900],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Column(
-                            children: [
-                              RadioListTile<String>(
-                                title: TextWidget(
-                                  text: 'My Current Location',
-                                  fontSize: 14,
-                                  color: Colors.white,
-                                ),
-                                subtitle: TextWidget(
-                                  text: 'Use my current location for the shop',
-                                  fontSize: 12,
-                                  color: Colors.white70,
-                                ),
-                                value: 'my_location',
-                                groupValue: _locationType,
-                                onChanged: (value) async {
-                                  setState(() {
-                                    _locationType = value!;
-                                  });
-                                  if (value == 'my_location') {
-                                    final pos = await _getCurrentPosition();
-                                    if (pos != null) {
-                                      _getAddressFromCoordinates(pos.latitude, pos.longitude);
-                                    }
-                                  }
-                                },
-                                activeColor: primary,
-                                contentPadding:
-                                    const EdgeInsets.symmetric(horizontal: 16),
-                              ),
-                              RadioListTile<String>(
-                                title: TextWidget(
-                                  text: 'Custom Location',
-                                  fontSize: 14,
-                                  color: Colors.white,
-                                ),
-                                subtitle: TextWidget(
-                                  text: 'Select a custom location on the map',
-                                  fontSize: 12,
-                                  color: Colors.white70,
-                                ),
-                                value: 'custom_location',
-                                groupValue: _locationType,
-                                onChanged: (value) {
-                                  setState(() {
-                                    _locationType = value!;
-                                  });
-                                },
-                                activeColor: primary,
-                                contentPadding:
-                                    const EdgeInsets.symmetric(horizontal: 16),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Show selected custom location info
-                        if (_locationType == 'custom_location' &&
-                            _selectedLocation != null)
-                          Container(
-                            margin: const EdgeInsets.only(top: 12),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[900],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.location_on,
-                                    color: primary, size: 20),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: TextWidget(
+                          // Posting as indicator
+                          if (_currentUser != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.account_circle,
+                                      color: Colors.white70, size: 18),
+                                  const SizedBox(width: 8),
+                                  TextWidget(
                                     text:
-                                        'Selected: ${_selectedLocation!.latitude.toStringAsFixed(6)}, ${_selectedLocation!.longitude.toStringAsFixed(6)}',
-                                    fontSize: 12,
+                                        'Posting as ${_currentUser!.displayName?.isNotEmpty == true ? _currentUser!.displayName! : (_currentUser!.email ?? 'Anonymous')}',
+                                    fontSize: 13,
                                     color: Colors.white70,
+                                    isBold: false,
                                   ),
-                                ),
-                                TextButton(
-                                  onPressed: _selectCustomLocation,
-                                  child: const Text('Change',
-                                      style: TextStyle(fontSize: 12)),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                        // Custom location selection button
-                        if (_locationType == 'custom_location')
-                          Container(
-                            margin: const EdgeInsets.only(top: 12),
-                            width: double.infinity,
-                            height: 48,
-                            child: ElevatedButton(
-                              onPressed: _selectCustomLocation,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: primary,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(100),
-                                ),
+                                ],
                               ),
-                              child: TextWidget(
-                                text: _selectedLocation == null
-                                    ? 'Select Location on Map'
-                                    : 'Change Location',
+                            ),
+
+                          const BusinessSectionLabel(
+                            step: '01',
+                            title: 'Identity',
+                            description:
+                                'The name and mark customers recognize first.',
+                          ),
+                          // Shop Logo Section
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              TextWidget(
+                                text: 'Shop Logo',
                                 fontSize: 16,
                                 color: Colors.white,
                                 isBold: true,
                               ),
+                              GestureDetector(
+                                onTap: _isUploading ? null : _pickImage,
+                                child: Container(
+                                  width: 60,
+                                  height: 60,
+                                  decoration: BoxDecoration(
+                                    color: primary,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: _isUploading
+                                      ? const Center(
+                                          child: SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                      Colors.white),
+                                            ),
+                                          ),
+                                        )
+                                      : _selectedImage != null
+                                          ? ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              child: Image.file(
+                                                _selectedImage!,
+                                                width: 60,
+                                                height: 60,
+                                                fit: BoxFit.cover,
+                                              ),
+                                            )
+                                          : _existingLogoUrl != null &&
+                                                  _existingLogoUrl!.isNotEmpty
+                                              ? ClipRRect(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  child: CachedNetworkImage(
+                                                    imageUrl: _existingLogoUrl!,
+                                                    width: 60,
+                                                    height: 60,
+                                                    fit: BoxFit.cover,
+                                                    placeholder:
+                                                        (context, url) =>
+                                                            Container(
+                                                                color: Colors
+                                                                    .grey[800]),
+                                                    errorWidget: (context, url,
+                                                            error) =>
+                                                        const Icon(Icons.error,
+                                                            color:
+                                                                Colors.white),
+                                                  ),
+                                                )
+                                              : Center(
+                                                  child: Icon(
+                                                    Icons.add_a_photo,
+                                                    color: Colors.white,
+                                                    size: 24,
+                                                  ),
+                                                ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Shop Name
+                          TextWidget(
+                            text: 'Shop Name',
+                            fontSize: 16,
+                            color: Colors.white,
+                            isBold: true,
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: TextField(
+                              controller: shopNameController,
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 14),
+                              decoration: InputDecoration(
+                                hintText: 'Sample Cafe Name',
+                                hintStyle: TextStyle(
+                                    color: Colors.grey[500], fontSize: 14),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 16),
+                              ),
                             ),
                           ),
+                          const SizedBox(height: 24),
 
-                        const SizedBox(height: 32),
+                          const BusinessSectionLabel(
+                            step: '02',
+                            title: 'Location',
+                            description:
+                                'Help customers find the correct café entrance.',
+                          ),
+                          // Shop Location Section (moved above Address)
+                          TextWidget(
+                            text: 'Shop Location',
+                            fontSize: 16,
+                            color: Colors.white,
+                            isBold: true,
+                          ),
+                          const SizedBox(height: 12),
 
-                        // Location requirement notice for my location
-                        if (_locationType == 'my_location' && !_locationReady)
-                          Container(
-                            width: double.infinity,
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.amber.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                  color: Colors.amber.withValues(alpha: 0.4)),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          // Location Type Selection
+                          Material(
+                            color: Colors.grey[900],
+                            borderRadius: BorderRadius.circular(8),
+                            clipBehavior: Clip.antiAlias,
+                            child: Column(
                               children: [
-                                const Icon(Icons.location_off,
-                                    color: Colors.amber, size: 18),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Location required',
-                                        style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.bold),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      const Text(
-                                        'Please enable Location Services and grant permission to proceed.',
-                                        style: TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 12),
-                                      ),
-                                      Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: TextButton(
-                                          onPressed: _ensureLocationReady,
-                                          child: const Text('Fix',
-                                              style: TextStyle(fontSize: 12)),
-                                        ),
-                                      )
-                                    ],
+                                RadioListTile<String>(
+                                  title: TextWidget(
+                                    text: 'My Current Location',
+                                    fontSize: 14,
+                                    color: Colors.white,
                                   ),
+                                  subtitle: TextWidget(
+                                    text:
+                                        'Use my current location for the shop',
+                                    fontSize: 12,
+                                    color: Colors.white70,
+                                  ),
+                                  value: 'my_location',
+                                  groupValue: _locationType,
+                                  onChanged: (value) async {
+                                    setState(() {
+                                      _locationType = value!;
+                                    });
+                                    if (value == 'my_location') {
+                                      final pos = await _getCurrentPosition();
+                                      if (pos != null) {
+                                        _getAddressFromCoordinates(
+                                            pos.latitude, pos.longitude);
+                                      }
+                                    }
+                                  },
+                                  activeColor: primary,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16),
+                                ),
+                                RadioListTile<String>(
+                                  title: TextWidget(
+                                    text: 'Custom Location',
+                                    fontSize: 14,
+                                    color: Colors.white,
+                                  ),
+                                  subtitle: TextWidget(
+                                    text: 'Select a custom location on the map',
+                                    fontSize: 12,
+                                    color: Colors.white70,
+                                  ),
+                                  value: 'custom_location',
+                                  groupValue: _locationType,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _locationType = value!;
+                                    });
+                                  },
+                                  activeColor: primary,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16),
                                 ),
                               ],
                             ),
                           ),
 
-                        const SizedBox(height: 24),
-
-                        // Address
-                        TextWidget(
-                          text: 'Address',
-                          fontSize: 16,
-                          color: Colors.white,
-                          isBold: true,
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          height: 50,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[900],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: TextField(
-                            controller: addressController,
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 14),
-                            decoration: InputDecoration(
-                              hintText: 'Davao City',
-                              hintStyle: TextStyle(
-                                  color: Colors.grey[500], fontSize: 14),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 16),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 32),
-
-                        // Gallery
-                        TextWidget(
-                          text: 'Gallery (Max 5)',
-                          fontSize: 16,
-                          color: Colors.white,
-                          isBold: true,
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          height: 200,
-                          child: (_existingGalleryUrls.isEmpty &&
-                                  _galleryImages.isEmpty)
-                              ? GestureDetector(
-                                  onTap:
-                                      _isUploading ? null : _pickGalleryImages,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[800],
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: Colors.grey[700]!,
-                                        width: 1,
-                                        style: BorderStyle.solid,
-                                      ),
-                                    ),
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        const Icon(
-                                          Icons.add_photo_alternate_outlined,
-                                          color: Colors.white54,
-                                          size: 40,
-                                        ),
-                                        const SizedBox(height: 8),
-                                        TextWidget(
-                                          text: 'Add up to 5 photos',
-                                          fontSize: 14,
-                                          color: Colors.white54,
-                                        ),
-                                      ],
+                          // Show selected custom location info
+                          if (_locationType == 'custom_location' &&
+                              _selectedLocation != null)
+                            Container(
+                              margin: const EdgeInsets.only(top: 12),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[900],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.location_on,
+                                      color: primary, size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: TextWidget(
+                                      text:
+                                          'Selected: ${_selectedLocation!.latitude.toStringAsFixed(6)}, ${_selectedLocation!.longitude.toStringAsFixed(6)}',
+                                      fontSize: 12,
+                                      color: Colors.white70,
                                     ),
                                   ),
-                                )
-                              : ListView.separated(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: _existingGalleryUrls.length +
-                                      _galleryImages.length +
-                                      (_existingGalleryUrls.length +
-                                                  _galleryImages.length <
-                                              5
-                                          ? 1
-                                          : 0),
-                                  separatorBuilder: (context, index) =>
-                                      const SizedBox(width: 12),
-                                  itemBuilder: (context, index) {
-                                    // Add button at the end
-                                    if (index ==
-                                        _existingGalleryUrls.length +
-                                            _galleryImages.length) {
-                                      return GestureDetector(
-                                        onTap: _isUploading
-                                            ? null
-                                            : _pickGalleryImages,
-                                        child: Container(
-                                          width: 150,
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey[800],
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            border: Border.all(
-                                                color: Colors.grey[700]!),
-                                          ),
-                                          child: const Center(
-                                            child: Icon(Icons.add,
-                                                color: Colors.white, size: 30),
-                                          ),
-                                        ),
-                                      );
-                                    }
-
-                                    // Existing Images
-                                    if (index < _existingGalleryUrls.length) {
-                                      return Stack(
-                                        children: [
-                                          ClipRRect(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            child: CachedNetworkImage(
-                                              imageUrl:
-                                                  _existingGalleryUrls[index],
-                                              width: 280,
-                                              height: 200,
-                                              fit: BoxFit.cover,
-                                              placeholder: (context, url) =>
-                                                  Container(
-                                                width: 280,
-                                                height: 200,
-                                                color: Colors.grey[800],
-                                                child: const Center(
-                                                    child:
-                                                        CircularProgressIndicator()),
-                                              ),
-                                              errorWidget:
-                                                  (context, url, error) =>
-                                                      const Icon(Icons.error,
-                                                          color: Colors.white),
-                                            ),
-                                          ),
-                                          Positioned(
-                                            top: 8,
-                                            right: 8,
-                                            child: GestureDetector(
-                                              onTap: () {
-                                                setState(() {
-                                                  _existingGalleryUrls
-                                                      .removeAt(index);
-                                                });
-                                              },
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.all(4),
-                                                decoration: const BoxDecoration(
-                                                  color: Colors.black54,
-                                                  shape: BoxShape.circle,
-                                                ),
-                                                child: const Icon(
-                                                  Icons.close,
-                                                  color: Colors.white,
-                                                  size: 16,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    }
-
-                                    // New Images
-                                    final newIndex =
-                                        index - _existingGalleryUrls.length;
-                                    return Stack(
-                                      children: [
-                                        ClipRRect(
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                          child: Image.file(
-                                            _galleryImages[newIndex],
-                                            width: 280,
-                                            height: 200,
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
-                                        Positioned(
-                                          top: 8,
-                                          right: 8,
-                                          child: GestureDetector(
-                                            onTap: () {
-                                              setState(() {
-                                                _galleryImages
-                                                    .removeAt(newIndex);
-                                              });
-                                            },
-                                            child: Container(
-                                              padding: const EdgeInsets.all(4),
-                                              decoration: const BoxDecoration(
-                                                color: Colors.black54,
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: const Icon(
-                                                Icons.close,
-                                                color: Colors.white,
-                                                size: 16,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                        ),
-                        const SizedBox(height: 32),
-
-                        // Menu/Price Photos
-                        TextWidget(
-                          text: 'Menu/Price Photos (Max 5)',
-                          fontSize: 16,
-                          color: Colors.white,
-                          isBold: true,
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          height: 200,
-                          child: (_existingMenuPriceUrls.isEmpty &&
-                                  _menuPriceImages.isEmpty)
-                              ? GestureDetector(
-                                  onTap: _isUploading
-                                      ? null
-                                      : _pickMenuPriceImages,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[800],
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: Colors.grey[700]!,
-                                        width: 1,
-                                        style: BorderStyle.solid,
-                                      ),
-                                    ),
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        const Icon(
-                                          Icons.add_photo_alternate_outlined,
-                                          color: Colors.white54,
-                                          size: 40,
-                                        ),
-                                        const SizedBox(height: 8),
-                                        TextWidget(
-                                          text: 'Add up to 5 photos',
-                                          fontSize: 14,
-                                          color: Colors.white54,
-                                        ),
-                                      ],
-                                    ),
+                                  TextButton(
+                                    onPressed: _selectCustomLocation,
+                                    child: const Text('Change',
+                                        style: TextStyle(fontSize: 12)),
                                   ),
-                                )
-                              : ListView.separated(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: _existingMenuPriceUrls.length +
-                                      _menuPriceImages.length +
-                                      (_existingMenuPriceUrls.length +
-                                                  _menuPriceImages.length <
-                                              5
-                                          ? 1
-                                          : 0),
-                                  separatorBuilder: (context, index) =>
-                                      const SizedBox(width: 12),
-                                  itemBuilder: (context, index) {
-                                    // Add button at the end
-                                    if (index ==
-                                        _existingMenuPriceUrls.length +
-                                            _menuPriceImages.length) {
-                                      return GestureDetector(
-                                        onTap: _isUploading
-                                            ? null
-                                            : _pickMenuPriceImages,
-                                        child: Container(
-                                          width: 150,
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey[800],
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            border: Border.all(
-                                                color: Colors.grey[700]!),
-                                          ),
-                                          child: const Center(
-                                            child: Icon(Icons.add,
-                                                color: Colors.white, size: 30),
-                                          ),
-                                        ),
-                                      );
-                                    }
-
-                                    // Existing Images
-                                    if (index < _existingMenuPriceUrls.length) {
-                                      return Stack(
-                                        children: [
-                                          ClipRRect(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            child: CachedNetworkImage(
-                                              imageUrl:
-                                                  _existingMenuPriceUrls[index],
-                                              width: 280,
-                                              height: 200,
-                                              fit: BoxFit.cover,
-                                              placeholder: (context, url) =>
-                                                  Container(
-                                                width: 280,
-                                                height: 200,
-                                                color: Colors.grey[800],
-                                                child: const Center(
-                                                    child:
-                                                        CircularProgressIndicator()),
-                                              ),
-                                              errorWidget:
-                                                  (context, url, error) =>
-                                                      const Icon(Icons.error,
-                                                          color: Colors.white),
-                                            ),
-                                          ),
-                                          Positioned(
-                                            top: 8,
-                                            right: 8,
-                                            child: GestureDetector(
-                                              onTap: () {
-                                                setState(() {
-                                                  _existingMenuPriceUrls
-                                                      .removeAt(index);
-                                                });
-                                              },
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.all(4),
-                                                decoration: const BoxDecoration(
-                                                  color: Colors.black54,
-                                                  shape: BoxShape.circle,
-                                                ),
-                                                child: const Icon(
-                                                  Icons.close,
-                                                  color: Colors.white,
-                                                  size: 16,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    }
-
-                                    // New Images
-                                    final newIndex =
-                                        index - _existingMenuPriceUrls.length;
-                                    return Stack(
-                                      children: [
-                                        ClipRRect(
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                          child: Image.file(
-                                            _menuPriceImages[newIndex],
-                                            width: 280,
-                                            height: 200,
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
-                                        Positioned(
-                                          top: 8,
-                                          right: 8,
-                                          child: GestureDetector(
-                                            onTap: () {
-                                              setState(() {
-                                                _menuPriceImages
-                                                    .removeAt(newIndex);
-                                              });
-                                            },
-                                            child: Container(
-                                              padding: const EdgeInsets.all(4),
-                                              decoration: const BoxDecoration(
-                                                color: Colors.black54,
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: const Icon(
-                                                Icons.close,
-                                                color: Colors.white,
-                                                size: 16,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                        ),
-                        const SizedBox(height: 32),
-
-                        // About Me
-                        TextWidget(
-                          text: 'About the Shop',
-                          fontSize: 16,
-                          color: Colors.white,
-                          isBold: true,
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          height: 150,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[900],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: TextField(
-                            controller: aboutController,
-                            maxLines: 4,
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 14),
-                            decoration: InputDecoration(
-                              hintText: '',
-                              hintStyle: TextStyle(
-                                  color: Colors.grey[500], fontSize: 14),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.all(16),
+                                ],
+                              ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(height: 32),
 
-                        // Contacts
-                        TextWidget(
-                          text: 'Contacts',
-                          fontSize: 16,
-                          color: Colors.white,
-                          isBold: true,
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Instagram
-                        _buildContactField(
-                          icon: Icons.camera_alt,
-                          controller: instagramController,
-                          label: 'Instagram',
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Facebook
-                        _buildContactField(
-                          icon: Icons.facebook,
-                          controller: facebookController,
-                          label: 'Facebook',
-                        ),
-                        const SizedBox(height: 12),
-
-                        // TikTok
-                        _buildContactField(
-                          icon: Icons.music_note,
-                          controller: tiktokController,
-                          label: 'Tiktok',
-                        ),
-                        const SizedBox(height: 32),
-
-                        // Select Tags
-                        TextWidget(
-                          text: 'Select Tags',
-                          fontSize: 16,
-                          color: Colors.white,
-                          isBold: true,
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Tags Sections (Categorized)
-                        ..._tagCategories.entries.map((entry) {
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(top: 16, bottom: 12),
+                          // Custom location selection button
+                          if (_locationType == 'custom_location')
+                            Container(
+                              margin: const EdgeInsets.only(top: 12),
+                              width: double.infinity,
+                              height: 48,
+                              child: ElevatedButton(
+                                onPressed: _selectCustomLocation,
+                                style: ElevatedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(100),
+                                  ),
+                                ),
                                 child: TextWidget(
-                                  text: entry.key,
-                                  fontSize: 14,
-                                  color: Colors.white70,
-                                  isBold: true,
-                                ),
-                              ),
-                              Wrap(
-                                spacing: 12,
-                                runSpacing: 12,
-                                children: entry.value.map((tag) {
-                                  // Ensure tag exists in state, default to false if not
-                                  final isSelected = selectedTags[tag] ?? false;
-                                  return _buildTag(tag, isSelected);
-                                }).toList(),
-                              ),
-                            ],
-                          );
-                        }),
-                        const SizedBox(height: 24),
-
-                        // Daily Schedule Section
-                        _buildScheduleSection(),
-
-                        const SizedBox(height: 40),
-                        // Extra padding for scrollview to not overlap with fixed button
-                        const SizedBox(height: 80),
-                      ],
-                    ),
-                  ),
-                  // Fixed Save Button at Bottom
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      color: Colors.black,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 16),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton(
-                          onPressed: (_isSaving ||
-                                  (_locationType == 'my_location' &&
-                                      !_locationReady) ||
-                                  (_locationType == 'custom_location' &&
-                                      _selectedLocation == null))
-                              ? null
-                              : _submitShop,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primary,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(100),
-                            ),
-                          ),
-                          child: _isSaving
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white),
-                                  ),
-                                )
-                              : TextWidget(
-                                  text: (_locationType == 'my_location' &&
-                                          !_locationReady)
-                                      ? 'Enable Location'
-                                      : (_locationType == 'custom_location' &&
-                                              _selectedLocation == null)
-                                          ? 'Select Location'
-                                          : (_isEditing ? 'Update' : 'Save'),
+                                  text: _selectedLocation == null
+                                      ? 'Select Location on Map'
+                                      : 'Change Location',
                                   fontSize: 16,
                                   color: Colors.white,
                                   isBold: true,
                                 ),
+                              ),
+                            ),
+
+                          const SizedBox(height: 32),
+
+                          // Location requirement notice for my location
+                          if (_locationType == 'my_location' && !_locationReady)
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                    color: Colors.amber.withValues(alpha: 0.4)),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(Icons.location_off,
+                                      color: Colors.amber, size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Location required',
+                                          style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        const Text(
+                                          'Please enable Location Services and grant permission to proceed.',
+                                          style: TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 12),
+                                        ),
+                                        Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: TextButton(
+                                            onPressed: _ensureLocationReady,
+                                            child: const Text('Fix',
+                                                style: TextStyle(fontSize: 12)),
+                                          ),
+                                        )
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                          const SizedBox(height: 24),
+
+                          // Address
+                          TextWidget(
+                            text: 'Address',
+                            fontSize: 16,
+                            color: Colors.white,
+                            isBold: true,
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: TextField(
+                              controller: addressController,
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 14),
+                              decoration: InputDecoration(
+                                hintText: 'Davao City',
+                                hintStyle: TextStyle(
+                                    color: Colors.grey[500], fontSize: 14),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 16),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+
+                          const BusinessSectionLabel(
+                            step: '03',
+                            title: 'Storefront gallery',
+                            description:
+                                'Lead with real photos of the space, menu, and experience.',
+                          ),
+                          // Gallery
+                          TextWidget(
+                            text: 'Gallery (Max 5)',
+                            fontSize: 16,
+                            color: Colors.white,
+                            isBold: true,
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            height: 200,
+                            child: (_existingGalleryUrls.isEmpty &&
+                                    _galleryImages.isEmpty)
+                                ? GestureDetector(
+                                    onTap: _isUploading
+                                        ? null
+                                        : _pickGalleryImages,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[800],
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: Colors.grey[700]!,
+                                          width: 1,
+                                          style: BorderStyle.solid,
+                                        ),
+                                      ),
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          const Icon(
+                                            Icons.add_photo_alternate_outlined,
+                                            color: Colors.white54,
+                                            size: 40,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          TextWidget(
+                                            text: 'Add up to 5 photos',
+                                            fontSize: 14,
+                                            color: Colors.white54,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: _existingGalleryUrls.length +
+                                        _galleryImages.length +
+                                        (_existingGalleryUrls.length +
+                                                    _galleryImages.length <
+                                                5
+                                            ? 1
+                                            : 0),
+                                    separatorBuilder: (context, index) =>
+                                        const SizedBox(width: 12),
+                                    itemBuilder: (context, index) {
+                                      // Add button at the end
+                                      if (index ==
+                                          _existingGalleryUrls.length +
+                                              _galleryImages.length) {
+                                        return GestureDetector(
+                                          onTap: _isUploading
+                                              ? null
+                                              : _pickGalleryImages,
+                                          child: Container(
+                                            width: 150,
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey[800],
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              border: Border.all(
+                                                  color: Colors.grey[700]!),
+                                            ),
+                                            child: const Center(
+                                              child: Icon(Icons.add,
+                                                  color: Colors.white,
+                                                  size: 30),
+                                            ),
+                                          ),
+                                        );
+                                      }
+
+                                      // Existing Images
+                                      if (index < _existingGalleryUrls.length) {
+                                        return Stack(
+                                          children: [
+                                            ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              child: CachedNetworkImage(
+                                                imageUrl:
+                                                    _existingGalleryUrls[index],
+                                                width: 280,
+                                                height: 200,
+                                                fit: BoxFit.cover,
+                                                placeholder: (context, url) =>
+                                                    Container(
+                                                  width: 280,
+                                                  height: 200,
+                                                  color: Colors.grey[800],
+                                                  child: const Center(
+                                                      child:
+                                                          CircularProgressIndicator()),
+                                                ),
+                                                errorWidget: (context, url,
+                                                        error) =>
+                                                    const Icon(Icons.error,
+                                                        color: Colors.white),
+                                              ),
+                                            ),
+                                            Positioned(
+                                              top: 8,
+                                              right: 8,
+                                              child: GestureDetector(
+                                                onTap: () {
+                                                  setState(() {
+                                                    _existingGalleryUrls
+                                                        .removeAt(index);
+                                                  });
+                                                },
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.all(4),
+                                                  decoration:
+                                                      const BoxDecoration(
+                                                    color: Colors.black54,
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.close,
+                                                    color: Colors.white,
+                                                    size: 16,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      }
+
+                                      // New Images
+                                      final newIndex =
+                                          index - _existingGalleryUrls.length;
+                                      return Stack(
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            child: Image.file(
+                                              _galleryImages[newIndex],
+                                              width: 280,
+                                              height: 200,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                          Positioned(
+                                            top: 8,
+                                            right: 8,
+                                            child: GestureDetector(
+                                              onTap: () {
+                                                setState(() {
+                                                  _galleryImages
+                                                      .removeAt(newIndex);
+                                                });
+                                              },
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.all(4),
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.black54,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(
+                                                  Icons.close,
+                                                  color: Colors.white,
+                                                  size: 16,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                          ),
+                          const SizedBox(height: 32),
+
+                          // Menu/Price Photos
+                          TextWidget(
+                            text: 'Menu/Price Photos (Max 5)',
+                            fontSize: 16,
+                            color: Colors.white,
+                            isBold: true,
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            height: 200,
+                            child: (_existingMenuPriceUrls.isEmpty &&
+                                    _menuPriceImages.isEmpty)
+                                ? GestureDetector(
+                                    onTap: _isUploading
+                                        ? null
+                                        : _pickMenuPriceImages,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[800],
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: Colors.grey[700]!,
+                                          width: 1,
+                                          style: BorderStyle.solid,
+                                        ),
+                                      ),
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          const Icon(
+                                            Icons.add_photo_alternate_outlined,
+                                            color: Colors.white54,
+                                            size: 40,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          TextWidget(
+                                            text: 'Add up to 5 photos',
+                                            fontSize: 14,
+                                            color: Colors.white54,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: _existingMenuPriceUrls.length +
+                                        _menuPriceImages.length +
+                                        (_existingMenuPriceUrls.length +
+                                                    _menuPriceImages.length <
+                                                5
+                                            ? 1
+                                            : 0),
+                                    separatorBuilder: (context, index) =>
+                                        const SizedBox(width: 12),
+                                    itemBuilder: (context, index) {
+                                      // Add button at the end
+                                      if (index ==
+                                          _existingMenuPriceUrls.length +
+                                              _menuPriceImages.length) {
+                                        return GestureDetector(
+                                          onTap: _isUploading
+                                              ? null
+                                              : _pickMenuPriceImages,
+                                          child: Container(
+                                            width: 150,
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey[800],
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              border: Border.all(
+                                                  color: Colors.grey[700]!),
+                                            ),
+                                            child: const Center(
+                                              child: Icon(Icons.add,
+                                                  color: Colors.white,
+                                                  size: 30),
+                                            ),
+                                          ),
+                                        );
+                                      }
+
+                                      // Existing Images
+                                      if (index <
+                                          _existingMenuPriceUrls.length) {
+                                        return Stack(
+                                          children: [
+                                            ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              child: CachedNetworkImage(
+                                                imageUrl:
+                                                    _existingMenuPriceUrls[
+                                                        index],
+                                                width: 280,
+                                                height: 200,
+                                                fit: BoxFit.cover,
+                                                placeholder: (context, url) =>
+                                                    Container(
+                                                  width: 280,
+                                                  height: 200,
+                                                  color: Colors.grey[800],
+                                                  child: const Center(
+                                                      child:
+                                                          CircularProgressIndicator()),
+                                                ),
+                                                errorWidget: (context, url,
+                                                        error) =>
+                                                    const Icon(Icons.error,
+                                                        color: Colors.white),
+                                              ),
+                                            ),
+                                            Positioned(
+                                              top: 8,
+                                              right: 8,
+                                              child: GestureDetector(
+                                                onTap: () {
+                                                  setState(() {
+                                                    _existingMenuPriceUrls
+                                                        .removeAt(index);
+                                                  });
+                                                },
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.all(4),
+                                                  decoration:
+                                                      const BoxDecoration(
+                                                    color: Colors.black54,
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.close,
+                                                    color: Colors.white,
+                                                    size: 16,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      }
+
+                                      // New Images
+                                      final newIndex =
+                                          index - _existingMenuPriceUrls.length;
+                                      return Stack(
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            child: Image.file(
+                                              _menuPriceImages[newIndex],
+                                              width: 280,
+                                              height: 200,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                          Positioned(
+                                            top: 8,
+                                            right: 8,
+                                            child: GestureDetector(
+                                              onTap: () {
+                                                setState(() {
+                                                  _menuPriceImages
+                                                      .removeAt(newIndex);
+                                                });
+                                              },
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.all(4),
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.black54,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(
+                                                  Icons.close,
+                                                  color: Colors.white,
+                                                  size: 16,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                          ),
+                          const SizedBox(height: 32),
+
+                          // About Me
+                          TextWidget(
+                            text: 'About the Shop',
+                            fontSize: 16,
+                            color: Colors.white,
+                            isBold: true,
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            height: 150,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: TextField(
+                              controller: aboutController,
+                              maxLines: 4,
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 14),
+                              decoration: InputDecoration(
+                                hintText: '',
+                                hintStyle: TextStyle(
+                                    color: Colors.grey[500], fontSize: 14),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.all(16),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+
+                          const BusinessSectionLabel(
+                            step: '04',
+                            title: 'Contact channels',
+                            description:
+                                'Give customers a reliable way to reach your café.',
+                          ),
+                          // Contacts
+                          TextWidget(
+                            text: 'Contacts',
+                            fontSize: 16,
+                            color: Colors.white,
+                            isBold: true,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Instagram
+                          _buildContactField(
+                            icon: Icons.camera_alt,
+                            controller: instagramController,
+                            label: 'Instagram',
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Facebook
+                          _buildContactField(
+                            icon: Icons.facebook,
+                            controller: facebookController,
+                            label: 'Facebook',
+                          ),
+                          const SizedBox(height: 12),
+
+                          // TikTok
+                          _buildContactField(
+                            icon: Icons.music_note,
+                            controller: tiktokController,
+                            label: 'Tiktok',
+                          ),
+                          const SizedBox(height: 32),
+
+                          const BusinessSectionLabel(
+                            step: '05',
+                            title: 'Customer expectations',
+                            description:
+                                'Choose only tags that customers can consistently expect.',
+                          ),
+                          // Select Tags
+                          TextWidget(
+                            text: 'Select Tags',
+                            fontSize: 16,
+                            color: Colors.white,
+                            isBold: true,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Tags Sections (Categorized)
+                          ..._tagCategories.entries.map((entry) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                      top: 16, bottom: 12),
+                                  child: TextWidget(
+                                    text: entry.key,
+                                    fontSize: 14,
+                                    color: Colors.white70,
+                                    isBold: true,
+                                  ),
+                                ),
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 12,
+                                  children: entry.value.map((tag) {
+                                    // Ensure tag exists in state, default to false if not
+                                    final isSelected =
+                                        selectedTags[tag] ?? false;
+                                    return _buildTag(tag, isSelected);
+                                  }).toList(),
+                                ),
+                              ],
+                            );
+                          }),
+                          const SizedBox(height: 24),
+
+                          const BusinessSectionLabel(
+                            step: '06',
+                            title: 'Opening hours',
+                            description:
+                                'Keep hours accurate so customers never arrive at a closed door.',
+                          ),
+                          // Daily Schedule Section
+                          _buildScheduleSection(),
+
+                          const SizedBox(height: 40),
+                          // Extra padding for scrollview to not overlap with fixed button
+                          const SizedBox(height: 80),
+                        ],
+                      ),
+                    ),
+                    // Fixed Save Button at Bottom
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: BusinessWorkspaceColors.canvas,
+                          border: Border(
+                            top:
+                                BorderSide(color: BusinessWorkspaceColors.line),
+                          ),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 16),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: FilledButton(
+                            onPressed: (_isSaving ||
+                                    (_locationType == 'my_location' &&
+                                        !_locationReady) ||
+                                    (_locationType == 'custom_location' &&
+                                        _selectedLocation == null))
+                                ? null
+                                : _submitShop,
+                            child: _isSaving
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          Colors.white),
+                                    ),
+                                  )
+                                : TextWidget(
+                                    text: (_locationType == 'my_location' &&
+                                            !_locationReady)
+                                        ? 'Enable Location'
+                                        : (_locationType == 'custom_location' &&
+                                                _selectedLocation == null)
+                                            ? 'Select Location'
+                                            : (_isEditing ? 'Update' : 'Save'),
+                                    fontSize: 16,
+                                    color: Colors.white,
+                                    isBold: true,
+                                  ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+        ),
       ),
     );
   }
@@ -1741,9 +1813,11 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
       final uploadTasks = _galleryImages.asMap().entries.map((entry) async {
         final i = entry.key;
         final file = entry.value;
-        final fileName = 'gallery_${shopId}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
-        final storageRef = FirebaseStorage.instance.ref().child('shop_images').child(fileName);
-        
+        final fileName =
+            'gallery_${shopId}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
+        final storageRef =
+            FirebaseStorage.instance.ref().child('shop_images').child(fileName);
+
         final snapshot = await storageRef.putFile(file);
         return await snapshot.ref.getDownloadURL();
       });
@@ -1769,8 +1843,10 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
       final uploadTasks = _menuPriceImages.asMap().entries.map((entry) async {
         final i = entry.key;
         final file = entry.value;
-        final fileName = 'menu_price_${shopId}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
-        final storageRef = FirebaseStorage.instance.ref().child('shop_images').child(fileName);
+        final fileName =
+            'menu_price_${shopId}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
+        final storageRef =
+            FirebaseStorage.instance.ref().child('shop_images').child(fileName);
 
         final snapshot = await storageRef.putFile(file);
         return await snapshot.ref.getDownloadURL();
@@ -1830,8 +1906,9 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(8),
+        color: BusinessWorkspaceColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: BusinessWorkspaceColors.line),
       ),
       child: Column(
         children: [
@@ -1888,7 +1965,9 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
     required bool enabled,
     required VoidCallback onTap,
   }) {
-    final tileColor = enabled ? Colors.grey[850] : Colors.grey[800];
+    final tileColor = enabled
+        ? BusinessWorkspaceColors.surfaceRaised
+        : BusinessWorkspaceColors.surface;
     final textColor = enabled ? Colors.white : Colors.white54;
     return GestureDetector(
       onTap: enabled ? onTap : null,
@@ -1897,8 +1976,8 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           color: tileColor,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey[700]!.withValues(alpha: 0.4)),
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(color: BusinessWorkspaceColors.line),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2138,10 +2217,11 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
     required String label,
   }) {
     return Container(
-      height: 50,
+      height: 54,
       decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(8),
+        color: BusinessWorkspaceColors.surface,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: BusinessWorkspaceColors.line),
       ),
       child: Row(
         children: [
@@ -2158,8 +2238,7 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
               controller: controller,
               style: const TextStyle(color: Colors.white, fontSize: 14),
               decoration: InputDecoration(
-                hintText: label,
-                hintStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
+                labelText: label,
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(vertical: 16),
               ),
@@ -2171,25 +2250,24 @@ class _SubmitShopScreenState extends State<SubmitShopScreen> {
   }
 
   Widget _buildTag(String text, bool isSelected) {
-    return GestureDetector(
-      onTap: () {
+    return FilterChip(
+      selected: isSelected,
+      onSelected: (_) {
         setState(() {
           selectedTags[text] = !selectedTags[text]!;
         });
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? primary : Colors.grey[800],
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: TextWidget(
-          text: text,
-          fontSize: 14,
-          color: Colors.white,
-          isBold: false,
-        ),
+      showCheckmark: true,
+      checkmarkColor: Colors.white,
+      selectedColor: BusinessWorkspaceColors.action,
+      backgroundColor: BusinessWorkspaceColors.surfaceRaised,
+      side: BorderSide(
+        color: isSelected
+            ? BusinessWorkspaceColors.action
+            : BusinessWorkspaceColors.line,
       ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(99)),
+      label: Text(text, style: const TextStyle(color: Colors.white)),
     );
   }
 

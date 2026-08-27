@@ -5,12 +5,94 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get_storage/get_storage.dart';
 
 class RecommendationService {
+  static const Duration recommendationCacheLifetime = Duration(hours: 24);
+  static const int recommendationAlgorithmVersion = 2;
+
+  static String _scoresKey(String userId) => 'shop_recommendations_$userId';
+  static String _timestampKey(String userId) => 'shop_rec_timestamp_$userId';
+  static String _inputVersionKey(String userId) =>
+      'shop_rec_input_version_$userId';
+  static String _calculatedVersionKey(String userId) =>
+      'shop_rec_calculated_version_$userId';
+  static String _dirtyKey(String userId) => 'shop_rec_dirty_$userId';
+  static String _algorithmVersionKey(String userId) =>
+      'shop_rec_algorithm_version_$userId';
+  static String _lastAttemptKey(String userId) =>
+      'shop_rec_last_attempt_$userId';
+
   static Future<void> invalidateCache(GetStorage box, String userId) async {
     await Future.wait([
-      box.remove('shop_recommendations_$userId'),
-      box.remove('shop_rec_timestamp_$userId'),
+      box.remove(_scoresKey(userId)),
+      box.remove(_timestampKey(userId)),
+      box.remove(_inputVersionKey(userId)),
+      box.remove(_calculatedVersionKey(userId)),
+      box.remove(_dirtyKey(userId)),
+      box.remove(_algorithmVersionKey(userId)),
+      box.remove(_lastAttemptKey(userId)),
     ]);
   }
+
+  /// Records a change to inputs used by collaborative filtering without
+  /// deleting the last working scores. Multiple changes can therefore be
+  /// coalesced into one later calculation.
+  static Future<int> markInputsChanged(GetStorage box, String userId) async {
+    final nextVersion = (box.read<int>(_inputVersionKey(userId)) ?? 0) + 1;
+    await Future.wait([
+      box.write(_inputVersionKey(userId), nextVersion),
+      box.write(_dirtyKey(userId), true),
+    ]);
+    return nextVersion;
+  }
+
+  /// Returns true when cached predictions should be refreshed in the
+  /// background. A dirty cache can still be displayed while it revalidates.
+  static bool shouldRevalidate(
+    GetStorage box,
+    String userId, {
+    DateTime? now,
+  }) {
+    final scores = box.read(_scoresKey(userId));
+    final timestamp = box.read<int>(_timestampKey(userId));
+    final cachedAlgorithmVersion = box.read<int>(_algorithmVersionKey(userId));
+    final isDirty = box.read<bool>(_dirtyKey(userId)) ?? false;
+
+    return cacheNeedsRevalidation(
+      hasScores: scores is Map,
+      generatedAtMilliseconds: timestamp,
+      isDirty: isDirty,
+      cachedAlgorithmVersion: cachedAlgorithmVersion,
+      now: now,
+    );
+  }
+
+  /// Pure cache-policy helper kept public so the 24-hour, dirty-input, and
+  /// formula-version rules can be verified without Firebase or device storage.
+  static bool cacheNeedsRevalidation({
+    required bool hasScores,
+    required int? generatedAtMilliseconds,
+    required bool isDirty,
+    required int? cachedAlgorithmVersion,
+    DateTime? now,
+  }) {
+    if (!hasScores || generatedAtMilliseconds == null) return true;
+    if (cachedAlgorithmVersion != recommendationAlgorithmVersion) return true;
+    if (isDirty) return true;
+
+    final generatedAt =
+        DateTime.fromMillisecondsSinceEpoch(generatedAtMilliseconds);
+    return (now ?? DateTime.now()).difference(generatedAt) >=
+        recommendationCacheLifetime;
+  }
+
+  static Map<String, double>? _readCachedScores(GetStorage box, String userId) {
+    final raw = box.read(_scoresKey(userId));
+    if (raw is! Map) return null;
+    return raw.map<String, double>((key, value) =>
+        MapEntry(key.toString(), value is num ? value.toDouble() : 0.0));
+  }
+
+  static bool hasCachedScores(GetStorage box, String userId) =>
+      _readCachedScores(box, userId) != null;
 
   static const Map<String, double> defaultVisitTagWeights = {
     'Study Session': 0.075,
@@ -269,7 +351,7 @@ class RecommendationService {
     if (activeUser == null || activeUser.uid != user.uid) {
       debugLog(
           '⚠️ [ALGORITHM] Similar-user lookup skipped: auth state changed.');
-      return [];
+      throw StateError('Recommendation user is no longer authenticated.');
     }
 
     var queryStage = 'refreshing authentication';
@@ -417,10 +499,10 @@ class RecommendationService {
     } on FirebaseException catch (e) {
       debugLog(
           '❌ [ALGORITHM] Firestore error while $queryStage: ${e.code} ${e.message ?? ''}');
-      return [];
+      rethrow;
     } catch (e) {
       debugLog('❌ [ALGORITHM] Error while $queryStage: $e');
-      return [];
+      rethrow;
     }
   }
 
@@ -433,30 +515,43 @@ class RecommendationService {
   }) async {
     if (user == null) return {};
 
-    final String recCacheKey = 'shop_recommendations_${user.uid}';
-    final String recTimeKey = 'shop_rec_timestamp_${user.uid}';
+    final recCacheKey = _scoresKey(user.uid);
+    final recTimeKey = _timestampKey(user.uid);
+    final staleScores = _readCachedScores(box, user.uid);
 
     // 1. Check Cache first
-    if (!forceRefresh) {
+    if (!forceRefresh && staleScores != null) {
       final int? timestamp = box.read(recTimeKey);
-      final Map<String, dynamic>? cachedScores = box.read(recCacheKey);
+      final cachedAlgorithmVersion =
+          box.read<int>(_algorithmVersionKey(user.uid));
 
-      if (timestamp != null && cachedScores != null) {
+      if (timestamp != null) {
         final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
         final diff = DateTime.now().difference(date);
 
-        // Cache is valid for 24 hours
-        if (diff.inHours < 24) {
+        // Dirty scores remain displayable while Explore schedules a background
+        // revalidation. Only age/formula compatibility decide whether this
+        // normal read can use them immediately.
+        if (diff < recommendationCacheLifetime &&
+            cachedAlgorithmVersion == recommendationAlgorithmVersion) {
           debugLog(
               '✅ [ALGORITHM] Loading weighted scores from CACHE (Valid for 24h)');
           debugLog('   Timestamp: $date');
-          return Map<String, double>.from(cachedScores);
+          return staleScores;
         }
       }
+
+      debugLog(
+          '📦 [ALGORITHM] Showing stale cached scores while Explore revalidates.');
+      return staleScores;
     }
 
     debugLog(
         '🔄 [ALGORITHM] Recalculating Cosine Similarity & Weighted Scores...');
+
+    final inputVersionAtStart = box.read<int>(_inputVersionKey(user.uid)) ?? 0;
+    await box.write(
+        _lastAttemptKey(user.uid), DateTime.now().millisecondsSinceEpoch);
 
     try {
       final similarUsers = await _findSimilarUsers(user);
@@ -466,6 +561,11 @@ class RecommendationService {
         // sparse data repeat the full collaborative query on every visit.
         await box.write(recCacheKey, <String, double>{});
         await box.write(recTimeKey, DateTime.now().millisecondsSinceEpoch);
+        await _finishSuccessfulCalculation(
+          box: box,
+          userId: user.uid,
+          inputVersionAtStart: inputVersionAtStart,
+        );
         return {};
       }
 
@@ -546,12 +646,32 @@ class RecommendationService {
       // Save to Cache
       await box.write(recCacheKey, scores);
       await box.write(recTimeKey, DateTime.now().millisecondsSinceEpoch);
+      await _finishSuccessfulCalculation(
+        box: box,
+        userId: user.uid,
+        inputVersionAtStart: inputVersionAtStart,
+      );
       debugLog('💾 [ALGORITHM] Scores saved to local cache.');
 
       return scores;
     } catch (e) {
       debugLog('❌ [ALGORITHM] Error calculating scores: $e');
-      return {};
+      // A failed refresh must not blank a previously useful Explore feed.
+      // Leave the dirty flag in place so a later qualified refresh can retry.
+      return staleScores ?? {};
     }
+  }
+
+  Future<void> _finishSuccessfulCalculation({
+    required GetStorage box,
+    required String userId,
+    required int inputVersionAtStart,
+  }) async {
+    final latestInputVersion = box.read<int>(_inputVersionKey(userId)) ?? 0;
+    await Future.wait([
+      box.write(_calculatedVersionKey(userId), inputVersionAtStart),
+      box.write(_algorithmVersionKey(userId), recommendationAlgorithmVersion),
+      box.write(_dirtyKey(userId), latestInputVersion != inputVersionAtStart),
+    ]);
   }
 }

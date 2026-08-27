@@ -6,9 +6,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/widgets/premium_background.dart';
-import 'package:cofi/features/home/explore/services/recommendation_service.dart';
 import 'package:cofi/utils/app_signals.dart';
-import 'package:get_storage/get_storage.dart';
+import 'package:cofi/widgets/custom_dialog.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class InterestSelectionScreen extends StatefulWidget {
   final bool isEditing;
@@ -179,8 +179,10 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
   Future<void> _saveInterestsAndContinue() async {
     // Validate at least one interest is selected
     if (_getSelectedInterests().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least one interest')),
+      CustomToast.showWarning(
+        context,
+        'Choose at least one interest to personalize Explore.',
+        title: 'Nothing selected',
       );
       return;
     }
@@ -202,14 +204,7 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
           }
         }
 
-        // Show success confirmation FIRST
-        setState(() => _isLoading = false);
-        await _showSuccessConfirmation();
-
-        if (!mounted) return;
-
-        // NOW save interests to Firestore
-        // This will trigger the AuthGate to navigate to HomeScreen
+        // Persist first; confirmation must never claim success before the write.
         await FirebaseFirestore.instance
             .collection('users')
             .doc(user.uid)
@@ -219,124 +214,47 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // Interests affect the For You ordering. Drop the old 24-hour score
-        // cache and notify an already-mounted Explore tab to refresh in the
-        // background; its user stream applies the interest bonus immediately.
-        await RecommendationService.invalidateCache(GetStorage(), user.uid);
-        recommendationVersion.value++;
+        // Interests are a local bonus added on top of collaborative scores.
+        // Keep the expensive 24-hour prediction cache and only re-sort Explore.
+        notifyInterestsChanged();
 
         // If we are editing, just pop back
         if (widget.isEditing) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Interests updated successfully!')),
-            );
+            final messenger = ScaffoldMessenger.of(context);
             Navigator.of(context).pop();
+            CustomToast.showFromMessenger(
+              messenger,
+              'Explore has already applied your new interests.',
+              type: ToastType.success,
+              title: 'Interests updated',
+            );
           }
           return;
+        }
+
+        if (mounted) {
+          CustomToast.showSuccess(
+            context,
+            'Explore will use these choices to shape your recommendations.',
+            title: 'Interests saved',
+          );
         }
 
         // If onboarding, continue
         // Ensure we check if user needs to select commitment or account type
         // But for now, let auth_gate handle routing
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: const Text('Error saving interests. Please try again.')),
+        CustomToast.showError(
+          context,
+          'We could not save your interests. Please try again.',
+          title: 'Interests not saved',
         );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _showSuccessConfirmation() async {
-    // Show dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.grey[900],
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: primary, width: 2),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Animated checkmark
-                TweenAnimationBuilder<double>(
-                  duration: const Duration(milliseconds: 600),
-                  tween: Tween(begin: 0.0, end: 1.0),
-                  builder: (context, value, child) {
-                    return Transform.scale(
-                      scale: value,
-                      child: Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: primary.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: primary, width: 3),
-                        ),
-                        child: Icon(
-                          Icons.check_rounded,
-                          color: primary,
-                          size: 48,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 20),
-                // Success message
-                const Text(
-                  'Interests Saved Successfully!',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Your preferences have been saved.\nRedirecting to Explore...',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                // Loading indicator
-                SizedBox(
-                  width: 30,
-                  height: 30,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 3,
-                    valueColor: AlwaysStoppedAnimation<Color>(primary),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-
-    // Wait 2 seconds for the user to see the success message
-    await Future.delayed(const Duration(seconds: 2));
-
-    if (mounted) {
-      // Dismiss the dialog
-      Navigator.of(context).pop();
     }
   }
 
@@ -432,22 +350,19 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
       if (user != null && !user.emailVerified) {
         await user.sendEmailVerification();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content:
-                  Text('Verification email sent! Please check your inbox.'),
-              backgroundColor: Colors.green,
-            ),
+          CustomToast.showSuccess(
+            context,
+            'Check your inbox and spam folder for the verification link.',
+            title: 'Verification email sent',
           );
         }
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to send verification email: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
+        CustomToast.showError(
+          context,
+          'We could not send the verification email. Please try again.',
+          title: 'Email not sent',
         );
       }
     }
@@ -463,25 +378,21 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
           await _saveInterestsAndContinue();
         } else {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                    'Email not verified yet. Please check your inbox and try again.'),
-                backgroundColor: Colors.orange,
-              ),
+            CustomToast.showWarning(
+              context,
+              'Open the verification link in your inbox, then try again.',
+              title: 'Email not verified',
             );
             _showEmailVerificationDialog();
           }
         }
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('Failed to check verification status: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
+        CustomToast.showError(
+          context,
+          'We could not check your verification status. Please try again.',
+          title: 'Verification check failed',
         );
       }
     }
@@ -489,8 +400,6 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    int selectedCount = _getSelectedInterests().length;
-
     return PremiumBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -513,24 +422,15 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
                       // Only sign out if we can't go back (root) and user wants to abort
                       // Or maybe just minimize app/do nothing?
                       // For now, let's just confirm with the user
-                      final shouldLogout = await showDialog<bool>(
+                      final shouldLogout = await CustomDialog.confirm(
                         context: context,
-                        builder: (context) => AlertDialog(
-                          backgroundColor: Colors.grey[900],
-                          title: const Text('Go back to login?',
-                              style: TextStyle(color: Colors.white)),
-                          actions: [
-                            TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('Cancel')),
-                            TextButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                child: const Text('Yes',
-                                    style: TextStyle(color: Colors.red))),
-                          ],
-                        ),
+                        title: 'Return to login?',
+                        message:
+                            'Your selected interests on this screen will not be saved.',
+                        confirmText: 'Return to login',
+                        icon: Icons.logout_outlined,
                       );
-                      if (shouldLogout == true) {
+                      if (shouldLogout) {
                         await GoogleSignInService.signOut();
                         await FirebaseAuth.instance.signOut();
                         if (context.mounted) Navigator.of(context).pop();
@@ -557,27 +457,23 @@ class _InterestSelectionScreenState extends State<InterestSelectionScreen> {
                               'updatedAt': FieldValue.serverTimestamp(),
                             });
 
-                            if (mounted) {
+                            if (context.mounted) {
                               // Show quick confirmation
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                      'Skipped! You can set interests later in settings.'),
-                                  duration: Duration(seconds: 2),
-                                  backgroundColor: Colors.green,
-                                ),
+                              CustomToast.showSuccess(
+                                context,
+                                'You can personalize Explore later from Settings.',
+                                title: 'Personalization skipped',
                               );
 
                               // AuthGate will now redirect to HomeScreen
                               // since interests field exists (even if empty)
                             }
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error: $e'),
-                                  backgroundColor: Colors.red,
-                                ),
+                          } catch (_) {
+                            if (context.mounted) {
+                              CustomToast.showError(
+                                context,
+                                'We could not continue. Please try again.',
+                                title: 'Something went wrong',
                               );
                             }
                           } finally {

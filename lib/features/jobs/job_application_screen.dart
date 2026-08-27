@@ -11,6 +11,7 @@ import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/services/notification_service.dart';
 import 'package:cofi/utils/app_signals.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class JobApplicationScreen extends StatefulWidget {
   final Map<String, dynamic>? job;
@@ -128,51 +129,46 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
 
       if (result != null) {
         final file = result.files.single;
-        
+
         // Validate file size (5MB limit)
         const maxSizeBytes = 5 * 1024 * 1024; // 5MB in bytes
         if (file.size > maxSizeBytes) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('File must be under 5MB. Please compress your resume.'),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 4),
-              ),
+            CustomToast.showWarning(
+              context,
+              'Choose a résumé smaller than 5 MB.',
+              title: 'File is too large',
             );
           }
           return;
         }
-        
+
         // Validate file extension
         final allowedExtensions = ['pdf', 'doc', 'docx'];
         final extension = file.extension?.toLowerCase();
         if (extension == null || !allowedExtensions.contains(extension)) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Only PDF, DOC, and DOCX files are allowed.'),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 4),
-              ),
+            CustomToast.showWarning(
+              context,
+              'Choose a PDF, DOC, or DOCX file.',
+              title: 'Unsupported file type',
             );
           }
           return;
         }
-        
+
         // File is valid, proceed
         setState(() {
           _resumePath = file.path;
           _resumeFileName = file.name;
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error picking file: $e'),
-            backgroundColor: Colors.red,
-          ),
+        CustomToast.showError(
+          context,
+          'We could not open that file. Please choose it again.',
+          title: 'Résumé not attached',
         );
       }
     }
@@ -181,44 +177,39 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
   void _submitApplication() async {
     if (_formKey.currentState!.validate()) {
       if (_resumePath == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please upload your resume/CV'),
-            backgroundColor: Colors.red,
-          ),
+        CustomToast.showWarning(
+          context,
+          'Attach your résumé or CV before submitting.',
+          title: 'Résumé required',
         );
         return;
       }
 
       if (!_acceptTerms) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'Please accept the authorization terms to submit your application'),
-            backgroundColor: Colors.red,
-          ),
+        CustomToast.showWarning(
+          context,
+          'Review and accept the authorization terms before submitting.',
+          title: 'Authorization required',
         );
         return;
       }
 
       // Check if user is a business owner
       if (_userAccountType == 'business') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Business accounts cannot apply for jobs'),
-            backgroundColor: Colors.red,
-          ),
+        CustomToast.showInfo(
+          context,
+          'Switch to a personal account to apply for job openings.',
+          title: 'Applications are for job seekers',
         );
         return;
       }
 
       // Check if user has already applied
       if (_hasApplied) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You have already applied for this position'),
-            backgroundColor: Colors.orange,
-          ),
+        CustomToast.showInfo(
+          context,
+          'You can track this application from your profile.',
+          title: 'Already applied',
         );
         return;
       }
@@ -232,11 +223,10 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
         final jobId = _jobId();
 
         if (jobId == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Unable to submit application: missing job ID.'),
-              backgroundColor: Colors.red,
-            ),
+          CustomToast.showError(
+            context,
+            'Close this screen, reopen the job, and try again.',
+            title: 'Job could not be identified',
           );
           return;
         }
@@ -320,7 +310,8 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
               .get();
           final ownerId = shopDoc.data()?['ownerId'];
           if (ownerId != null) {
-            await NotificationService().createApplicationNotificationForBusiness(
+            await NotificationService()
+                .createApplicationNotificationForBusiness(
               ownerId,
               applicationId,
               _nameController.text,
@@ -335,22 +326,29 @@ class _JobApplicationScreenState extends State<JobApplicationScreen> {
         }
 
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Application submitted successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
+        CustomToast.showFromMessenger(
+          messenger,
+          'The café can now review your application.',
+          type: ToastType.success,
+          title: 'Application submitted',
+        );
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error submitting application: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          if (e.toString().contains('already applied')) {
+            CustomToast.showInfo(
+              context,
+              'You can track this application from your profile.',
+              title: 'Already applied',
+            );
+          } else {
+            CustomToast.showError(
+              context,
+              'We could not submit your application. Please try again.',
+              title: 'Application not submitted',
+            );
+          }
         }
       } finally {
         if (mounted) {

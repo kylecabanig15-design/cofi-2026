@@ -12,7 +12,7 @@ import 'package:cofi/features/profile/visited_cafes_screen.dart';
 import 'package:cofi/features/profile/your_reviews_screen.dart';
 import 'package:cofi/features/profile/my_contributions_screen.dart';
 import 'package:cofi/features/jobs/job_chat_screen.dart';
-import 'package:cofi/utils/colors.dart';
+import 'package:cofi/utils/app_theme.dart';
 import 'package:cofi/utils/globals.dart';
 import 'package:cofi/services/user_session.dart';
 import 'package:flutter/material.dart';
@@ -62,10 +62,7 @@ class UserApp extends StatelessWidget {
       child: MaterialApp(
         navigatorKey: Globals.navigatorKey,
         title: 'Cofi',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: primary),
-          useMaterial3: true,
-        ),
+        theme: AppTheme.dark(),
         debugShowCheckedModeBanner: false,
         home: const AuthGate(),
         builder: (context, child) => GestureDetector(

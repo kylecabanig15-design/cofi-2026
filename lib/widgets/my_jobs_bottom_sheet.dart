@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/widgets/post_job_bottom_sheet.dart';
 import 'package:cofi/features/jobs/job_details_screen.dart';
+import 'package:cofi/features/business/widgets/business_workspace_ui.dart';
 
 class MyJobsBottomSheet extends StatelessWidget {
   const MyJobsBottomSheet({super.key, required this.shopId});
@@ -15,7 +15,7 @@ class MyJobsBottomSheet extends StatelessWidget {
     return Container(
       height: MediaQuery.of(context).size.height * 0.9,
       decoration: BoxDecoration(
-        color: Colors.grey[900],
+        color: BusinessWorkspaceColors.canvas,
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(25),
           topRight: Radius.circular(25),
@@ -24,39 +24,21 @@ class MyJobsBottomSheet extends StatelessWidget {
       child: SafeArea(
         child: Column(
           children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: const Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  TextWidget(
-                    text: 'My Jobs',
-                    fontSize: 18,
-                    color: Colors.white,
-                    isBold: true,
-                  ),
-                  Expanded(child: const SizedBox(width: 16)),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.pop(context);
-                      PostJobBottomSheet.show(context, shopId: shopId);
-                    },
-                    child: const Icon(
-                      Icons.add,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                ],
+            BusinessSheetHeader(
+              title: 'Hiring board',
+              subtitle: 'Open roles and approval status in one place',
+              icon: Icons.work_outline_rounded,
+              action: IconButton.filled(
+                tooltip: 'Create job',
+                style: IconButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                  foregroundColor: Colors.black,
+                ),
+                onPressed: () {
+                  Navigator.pop(context);
+                  PostJobBottomSheet.show(context, shopId: shopId);
+                },
+                icon: const Icon(Icons.add_rounded),
               ),
             ),
 
@@ -103,70 +85,83 @@ class MyJobsBottomSheet extends StatelessWidget {
                     }).toList();
 
                     if (activeJobs.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            TextWidget(
-                              text: 'No active jobs',
-                              fontSize: 16,
-                              color: Colors.white,
-                              isBold: true,
-                            ),
-                            const SizedBox(height: 8),
-                            TextWidget(
-                              text: 'Tap + to post your first job',
-                              fontSize: 14,
-                              color: Colors.grey,
-                            ),
-                          ],
-                        ),
+                      return const BusinessEmptyState(
+                        icon: Icons.person_add_alt_1_outlined,
+                        title: 'No roles are open',
+                        message:
+                            'When your team needs someone new, create a focused job post here.',
                       );
                     }
-                    return ListView.separated(
-                      itemCount: activeJobs.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 16),
-                      itemBuilder: (context, index) {
-                        final jobDoc = activeJobs[index];
-                        final jobId = jobDoc.id;
-                        final data = jobDoc.data();
+                    final pendingCount = activeJobs
+                        .where((doc) =>
+                            (doc.data()['status'] ?? 'pending') == 'pending')
+                        .length;
+                    final pausedCount = activeJobs
+                        .where((doc) => doc.data()['isPaused'] == true)
+                        .length;
+                    return Column(
+                      children: [
+                        BusinessMetricsStrip(
+                          items: [
+                            BusinessMetricData(
+                                '${activeJobs.length}', 'Open roles'),
+                            BusinessMetricData('$pendingCount', 'In review'),
+                            BusinessMetricData('$pausedCount', 'Paused'),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Expanded(
+                          child: ListView.separated(
+                            itemCount: activeJobs.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              final jobDoc = activeJobs[index];
+                              final jobId = jobDoc.id;
+                              final data = jobDoc.data();
 
-                        // Get status directly from job data
-                        String status =
-                            (data['status'] as String?) ?? 'pending';
-                        final statusLower = status.toLowerCase();
+                              // Get status directly from job data
+                              String status =
+                                  (data['status'] as String?) ?? 'pending';
+                              final statusLower = status.toLowerCase();
 
-                        final title = (data['title'] as String?) ?? 'Untitled';
-                        final statusColor =
-                            statusLower == 'approved' || statusLower == 'active'
-                                ? Colors.green
-                                : statusLower == 'closed'
-                                    ? Colors.grey
-                                    : statusLower == 'rejected'
-                                        ? Colors.red
-                                        : Colors.orange;
+                              final title =
+                                  (data['title'] as String?) ?? 'Untitled';
+                              final statusColor = statusLower == 'approved' ||
+                                      statusLower == 'active'
+                                  ? Colors.green
+                                  : statusLower == 'closed'
+                                      ? Colors.grey
+                                      : statusLower == 'rejected'
+                                          ? Colors.red
+                                          : Colors.orange;
 
-                        String displayStatus = statusLower == 'pending'
-                            ? 'Pending for approval'
-                            : statusLower == 'active'
-                                ? 'Active'
-                                : statusLower == 'closed'
-                                    ? 'Closed'
-                                    : status[0].toUpperCase() +
-                                        status.substring(1);
+                              String displayStatus = statusLower == 'pending'
+                                  ? 'Pending for approval'
+                                  : statusLower == 'active'
+                                      ? 'Active'
+                                      : statusLower == 'closed'
+                                          ? 'Closed'
+                                          : status.isEmpty
+                                              ? 'Unknown'
+                                              : status[0].toUpperCase() +
+                                                  status.substring(1);
 
-                        return _buildJobItem(
-                          context: context,
-                          jobId: jobId,
-                          jobData: data,
-                          title: title,
-                          status: displayStatus,
-                          statusColor: statusColor,
-                          isPaused: (data['isPaused'] as bool?) ?? false,
-                          isPending: statusLower == 'pending',
-                          isClosed: statusLower == 'closed',
-                        );
-                      },
+                              return _buildJobItem(
+                                context: context,
+                                jobId: jobId,
+                                jobData: data,
+                                title: title,
+                                status: displayStatus,
+                                statusColor: statusColor,
+                                isPaused: (data['isPaused'] as bool?) ?? false,
+                                isPending: statusLower == 'pending',
+                                isClosed: statusLower == 'closed',
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     );
                   },
                 ),
@@ -213,8 +208,9 @@ class MyJobsBottomSheet extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isPending ? Colors.grey[900] : Colors.grey[800],
-            borderRadius: BorderRadius.circular(12),
+            color: BusinessWorkspaceColors.surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: BusinessWorkspaceColors.line),
           ),
           child: Row(
             children: [
@@ -222,26 +218,19 @@ class MyJobsBottomSheet extends StatelessWidget {
               Stack(
                 children: [
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: 44,
+                    height: 44,
                     decoration: BoxDecoration(
-                      color: primary,
-                      borderRadius: BorderRadius.circular(8),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .secondary
+                          .withValues(alpha: .13),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Center(
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.local_cafe,
-                          color: Colors.red,
-                          size: 12,
-                        ),
-                      ),
+                    child: Icon(
+                      Icons.badge_outlined,
+                      color: Theme.of(context).colorScheme.secondary,
+                      size: 21,
                     ),
                   ),
                   // Paused badge
@@ -330,6 +319,22 @@ class MyJobsBottomSheet extends StatelessWidget {
                   ],
                 ),
               ),
+              const SizedBox(width: 10),
+              Container(
+                width: 32,
+                height: 32,
+                decoration: const BoxDecoration(
+                  color: BusinessWorkspaceColors.surfaceRaised,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isPending
+                      ? Icons.hourglass_top_rounded
+                      : Icons.arrow_forward_rounded,
+                  color: Colors.white70,
+                  size: 16,
+                ),
+              ),
             ],
           ),
         ),
@@ -343,7 +348,10 @@ class MyJobsBottomSheet extends StatelessWidget {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (context) => MyJobsBottomSheet(shopId: shopId),
+      builder: (context) => BusinessWorkspaceTheme(
+        accentColor: Colors.tealAccent,
+        child: MyJobsBottomSheet(shopId: shopId),
+      ),
     );
   }
 }

@@ -6,6 +6,7 @@ import 'package:cofi/widgets/text_widget.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/features/events/event_details_screen.dart';
 import 'package:cofi/utils/colors.dart';
+import 'package:cofi/features/business/widgets/business_workspace_ui.dart';
 
 class MyEventsBottomSheet extends StatelessWidget {
   const MyEventsBottomSheet({super.key, required this.shopId});
@@ -16,8 +17,8 @@ class MyEventsBottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: MediaQuery.of(context).size.height * 0.9,
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
+      decoration: const BoxDecoration(
+        color: BusinessWorkspaceColors.canvas,
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(25),
           topRight: Radius.circular(25),
@@ -26,46 +27,28 @@ class MyEventsBottomSheet extends StatelessWidget {
       child: SafeArea(
         child: Column(
           children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: const Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  TextWidget(
-                    text: 'My Events',
-                    fontSize: 18,
-                    color: Colors.white,
-                    isBold: true,
-                  ),
-                  Expanded(child: SizedBox()),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.pop(context);
-                      PostEventBottomSheet.show(context, shopId: shopId);
-                    },
-                    child: Icon(
-                      Icons.add,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                ],
+            BusinessSheetHeader(
+              title: 'Event board',
+              subtitle: 'Upcoming and currently running gatherings',
+              icon: Icons.event_available_rounded,
+              action: IconButton.filled(
+                tooltip: 'Create event',
+                style: IconButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                  foregroundColor: Colors.black,
+                ),
+                onPressed: () {
+                  Navigator.pop(context);
+                  PostEventBottomSheet.show(context, shopId: shopId);
+                },
+                icon: const Icon(Icons.add_rounded),
               ),
             ),
 
             // Events List
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                   stream: FirebaseFirestore.instance
                       .collection('shops')
@@ -128,63 +111,91 @@ class MyEventsBottomSheet extends StatelessWidget {
                       }
 
                       if (startDateTime != null) {
-                        return startDateTime.isAfter(now);
+                        final endOfStartDay = DateTime(
+                          startDateTime.year,
+                          startDateTime.month,
+                          startDateTime.day,
+                          23,
+                          59,
+                          59,
+                        );
+                        return now.isBefore(endOfStartDay);
                       }
 
                       return true; // Show if no dates found
                     }).toList();
 
                     if (upcomingDocs.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            TextWidget(
-                              text: 'No upcoming events',
-                              fontSize: 16,
-                              color: Colors.white,
-                              isBold: true,
-                            ),
-                            const SizedBox(height: 8),
-                            TextWidget(
-                              text: 'Tap + to post your first event',
-                              fontSize: 14,
-                              color: Colors.grey,
-                            ),
-                          ],
-                        ),
+                      return const BusinessEmptyState(
+                        icon: Icons.event_note_outlined,
+                        title: 'Nothing on the board',
+                        message:
+                            'Create an event when your café has something worth gathering for.',
                       );
                     }
-                    return ListView.separated(
-                      itemCount: upcomingDocs.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 16),
-                      itemBuilder: (context, index) {
-                        final data = upcomingDocs[index].data();
-                        final title = (data['title'] as String?) ?? 'Untitled';
-                        final status = (data['status'] as String?) ?? 'pending';
-                        final participants = data['participantsCount'] is int
-                            ? data['participantsCount'] as int
-                            : 0;
-                        final statusColor = status.toLowerCase() == 'approved'
-                            ? Colors.green
-                            : status.toLowerCase() == 'rejected'
-                                ? Colors.red
-                                : Colors.orange;
-                        return _buildEventItem(
-                          context: context,
-                          image: data['imageUrl'],
-                          about: data['about'],
-                          title: title,
-                          status: status == 'pending'
-                              ? ''
-                              : status[0].toUpperCase() + status.substring(1),
-                          statusColor: statusColor,
-                          participants: participants,
-                          eventData: data,
-                          eventId: upcomingDocs[index].id,
-                          shopId: shopId,
-                        );
-                      },
+                    final totalParticipants = upcomingDocs.fold<int>(
+                      0,
+                      (total, doc) =>
+                          total +
+                          ((doc.data()['participantsCount'] as num?)?.toInt() ??
+                              0),
+                    );
+                    final paused = upcomingDocs
+                        .where((doc) => doc.data()['isPaused'] == true)
+                        .length;
+                    return Column(
+                      children: [
+                        BusinessMetricsStrip(
+                          items: [
+                            BusinessMetricData(
+                                '${upcomingDocs.length}', 'On board'),
+                            BusinessMetricData(
+                                '$totalParticipants', 'Participants'),
+                            BusinessMetricData('$paused', 'Paused'),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Expanded(
+                          child: ListView.separated(
+                            itemCount: upcomingDocs.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              final data = upcomingDocs[index].data();
+                              final title =
+                                  (data['title'] as String?) ?? 'Untitled';
+                              final status =
+                                  (data['status'] as String?) ?? 'pending';
+                              final participants =
+                                  data['participantsCount'] is int
+                                      ? data['participantsCount'] as int
+                                      : 0;
+                              final statusColor =
+                                  status.toLowerCase() == 'approved'
+                                      ? Colors.green
+                                      : status.toLowerCase() == 'rejected'
+                                          ? Colors.red
+                                          : Colors.orange;
+                              return _buildEventItem(
+                                context: context,
+                                image: (data['imageUrl'] as String?) ?? '',
+                                about: (data['about'] as String?) ??
+                                    'No event description yet.',
+                                title: title,
+                                status: status.isEmpty || status == 'pending'
+                                    ? ''
+                                    : status[0].toUpperCase() +
+                                        status.substring(1),
+                                statusColor: statusColor,
+                                participants: participants,
+                                eventData: data,
+                                eventId: upcomingDocs[index].id,
+                                shopId: shopId,
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     );
                   },
                 ),
@@ -230,8 +241,9 @@ class MyEventsBottomSheet extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.grey[900],
-          borderRadius: BorderRadius.circular(12),
+          color: BusinessWorkspaceColors.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: BusinessWorkspaceColors.line),
         ),
         child: Row(
           children: [
@@ -239,14 +251,26 @@ class MyEventsBottomSheet extends StatelessWidget {
             Stack(
               children: [
                 Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(7.5),
-                      image: DecorationImage(
-                          image: CachedNetworkImageProvider(image),
-                          fit: BoxFit.cover),
-                    )),
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: BusinessWorkspaceColors.surfaceRaised,
+                    borderRadius: BorderRadius.circular(12),
+                    image: image.isNotEmpty
+                        ? DecorationImage(
+                            image: CachedNetworkImageProvider(image),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
+                  ),
+                  child: image.isEmpty
+                      ? Icon(
+                          Icons.event_rounded,
+                          color: Theme.of(context).colorScheme.secondary,
+                          size: 20,
+                        )
+                      : null,
+                ),
                 // Paused overlay badge
                 if (eventData['isPaused'] == true)
                   Positioned(
@@ -349,7 +373,8 @@ class MyEventsBottomSheet extends StatelessWidget {
                 }
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: primary.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(20),
@@ -408,7 +433,8 @@ class MyEventsBottomSheet extends StatelessWidget {
                 children: [
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
-                    child: const Icon(Icons.close, color: Colors.white, size: 24),
+                    child:
+                        const Icon(Icons.close, color: Colors.white, size: 24),
                   ),
                   const SizedBox(width: 16),
                   TextWidget(
@@ -449,12 +475,15 @@ class MyEventsBottomSheet extends StatelessWidget {
                   return ListView.separated(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     itemCount: snapshot.data!.docs.length,
-                    separatorBuilder: (_, __) => const Divider(color: Colors.white24),
+                    separatorBuilder: (_, __) =>
+                        const Divider(color: Colors.white24),
                     itemBuilder: (context, index) {
-                      final participantData =
-                          snapshot.data!.docs[index].data() as Map<String, dynamic>;
-                      final name = participantData['userName'] as String? ?? 'User';
-                      final photoUrl = participantData['userPhotoUrl'] as String? ?? '';
+                      final participantData = snapshot.data!.docs[index].data()
+                          as Map<String, dynamic>;
+                      final name =
+                          participantData['userName'] as String? ?? 'User';
+                      final photoUrl =
+                          participantData['userPhotoUrl'] as String? ?? '';
 
                       return ListTile(
                         leading: CircleAvatar(
@@ -492,7 +521,10 @@ class MyEventsBottomSheet extends StatelessWidget {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (context) => MyEventsBottomSheet(shopId: shopId),
+      builder: (context) => BusinessWorkspaceTheme(
+        accentColor: Colors.blueAccent,
+        child: MyEventsBottomSheet(shopId: shopId),
+      ),
     );
   }
 }

@@ -11,6 +11,8 @@ import 'package:cofi/widgets/custom_toast.dart';
 import 'package:cofi/utils/app_signals.dart';
 import 'package:cofi/utils/formatters.dart';
 import 'package:cofi/services/notification_service.dart';
+import 'package:cofi/features/home/explore/services/recommendation_service.dart';
+import 'package:get_storage/get_storage.dart';
 
 class ReviewShopScreen extends StatefulWidget {
   final String shopId;
@@ -63,9 +65,13 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
           _selectedImage = File(pickedFile.path);
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        CustomToast.showError(context, 'Failed to pick image: $e');
+        CustomToast.showError(
+          context,
+          'We could not open that image. Please choose it again.',
+          title: 'Image not attached',
+        );
       }
     }
   }
@@ -88,9 +94,13 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
       final downloadUrl = await snapshot.ref.getDownloadURL();
 
       return downloadUrl;
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        CustomToast.showError(context, 'Failed to upload image: $e');
+        CustomToast.showError(
+          context,
+          'Check your connection and try attaching the image again.',
+          title: 'Image upload failed',
+        );
       }
       return null;
     } finally {
@@ -105,18 +115,30 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
   Future<void> _submit() async {
     if (_submitting) return;
     if (widget.shopId.isEmpty) {
-      CustomToast.showError(context, 'Cannot review without a shop.');
+      CustomToast.showError(
+        context,
+        'Close this screen, reopen the café, and try again.',
+        title: 'Café could not be identified',
+      );
       return;
     }
     if (_rating == 0) {
-      CustomToast.showInfo(context, 'Please select a rating.');
+      CustomToast.showWarning(
+        context,
+        'Choose a star rating before submitting.',
+        title: 'Rating required',
+      );
       return;
     }
     setState(() => _submitting = true);
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        CustomToast.showInfo(context, 'Please sign in to submit a review.');
+        CustomToast.showWarning(
+          context,
+          'Sign in to share your café experience.',
+          title: 'Sign-in required',
+        );
         return;
       }
 
@@ -140,7 +162,7 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
         final userDoc = results[0];
         final shopDoc = results[1];
         final userData = userDoc.data();
-        userPhotoUrl = userData?['photoUrl'] as String?;
+        userPhotoUrl = (userData?['photoUrl'] as String?) ?? user.photoURL;
         ownerId = shopDoc.data()?['ownerId'] as String?;
       } catch (e) {
         debugPrint('Error fetching review context: $e');
@@ -184,7 +206,14 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
       );
       await batch.commit();
 
-      recommendationVersion.value++;
+      // Keep the last scores visible, mark their inputs as stale, and let
+      // Explore coalesce a background recalculation.
+      try {
+        await RecommendationService.markInputsChanged(GetStorage(), user.uid);
+      } catch (_) {
+        // The review is already committed; cache bookkeeping is best effort.
+      }
+      notifyRecommendationInputsChanged();
 
       // Notify the business owner in real-time
       if (ownerId != null && ownerId != user.uid) {
@@ -211,17 +240,19 @@ class _ReviewShopScreenState extends State<ReviewShopScreen> {
       final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
       Navigator.pop(context);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: const Text('Review submitted successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-    } catch (e) {
+      CustomToast.showFromMessenger(
+        messenger,
+        'Thanks for helping the community choose with confidence.',
+        type: ToastType.success,
+        title: 'Review published',
+      );
+    } catch (_) {
       if (!mounted) return;
-      CustomToast.showError(context, 'Failed: $e');
+      CustomToast.showError(
+        context,
+        'We could not publish your review. Please try again.',
+        title: 'Review not published',
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

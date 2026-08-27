@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/utils/auth_error_handler.dart';
 import 'package:cofi/widgets/text_widget.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class CommunityCommitmentScreen extends StatefulWidget {
   const CommunityCommitmentScreen({super.key});
@@ -154,22 +155,19 @@ class _CommunityCommitmentScreenState extends State<CommunityCommitmentScreen> {
       if (user != null && !user.emailVerified) {
         await user.sendEmailVerification();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content:
-                  Text('Verification email sent! Please check your inbox.'),
-              backgroundColor: Colors.green,
-            ),
+          CustomToast.showSuccess(
+            context,
+            'Check your inbox and spam folder for the verification link.',
+            title: 'Verification email sent',
           );
         }
       }
     } on Exception catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AuthErrorHandler.getFriendlyMessage(e)),
-            backgroundColor: Colors.red,
-          ),
+        CustomToast.showError(
+          context,
+          AuthErrorHandler.getFriendlyMessage(e),
+          title: 'Email not sent',
         );
       }
     } finally {
@@ -188,12 +186,10 @@ class _CommunityCommitmentScreenState extends State<CommunityCommitmentScreen> {
           await _agreeAndContinue();
         } else {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                    'Email not verified yet. Please check your inbox and try again.'),
-                backgroundColor: Colors.orange,
-              ),
+            CustomToast.showWarning(
+              context,
+              'Open the verification link in your inbox, then try again.',
+              title: 'Email not verified',
             );
             _showEmailVerificationDialog();
           }
@@ -201,12 +197,10 @@ class _CommunityCommitmentScreenState extends State<CommunityCommitmentScreen> {
       }
     } on Exception catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text(AuthErrorHandler.getFriendlyMessage(e)),
-            backgroundColor: Colors.red,
-          ),
+        CustomToast.showError(
+          context,
+          AuthErrorHandler.getFriendlyMessage(e),
+          title: 'Verification check failed',
         );
       }
     } finally {
@@ -221,10 +215,12 @@ class _CommunityCommitmentScreenState extends State<CommunityCommitmentScreen> {
     try {
       await GoogleSignInService.signOut();
       await FirebaseAuth.instance.signOut();
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to sign out. Please try again.')),
+        CustomToast.showError(
+          context,
+          'We could not sign you out. Please try again.',
+          title: 'Sign-out failed',
         );
       }
     }

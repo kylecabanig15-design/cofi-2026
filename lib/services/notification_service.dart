@@ -1219,6 +1219,9 @@ class NotificationService {
       Timestamp sentAt,
       {required String recipientRole}) async {
     var resolvedRecipientRole = recipientRole;
+    String finalSenderName = senderName;
+    String? finalImageUrl;
+
     try {
       final recipientDoc =
           await _firestore.collection('users').doc(recipientId).get();
@@ -1227,8 +1230,33 @@ class NotificationService {
       if (accountType == 'business' || accountType == 'user') {
         resolvedRecipientRole = accountType!;
       }
+      
+      if (resolvedRecipientRole == 'user') {
+        if (shopId.isNotEmpty) {
+          final shopDoc = await _firestore.collection('shops').doc(shopId).get();
+          final shopData = shopDoc.data();
+          if (shopData != null) {
+            finalSenderName = (shopData['name'] as String?) ?? senderName;
+            finalImageUrl = (shopData['logoUrl'] as String?) ?? (shopData['imageUrl'] as String?);
+          }
+        }
+      } else {
+        if (applicantId.isNotEmpty) {
+          final applicantDoc = await _firestore.collection('users').doc(applicantId).get();
+          final applicantData = applicantDoc.data();
+          if (applicantData != null) {
+            final firstName = applicantData['firstName']?.toString().trim() ?? '';
+            final lastName = applicantData['lastName']?.toString().trim() ?? '';
+            final fullName = firstName.isNotEmpty || lastName.isNotEmpty
+                ? '$firstName $lastName'.trim()
+                : null;
+            finalSenderName = fullName ?? senderName;
+            finalImageUrl = applicantData['photoUrl'] as String?;
+          }
+        }
+      }
     } catch (e) {
-      debugLog('Could not resolve chat recipient role for $recipientId: $e');
+      debugLog('Could not resolve chat recipient info for $recipientId: $e');
     }
 
     final displayBody = messageText.length > 60
@@ -1237,8 +1265,9 @@ class NotificationService {
 
     final notification = NotificationModel(
       id: 'chat_msg_$messageId',
-      title: 'New Message from $senderName',
+      title: 'New Message from $finalSenderName',
       body: displayBody,
+      imageUrl: finalImageUrl,
       type: 'chat',
       relatedId: chatId,
       createdAt: sentAt.toDate(),

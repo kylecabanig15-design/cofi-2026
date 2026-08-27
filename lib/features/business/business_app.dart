@@ -1,7 +1,7 @@
 import 'package:cofi/features/business/business_dashboard_screen.dart';
 import 'package:cofi/features/business/claim_shop_screen.dart';
 import 'package:cofi/features/cafe/submit_shop_screen.dart';
-import 'package:cofi/utils/colors.dart';
+import 'package:cofi/utils/app_theme.dart';
 import 'package:flutter/material.dart';
 
 class BusinessApp extends StatelessWidget {
@@ -12,10 +12,7 @@ class BusinessApp extends StatelessWidget {
     return MaterialApp(
       title: 'CoFi Business',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: primary),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.dark(),
       home: const BusinessDashboardScreen(),
       onGenerateRoute: (settings) {
         if (settings.name == '/submitShop') {

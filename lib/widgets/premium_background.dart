@@ -9,58 +9,74 @@ class PremiumBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Stack(
+      fit: StackFit.expand,
       children: [
-        // Solid base color
+        // Shared foundation for Explore, Community, and Profile.
         Positioned.fill(
-          child: Container(color: Colors.black),
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: [0, 0.55, 1],
+                colors: [
+                  Color(0xFF0D090A),
+                  Color(0xFF080707),
+                  Color(0xFF0C090A),
+                ],
+              ),
+            ),
+          ),
         ),
-        // ambient background - Top Left
+
+        // Low-opacity edge lighting keeps the center calm and readable.
         Positioned(
-          top: -500,
-          left: -500,
+          top: -300,
+          left: -290,
           child: Container(
-            width: 1000,
-            height: 1000,
+            width: 610,
+            height: 610,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: RadialGradient(
                 colors: [
+                  primary.withValues(alpha: 0.2),
+                  primary.withValues(alpha: 0.018),
+                  Colors.transparent,
+                ],
+                stops: const [0, 0.5, 1],
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: -450,
+          right: -400,
+          child: Container(
+            width: 680,
+            height: 680,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  primary.withValues(alpha: 0.10),
                   primary.withValues(alpha: 0.18),
-                  Colors.black.withValues(alpha: 0.0),
+                  Colors.transparent,
                 ],
-                radius: 0.8,
+                stops: const [0, 0.52, 1],
               ),
             ),
           ),
         ),
-        // ambient background - Bottom Right
-        Positioned(
-          bottom: -480,
-          right: -480,
-          child: Container(
-            width: 1000,
-            height: 1000,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  primary.withValues(alpha: 0.12),
-                  Colors.black.withValues(alpha: 0.0),
-                ],
-                radius: 0.8,
-              ),
-            ),
-          ),
-        ),
-        
+
         // Noise Overlay
         Positioned.fill(
-           child: Opacity(
-              opacity: 0.05, // Very subtle noise
-              child: CustomPaint(
-                  painter: NoisePainter(),
-              ),
-           ),
+          child: IgnorePointer(
+            child: Opacity(
+              opacity: 0.018,
+              child: CustomPaint(painter: NoisePainter()),
+            ),
+          ),
         ),
 
         // Main Content
@@ -76,15 +92,15 @@ class NoisePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final random = math.Random();
     final paint = Paint()..color = Colors.white;
-    
+
     // Draw fewer points for performance, but enough for texture
     // A full screen noise loop can be heavy. We'll try a moderate density.
     for (int i = 0; i < 5000; i++) {
-        final x = random.nextDouble() * size.width;
-        final y = random.nextDouble() * size.height;
-        // Vary opacity slightly for depth
-        paint.color = Colors.white.withValues(alpha: random.nextDouble() * 0.5);
-        canvas.drawRect(Rect.fromLTWH(x, y, 1.5, 1.5), paint);
+      final x = random.nextDouble() * size.width;
+      final y = random.nextDouble() * size.height;
+      // Vary opacity slightly for depth
+      paint.color = Colors.white.withValues(alpha: random.nextDouble() * 0.5);
+      canvas.drawRect(Rect.fromLTWH(x, y, 1.5, 1.5), paint);
     }
   }
 

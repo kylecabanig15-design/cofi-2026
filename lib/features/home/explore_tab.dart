@@ -1,4 +1,5 @@
 import 'package:cofi/utils/logger.dart';
+import 'dart:async';
 
 import 'package:cofi/features/cafe/cafe_details_screen.dart';
 import 'package:cofi/utils/colors.dart';
@@ -38,7 +39,12 @@ class ExploreTab extends StatefulWidget {
 }
 
 class ExploreTabState extends State<ExploreTab> {
-  int _selectedChip = 0; // Default to 'For You'
+  // Popular is the safe default while the account role is being resolved.
+  // Café-goers switch to For You once confirmed; business accounts stay here.
+  int _selectedChip = 1;
+  bool _isBusinessAccount = false;
+  bool _accountModeResolved = false;
+  bool _accountModeResolutionScheduled = false;
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _currentShops = [];
 
   // ==========================================================================
@@ -105,6 +111,10 @@ class ExploreTabState extends State<ExploreTab> {
   Map<String, double> _shopRecommendationScores = {};
   final _box = GetStorage();
   int _recommendationRequestId = 0;
+  Timer? _recommendationDebounce;
+  bool _recommendationRefreshRunning = false;
+  bool _recommendationRefreshQueued = false;
+  bool _recommendationSignalPending = false;
 
   // Consolidated Grouped Filters
   final Set<String> _selectedFilters = {};
@@ -151,6 +161,7 @@ class ExploreTabState extends State<ExploreTab> {
   void initState() {
     super.initState();
     recommendationVersion.addListener(_refreshRecommendations);
+    interestsVersion.addListener(_refreshInterests);
     _updateShopsStream();
     _featuredShopsStream = FirebaseFirestore.instance
         .collection('shops')
@@ -163,9 +174,8 @@ class ExploreTabState extends State<ExploreTab> {
           .collection('users')
           .doc(_user!.uid)
           .snapshots();
-
-      // Load recommendation scores for shops using cosine similarity over similar users
-      _loadRecommendationScores();
+    } else {
+      _accountModeResolved = true;
     }
     _searchCtrl.addListener(() {
       final q = _searchCtrl.text.trim();
@@ -179,14 +189,19 @@ class ExploreTabState extends State<ExploreTab> {
         });
       }
     });
-
-    // Fetch user interests
-    _fetchUserInterests();
   }
 
   void _refreshRecommendations() {
+    if (!_accountModeResolved || _isBusinessAccount) return;
+    _recommendationSignalPending = true;
+    _scheduleRecommendationRevalidation();
+  }
+
+  void _refreshInterests() {
+    if (!_accountModeResolved || _isBusinessAccount) return;
+    // Interest matches are added to cached collaborative predictions during
+    // local sorting, so this updates Explore without running the algorithm.
     _fetchUserInterests();
-    _loadRecommendationScores(forceRefresh: true);
   }
 
   // New method to fetch user interests
@@ -215,25 +230,102 @@ class ExploreTabState extends State<ExploreTab> {
     }
   }
 
+  void _applyAccountMode(bool isBusiness) {
+    if (!mounted) return;
+    _accountModeResolutionScheduled = false;
+    final changed = !_accountModeResolved || isBusiness != _isBusinessAccount;
+    if (!changed) return;
+    setState(() {
+      _isBusinessAccount = isBusiness;
+      _accountModeResolved = true;
+      _selectedChip = isBusiness ? 1 : 0;
+      if (isBusiness) {
+        _recommendationRequestId++;
+        _recommendationDebounce?.cancel();
+        _shopRecommendationScores = {};
+      }
+      _updateShopsStream();
+    });
+
+    if (!isBusiness) {
+      _loadRecommendationScores();
+    }
+  }
+
   /// Compute recommendation scores per shop using similar users' reviews.
   /// This uses _findSimilarUsers(), which is based on calculateCosineSimilarity.
   /// includes Caching (24h) and optimizations.
   Future<void> _loadRecommendationScores({bool forceRefresh = false}) async {
+    if (!_accountModeResolved || _isBusinessAccount) return;
     final requestId = ++_recommendationRequestId;
     final scores = await RecommendationService().loadRecommendationScores(
       user: _user,
       box: _box,
       forceRefresh: forceRefresh,
     );
-    if (!mounted || requestId != _recommendationRequestId) return;
+    if (!mounted ||
+        _isBusinessAccount ||
+        requestId != _recommendationRequestId) {
+      return;
+    }
     setState(() {
       _shopRecommendationScores = scores;
     });
+
+    // On app reopen, persisted dirty metadata tells Explore that reviews or
+    // visits changed while this tab was not mounted. Display the cache first,
+    // then quietly refresh it.
+    if (!forceRefresh &&
+        _user != null &&
+        RecommendationService.hasCachedScores(_box, _user!.uid) &&
+        RecommendationService.shouldRevalidate(_box, _user!.uid)) {
+      _scheduleRecommendationRevalidation();
+    }
+  }
+
+  void _scheduleRecommendationRevalidation() {
+    if (_user == null || !_accountModeResolved || _isBusinessAccount) return;
+    _recommendationDebounce?.cancel();
+    _recommendationDebounce = Timer(
+      const Duration(seconds: 2),
+      _runRecommendationRevalidation,
+    );
+  }
+
+  Future<void> _runRecommendationRevalidation() async {
+    if (!_accountModeResolved || _isBusinessAccount) return;
+    if (_recommendationRefreshRunning) {
+      _recommendationRefreshQueued = true;
+      return;
+    }
+
+    final user = _user;
+    if (user == null) return;
+    if (!_recommendationSignalPending &&
+        !RecommendationService.shouldRevalidate(_box, user.uid)) {
+      return;
+    }
+
+    _recommendationRefreshRunning = true;
+    try {
+      do {
+        _recommendationRefreshQueued = false;
+        _recommendationSignalPending = false;
+        await _loadRecommendationScores(forceRefresh: true);
+      } while (_recommendationRefreshQueued &&
+          mounted &&
+          (_recommendationSignalPending ||
+              RecommendationService.shouldRevalidate(_box, user.uid)));
+    } finally {
+      _recommendationRefreshRunning = false;
+    }
   }
 
   @override
   void dispose() {
     recommendationVersion.removeListener(_refreshRecommendations);
+    interestsVersion.removeListener(_refreshInterests);
+    _recommendationDebounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -250,13 +342,6 @@ class ExploreTabState extends State<ExploreTab> {
 
   @override
   Widget build(BuildContext context) {
-    final filterChips = [
-      'For You',
-      'Popular',
-      'Newest',
-      'Open now',
-    ];
-
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: _userStream == null
@@ -266,6 +351,17 @@ class ExploreTabState extends State<ExploreTab> {
               builder: (context, userSnap) {
                 if (userSnap.hasData) {
                   final data = userSnap.data!.data();
+                  final isBusiness =
+                      (data?['accountType'] as String?)?.toLowerCase() ==
+                          'business';
+                  if ((!_accountModeResolved ||
+                          isBusiness != _isBusinessAccount) &&
+                      !_accountModeResolutionScheduled) {
+                    _accountModeResolutionScheduled = true;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _applyAccountMode(isBusiness);
+                    });
+                  }
                   final list =
                       (data?['bookmarks'] as List?)?.cast<String>() ?? [];
                   final vlist =
@@ -302,11 +398,12 @@ class ExploreTabState extends State<ExploreTab> {
     AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>>? userSnap,
     AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>>? shopsSnap,
   ) {
-    final filterChips = [
-      'For You',
-      'Popular',
-      'Newest',
-      'Open now',
+    final filterChips = <MapEntry<int, String>>[
+      if (_accountModeResolved && !_isBusinessAccount)
+        const MapEntry(0, 'For You'),
+      const MapEntry(1, 'Popular'),
+      const MapEntry(2, 'Newest'),
+      const MapEntry(3, 'Open now'),
     ];
 
     return RefreshIndicator(
@@ -314,8 +411,10 @@ class ExploreTabState extends State<ExploreTab> {
         // Firestore streams already refresh the visible feed. Re-read the
         // user's interests and use the cached score immediately instead of
         // blocking the pull gesture on a full collaborative recomputation.
-        await _fetchUserInterests();
-        await _loadRecommendationScores();
+        if (_accountModeResolved && !_isBusinessAccount) {
+          await _fetchUserInterests();
+          await _loadRecommendationScores();
+        }
       },
       color: primary,
       backgroundColor: Colors.black87,
@@ -359,17 +458,19 @@ class ExploreTabState extends State<ExploreTab> {
                       separatorBuilder: (context, index) =>
                           const SizedBox(width: 8),
                       itemBuilder: (context, i) {
+                        final chip = filterChips[i];
+                        final chipIndex = chip.key;
                         // Automatically remove "For You" chip when searching as requested
-                        if (_query.isNotEmpty && i == 0) {
+                        if (_query.isNotEmpty && chipIndex == 0) {
                           return const SizedBox.shrink();
                         }
 
-                        final isSelected = _selectedChip == i;
+                        final isSelected = _selectedChip == chipIndex;
                         return GestureDetector(
                           onTap: () {
                             if (!isSelected) {
                               setState(() {
-                                _selectedChip = i;
+                                _selectedChip = chipIndex;
                                 _updateShopsStream();
                               });
                             }
@@ -399,7 +500,7 @@ class ExploreTabState extends State<ExploreTab> {
                                   : [],
                             ),
                             child: TextWidget(
-                              text: filterChips[i],
+                              text: chip.value,
                               fontSize: 14,
                               color: Colors.white,
                               isBold: true,
@@ -545,13 +646,15 @@ class ExploreTabState extends State<ExploreTab> {
                   _buildEventsSection(),
                   const SizedBox(height: 18),
                 ],
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: GestureDetector(
-                      onTap: () => widget.onOpenCommunity?.call(),
-                      child: _buildCheckCommunityButton()),
-                ),
-                const SizedBox(height: 18),
+                if (!_isBusinessAccount) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: GestureDetector(
+                        onTap: () => widget.onOpenCommunity?.call(),
+                        child: _buildCheckCommunityButton()),
+                  ),
+                  const SizedBox(height: 18),
+                ],
                 _sectionTitle('Shops'),
                 const SizedBox(height: 10),
               ],

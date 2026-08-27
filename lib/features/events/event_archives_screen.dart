@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cofi/features/business/widgets/business_workspace_ui.dart';
+import 'package:cofi/widgets/custom_dialog.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class EventArchivesScreen extends StatefulWidget {
   final String shopId;
@@ -19,9 +22,9 @@ class _EventArchivesScreenState extends State<EventArchivesScreen> {
     final now = DateTime.now();
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: BusinessWorkspaceColors.canvas,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: BusinessWorkspaceColors.canvas,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
@@ -29,94 +32,105 @@ class _EventArchivesScreenState extends State<EventArchivesScreen> {
         ),
         centerTitle: true,
         title: TextWidget(
-          text: 'Event Archives',
+          text: 'Past events',
           fontSize: 18,
-          color: Colors.white,
+          color: BusinessWorkspaceColors.paper,
           isBold: true,
         ),
       ),
-      body: SafeArea(
-        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('shops')
-              .doc(widget.shopId)
-              .collection('events')
-              .orderBy('createdAt', descending: true)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(strokeWidth: 2),
-              );
-            }
-
-            if (snapshot.hasError) {
-              return Center(
-                child: TextWidget(
-                  text: 'Error loading archives',
-                  fontSize: 16,
-                  color: Colors.white70,
-                ),
-              );
-            }
-
-            final allEvents = snapshot.data?.docs ?? [];
-
-            // Filter to only show archived events (explicitly archived or ended)
-            final archivedEvents = allEvents.where((doc) {
-              final event = doc.data();
-
-              // Check if explicitly marked as archived
-              if (event['isArchived'] == true) {
-                return true;
-              }
-
-              // Check if end date has passed (only end date matters for auto-archiving)
-              final endDate = event['endDate'];
-              DateTime? endDateTime;
-
-              if (endDate is Timestamp) {
-                endDateTime = endDate.toDate();
-              } else if (endDate is String && endDate.isNotEmpty) {
-                try {
-                  endDateTime = DateTime.parse(endDate);
-                } catch (_) {}
-              }
-
-              if (endDateTime != null && endDateTime.isBefore(now)) {
-                return true;
-              }
-
-              // If not explicitly archived and end date hasn't passed, don't show
-              return false;
-            }).toList();
-
-            if (archivedEvents.isEmpty) {
-              return Center(
-                child: TextWidget(
-                  text: 'No archived events',
-                  fontSize: 16,
-                  color: Colors.white70,
-                ),
-              );
-            }
-
-            return ListView.separated(
-              padding: const EdgeInsets.all(24),
-              itemCount: archivedEvents.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 16),
-              itemBuilder: (context, index) {
-                final event = archivedEvents[index].data();
-                final eventId = archivedEvents[index].id;
-
-                return _buildArchivedEventCard(
-                  eventId: eventId,
-                  event: event,
-                  onDelete: () => _deleteEvent(eventId),
+      body: BusinessWorkspaceTheme(
+        accentColor: Colors.grey,
+        child: SafeArea(
+          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('shops')
+                .doc(widget.shopId)
+                .collection('events')
+                .orderBy('createdAt', descending: true)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 );
-              },
-            );
-          },
+              }
+
+              if (snapshot.hasError) {
+                return Center(
+                  child: TextWidget(
+                    text: 'Error loading archives',
+                    fontSize: 16,
+                    color: Colors.white70,
+                  ),
+                );
+              }
+
+              final allEvents = snapshot.data?.docs ?? [];
+
+              // Filter to only show archived events (explicitly archived or ended)
+              final archivedEvents = allEvents.where((doc) {
+                final event = doc.data();
+
+                // Check if explicitly marked as archived
+                if (event['isArchived'] == true) {
+                  return true;
+                }
+
+                // Check if end date has passed (only end date matters for auto-archiving)
+                final endDate = event['endDate'];
+                DateTime? endDateTime;
+
+                if (endDate is Timestamp) {
+                  endDateTime = endDate.toDate();
+                } else if (endDate is String && endDate.isNotEmpty) {
+                  try {
+                    endDateTime = DateTime.parse(endDate);
+                  } catch (_) {}
+                }
+
+                if (endDateTime != null && endDateTime.isBefore(now)) {
+                  return true;
+                }
+
+                // If not explicitly archived and end date hasn't passed, don't show
+                return false;
+              }).toList();
+
+              if (archivedEvents.isEmpty) {
+                return const BusinessEmptyState(
+                  icon: Icons.event_busy_rounded,
+                  title: 'Your event history is empty',
+                  message:
+                      'Finished and archived events will stay here for reference.',
+                );
+              }
+
+              return ListView.separated(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                itemCount: archivedEvents.length + 1,
+                separatorBuilder: (_, __) => const SizedBox(height: 16),
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return const BusinessPageIntro(
+                      eyebrow: 'Event ledger',
+                      title: 'Past gatherings',
+                      description:
+                          'Keep a clean history of what your café has hosted.',
+                      icon: Icons.history_rounded,
+                    );
+                  }
+                  final event = archivedEvents[index - 1].data();
+                  final eventId = archivedEvents[index - 1].id;
+
+                  return _buildArchivedEventCard(
+                    eventId: eventId,
+                    event: event,
+                    onDelete: () => _deleteEvent(eventId),
+                  );
+                },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -133,8 +147,6 @@ class _EventArchivesScreenState extends State<EventArchivesScreen> {
         v is String ? v : (v?.toString() ?? fallback);
     final title = asString(event['title'], 'Event');
     final address = asString(event['address'], '');
-    final startDateRaw = event['startDate'] ?? event['date'];
-    final endDateRaw = event['endDate'];
     final imageUrl = asString(event['imageUrl'], '');
 
     String dateRange = 'Date TBD';
@@ -144,19 +156,28 @@ class _EventArchivesScreenState extends State<EventArchivesScreen> {
 
     // Parse startDate
     final d = event['date'];
-    if (d is Timestamp) startDateTime = d.toDate();
-    else if (d is String && d.isNotEmpty) startDateTime = DateTime.tryParse(d);
+    if (d is Timestamp) {
+      startDateTime = d.toDate();
+    } else if (d is String && d.isNotEmpty) {
+      startDateTime = DateTime.tryParse(d);
+    }
 
     final sd = event['startDate'];
     if (startDateTime == null) {
-      if (sd is Timestamp) startDateTime = sd.toDate();
-      else if (sd is String && sd.isNotEmpty) startDateTime = DateTime.tryParse(sd);
+      if (sd is Timestamp) {
+        startDateTime = sd.toDate();
+      } else if (sd is String && sd.isNotEmpty) {
+        startDateTime = DateTime.tryParse(sd);
+      }
     }
 
     // Parse endDate
     final ed = event['endDate'];
-    if (ed is Timestamp) endDateTime = ed.toDate();
-    else if (ed is String && ed.isNotEmpty) endDateTime = DateTime.tryParse(ed);
+    if (ed is Timestamp) {
+      endDateTime = ed.toDate();
+    } else if (ed is String && ed.isNotEmpty) {
+      endDateTime = DateTime.tryParse(ed);
+    }
 
     if (startDateTime != null) {
       if (endDateTime != null) {
@@ -166,15 +187,18 @@ class _EventArchivesScreenState extends State<EventArchivesScreen> {
         dateRange = _formatDate(startDateTime);
       }
     } else {
-      if (d is String && d.isNotEmpty) dateRange = d;
-      else if (sd is String && sd.isNotEmpty) dateRange = sd;
+      if (d is String && d.isNotEmpty) {
+        dateRange = d;
+      } else if (sd is String && sd.isNotEmpty) {
+        dateRange = sd;
+      }
     }
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[800]!),
+        color: BusinessWorkspaceColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: BusinessWorkspaceColors.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -235,21 +259,19 @@ class _EventArchivesScreenState extends State<EventArchivesScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: onDelete,
-                      style: TextButton.styleFrom(
-                        backgroundColor: Colors.red.withValues(alpha: 0.2),
-                      ),
-                      child: TextWidget(
-                        text: 'Delete',
-                        fontSize: 14,
-                        color: Colors.red,
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: onDelete,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.redAccent,
+                      side: BorderSide(
+                        color: Colors.redAccent.withValues(alpha: .35),
                       ),
                     ),
-                  ],
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                    label: const Text('Delete permanently'),
+                  ),
                 ),
               ],
             ),
@@ -264,43 +286,16 @@ class _EventArchivesScreenState extends State<EventArchivesScreen> {
   }
 
   Future<void> _deleteEvent(String eventId) async {
-    final confirmed = await showDialog<bool>(
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await CustomDialog.confirm(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: TextWidget(
-          text: 'Delete Event',
-          fontSize: 18,
-          color: Colors.white,
-          isBold: true,
-        ),
-        content: TextWidget(
-          text: 'Are you sure you want to delete this archived event?',
-          fontSize: 14,
-          color: Colors.white70,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: TextWidget(
-              text: 'Cancel',
-              fontSize: 14,
-              color: Colors.white,
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: TextWidget(
-              text: 'Delete',
-              fontSize: 14,
-              color: Colors.red,
-            ),
-          ),
-        ],
-      ),
+      title: 'Delete archived event?',
+      message: 'This permanently removes the event and its archive record.',
+      confirmText: 'Delete event',
+      isDestructive: true,
     );
 
-    if (confirmed == true) {
+    if (confirmed) {
       try {
         await FirebaseFirestore.instance
             .collection('shops')
@@ -309,17 +304,19 @@ class _EventArchivesScreenState extends State<EventArchivesScreen> {
             .doc(eventId)
             .delete();
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Event deleted')),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
-          );
-        }
+        CustomToast.showFromMessenger(
+          messenger,
+          'The archived event was permanently removed.',
+          type: ToastType.success,
+          title: 'Event deleted',
+        );
+      } catch (_) {
+        CustomToast.showFromMessenger(
+          messenger,
+          'We could not delete the event. Please try again.',
+          type: ToastType.error,
+          title: 'Delete failed',
+        );
       }
     }
   }

@@ -154,4 +154,49 @@ void main() {
       expect(merged, isEmpty);
     });
   });
+
+  group('recommendation cache policy', () {
+    final now = DateTime(2026, 8, 28, 12);
+    final freshTimestamp =
+        now.subtract(const Duration(hours: 23)).millisecondsSinceEpoch;
+    final expiredTimestamp =
+        now.subtract(const Duration(hours: 24)).millisecondsSinceEpoch;
+
+    test('keeps a compatible unchanged cache for less than 24 hours', () {
+      expect(
+        RecommendationService.cacheNeedsRevalidation(
+          hasScores: true,
+          generatedAtMilliseconds: freshTimestamp,
+          isDirty: false,
+          cachedAlgorithmVersion:
+              RecommendationService.recommendationAlgorithmVersion,
+          now: now,
+        ),
+        isFalse,
+      );
+    });
+
+    test('revalidates dirty, expired, missing, or old-formula caches', () {
+      bool shouldRefresh({
+        bool hasScores = true,
+        int? timestamp,
+        bool dirty = false,
+        int? algorithmVersion,
+      }) {
+        return RecommendationService.cacheNeedsRevalidation(
+          hasScores: hasScores,
+          generatedAtMilliseconds: timestamp ?? freshTimestamp,
+          isDirty: dirty,
+          cachedAlgorithmVersion: algorithmVersion ??
+              RecommendationService.recommendationAlgorithmVersion,
+          now: now,
+        );
+      }
+
+      expect(shouldRefresh(dirty: true), isTrue);
+      expect(shouldRefresh(timestamp: expiredTimestamp), isTrue);
+      expect(shouldRefresh(hasScores: false), isTrue);
+      expect(shouldRefresh(algorithmVersion: 1), isTrue);
+    });
+  });
 }

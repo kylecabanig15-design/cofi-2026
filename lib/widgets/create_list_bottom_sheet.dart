@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/features/cafe/shop_selection_screen.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class CreateListBottomSheet extends StatefulWidget {
   const CreateListBottomSheet({super.key});
@@ -38,6 +39,7 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
   String _collectionType = 'filter'; // 'filter' or 'custom'
   List<String> _selectedShopIds = []; // For custom collections
   bool _isPrivate = true; // Visibility toggle
+  bool _isSaving = false;
 
   // Check if save button should be enabled
   bool get _isSaveButtonEnabled {
@@ -271,9 +273,9 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
                       ),
                       const SizedBox(height: 4),
                       TextWidget(
-                        text: _isPrivate 
-                          ? 'Only you can see this collection' 
-                          : 'Visible to everyone',
+                        text: _isPrivate
+                            ? 'Only you can see this collection'
+                            : 'Visible to everyone',
                         fontSize: 12,
                         color: Colors.white70,
                       ),
@@ -392,19 +394,21 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _isSaveButtonEnabled
+                  onPressed: _isSaveButtonEnabled && !_isSaving
                       ? () async {
                           final name = _nameController.text.trim();
                           final description =
                               _descriptionController.text.trim();
                           final user = FirebaseAuth.instance.currentUser;
                           if (user == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('Sign in to create lists')),
+                            CustomToast.showWarning(
+                              context,
+                              'Sign in to save a café collection.',
+                              title: 'Sign-in required',
                             );
                             return;
                           }
+                          setState(() => _isSaving = true);
                           try {
                             final listsCol = FirebaseFirestore.instance
                                 .collection('users')
@@ -430,7 +434,10 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
                               // Doc IDs are always the shopId so removal by
                               // .doc(shopId).delete() works for these items.
                               for (final shopId in _selectedShopIds) {
-                                await docRef.collection('items').doc(shopId).set({
+                                await docRef
+                                    .collection('items')
+                                    .doc(shopId)
+                                    .set({
                                   'shopId': shopId,
                                   'addedAt': now,
                                 });
@@ -441,7 +448,7 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
                                   .where((e) => e.value)
                                   .map((e) => e.key)
                                   .toList();
-                                  docRef = await listsCol.add({
+                              docRef = await listsCol.add({
                                 'userId': user.uid,
                                 'name': name,
                                 'description': description,
@@ -457,114 +464,61 @@ class _CreateListBottomSheetState extends State<CreateListBottomSheet> {
                             }
 
                             if (context.mounted) {
-                              // Show success feedback FIRST, then pop on OK
-                              _showStatusDialog(
-                                context, 
-                                'Collection created successfully', 
-                                isSuccess: true,
-                                onConfirm: () {
-                                   if (context.mounted) {
-                                      Navigator.pop(context, docRef.id);
-                                   }
-                                }
+                              final messenger = ScaffoldMessenger.of(context);
+                              Navigator.pop(context, docRef.id);
+                              CustomToast.showFromMessenger(
+                                messenger,
+                                _isPrivate
+                                    ? 'The collection is saved privately to your profile.'
+                                    : 'The collection is saved and visible to Community.',
+                                type: ToastType.success,
+                                title: 'Collection created',
                               );
                             }
-                          } catch (e) {
+                          } catch (_) {
                             if (context.mounted) {
-                              _showStatusDialog(
-                                context, 
-                                'Failed to create collection: $e', 
-                                isSuccess: false,
+                              CustomToast.showError(
+                                context,
+                                'We could not create the collection. Please try again.',
+                                title: 'Collection not created',
                               );
                             }
+                          } finally {
+                            if (mounted) setState(() => _isSaving = false);
                           }
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        _isSaveButtonEnabled ? primary : Colors.grey[600],
+                    backgroundColor: _isSaveButtonEnabled && !_isSaving
+                        ? primary
+                        : Colors.grey[700],
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(30),
                     ),
                   ),
-                  child: TextWidget(
-                    text: _isSaveButtonEnabled ? 'Save' : '',
-                    fontSize: 16,
-                    color: Colors.white,
-                    isBold: true,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showStatusDialog(BuildContext context, String message, {required bool isSuccess, IconData? icon, VoidCallback? onConfirm}) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.grey[900],
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.5),
-                blurRadius: 20,
-                spreadRadius: 5,
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isSuccess ? primary.withValues(alpha: 0.1) : Colors.redAccent.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon ?? (isSuccess ? Icons.check_circle_outline : Icons.error_outline),
-                  color: isSuccess ? primary : Colors.redAccent,
-                  size: 40,
-                ),
-              ),
-              const SizedBox(height: 20),
-              TextWidget(
-                text: isSuccess ? 'Success' : 'Oops!',
-                fontSize: 20,
-                color: Colors.white,
-                isBold: true,
-              ),
-              const SizedBox(height: 8),
-              TextWidget(
-                text: message,
-                fontSize: 14,
-                color: Colors.white70,
-                align: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(dialogContext);
-                    if (onConfirm != null) onConfirm();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isSuccess ? primary : Colors.grey[800],
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: const TextWidget(text: 'OK', fontSize: 16, color: Colors.white, isBold: true),
+                  child: _isSaving
+                      ? const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                color: Colors.white,
+                              ),
+                            ),
+                            SizedBox(width: 10),
+                            Text('Creating…'),
+                          ],
+                        )
+                      : const TextWidget(
+                          text: 'Create collection',
+                          fontSize: 16,
+                          color: Colors.white,
+                          isBold: true,
+                        ),
                 ),
               ),
             ],

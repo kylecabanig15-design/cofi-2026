@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:cofi/features/events/event_details_screen.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -34,7 +33,61 @@ class PremiumEventCard extends StatelessWidget {
 
     final isPaused = event['isPaused'] == true;
 
-    // 2. Build Card
+    final shopId = (event['shopId'] ?? '').toString();
+    final embeddedLogo = (event['logoUrl'] ?? '').toString();
+    final embeddedShopName =
+        (event['shopName'] ?? event['cafeName'] ?? '').toString();
+
+    if (shopId.isNotEmpty &&
+        (embeddedLogo.isEmpty || embeddedShopName.isEmpty)) {
+      return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        future:
+            FirebaseFirestore.instance.collection('shops').doc(shopId).get(),
+        builder: (context, snapshot) {
+          final shop = snapshot.data?.data();
+          return _buildVisualCard(
+            context,
+            isPaused: isPaused,
+            isOngoing: isOngoing,
+            isEnded: isEnded,
+            isDateMissing: isDateMissing,
+            startDateTime: startDateTime,
+            endDateTime: endDateTime,
+            logoUrl: embeddedLogo.isNotEmpty
+                ? embeddedLogo
+                : (shop?['logoUrl'] ?? '').toString(),
+            shopName: embeddedShopName.isNotEmpty
+                ? embeddedShopName
+                : (shop?['name'] ?? 'Local café').toString(),
+          );
+        },
+      );
+    }
+
+    return _buildVisualCard(
+      context,
+      isPaused: isPaused,
+      isOngoing: isOngoing,
+      isEnded: isEnded,
+      isDateMissing: isDateMissing,
+      startDateTime: startDateTime,
+      endDateTime: endDateTime,
+      logoUrl: embeddedLogo,
+      shopName: embeddedShopName.isEmpty ? 'Local café' : embeddedShopName,
+    );
+  }
+
+  Widget _buildVisualCard(
+    BuildContext context, {
+    required bool isPaused,
+    required bool isOngoing,
+    required bool isEnded,
+    required bool isDateMissing,
+    required DateTime? startDateTime,
+    required DateTime? endDateTime,
+    required String logoUrl,
+    required String shopName,
+  }) {
     return SizedBox(
       width: width,
       height: height,
@@ -51,16 +104,7 @@ class PremiumEventCard extends StatelessWidget {
           );
         },
         child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(20)),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: Stack(
@@ -82,56 +126,70 @@ class PremiumEventCard extends StatelessWidget {
                 else
                   Container(color: const Color(0xFF1E1E1E)),
 
-                // Paused Overlay (Darker)
-                if (isPaused)
-                  Container(color: Colors.black.withValues(alpha: 0.6)),
-
-                // Gradient Overlay for Text Readability
+                // Same dark-exposure treatment used by Special Offers.
                 Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Colors.black.withValues(alpha: 0.1),
-                        Colors.black.withValues(alpha: 0.3),
-                        Colors.black.withValues(alpha: 0.8),
-                        Colors.black.withValues(alpha: 0.95),
+                        Colors.black.withValues(alpha: isPaused ? .72 : .45),
+                        Colors.black.withValues(alpha: isPaused ? .9 : .96),
                       ],
-                      stops: const [0.0, 0.4, 0.7, 1.0],
                     ),
                   ),
                 ),
 
-                // Top Badge
+                // Status badge
                 Positioned(
-                  top: 12,
-                  right: 12,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: _getBadgeColor(
-                                  isPaused, isOngoing, isEnded, isDateMissing)
-                              .withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            width: 0.5,
-                          ),
+                  top: 14,
+                  left: 14,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: _getBadgeColor(
+                          isPaused, isOngoing, isEnded, isDateMissing),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: TextWidget(
+                      text: _getBadgeText(
+                          isPaused, isOngoing, isEnded, isDateMissing),
+                      fontSize: 10,
+                      color: Colors.white,
+                      isBold: true,
+                    ),
+                  ),
+                ),
+
+                Positioned(
+                  top: 14,
+                  right: 14,
+                  child: Container(
+                    width: 48,
+                    padding: const EdgeInsets.symmetric(vertical: 7),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: .68),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextWidget(
+                          text: startDateTime == null
+                              ? 'TBD'
+                              : _month(startDateTime),
+                          fontSize: 9,
+                          color: Colors.white70,
+                          isBold: true,
                         ),
-                        child: TextWidget(
-                          text: _getBadgeText(
-                              isPaused, isOngoing, isEnded, isDateMissing),
-                          fontSize: 11,
+                        TextWidget(
+                          text: startDateTime?.day.toString() ?? '—',
+                          fontSize: 18,
                           color: Colors.white,
                           isBold: true,
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 ),
@@ -140,7 +198,7 @@ class PremiumEventCard extends StatelessWidget {
                 Positioned(
                   left: 16,
                   right: 16,
-                  bottom: 16,
+                  bottom: 14,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -152,20 +210,94 @@ class PremiumEventCard extends StatelessWidget {
                         isBold: true,
                         maxLines: 2,
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
-                          const Icon(Icons.calendar_month_rounded,
-                              color: Colors.amber, size: 14),
-                          const SizedBox(width: 6),
+                          Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: Colors.white12,
+                              shape: BoxShape.circle,
+                              image: logoUrl.isEmpty
+                                  ? null
+                                  : DecorationImage(
+                                      image:
+                                          CachedNetworkImageProvider(logoUrl),
+                                      fit: BoxFit.cover,
+                                    ),
+                            ),
+                            child: logoUrl.isEmpty
+                                ? const Icon(Icons.local_cafe,
+                                    color: Colors.white, size: 15)
+                                : null,
+                          ),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: TextWidget(
-                              text: _eventSubtitle(event),
+                              text: shopName,
                               fontSize: 13,
-                              color: Colors.white.withValues(alpha: 0.9),
+                              color: Colors.white,
+                              isBold: true,
                               maxLines: 1,
                             ),
                           ),
+                          if ((event['participantsCount'] as num?) != null) ...[
+                            const Icon(Icons.people_alt_rounded,
+                                color: Colors.white70, size: 14),
+                            const SizedBox(width: 4),
+                            TextWidget(
+                              text:
+                                  '${(event['participantsCount'] as num).toInt()} going',
+                              fontSize: 11,
+                              color: Colors.white70,
+                              isBold: true,
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          const Icon(Icons.arrow_forward_rounded,
+                              color: Colors.white, size: 17),
+                        ],
+                      ),
+                      const SizedBox(height: 7),
+                      Row(
+                        children: [
+                          const Icon(Icons.schedule_rounded,
+                              color: Colors.white70, size: 13),
+                          const SizedBox(width: 5),
+                          TextWidget(
+                            text:
+                                _timeRange(context, startDateTime, endDateTime),
+                            fontSize: 12,
+                            color: Colors.white70,
+                            isBold: true,
+                          ),
+                          if ((event['address'] ?? '')
+                              .toString()
+                              .trim()
+                              .isNotEmpty) ...[
+                            Container(
+                              width: 3,
+                              height: 3,
+                              margin: const EdgeInsets.symmetric(horizontal: 7),
+                              decoration: const BoxDecoration(
+                                color: Colors.white54,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const Icon(Icons.location_on_rounded,
+                                color: Colors.white70, size: 13),
+                            const SizedBox(width: 3),
+                            Expanded(
+                              child: TextWidget(
+                                text: _shortAddress(
+                                    (event['address'] ?? '').toString()),
+                                fontSize: 12,
+                                color: Colors.white70,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ],
@@ -200,55 +332,41 @@ class PremiumEventCard extends StatelessWidget {
   String _getBadgeText(
       bool isPaused, bool isOngoing, bool isEnded, bool isDateMissing) {
     if (isPaused) return 'PAUSED';
-    if (isOngoing) return 'ONGOING TODAY';
+    if (isOngoing) return 'LIVE NOW';
     if (isEnded) return 'ENDED';
     if (isDateMissing) return 'DATE TBD';
     return 'UPCOMING';
   }
 
-  String _eventSubtitle(Map<String, dynamic> event) {
-    DateTime? startDate;
-    DateTime? endDate;
-
-    final d = event['date'];
-    final sd = event['startDate'];
-    startDate = _parseEventDate(sd ?? d);
-    endDate = _parseEventDate(event['endDate']);
-
-    if (startDate != null) {
-      if (endDate != null &&
-          endDate.year == startDate.year &&
-          endDate.month == startDate.month &&
-          endDate.day == startDate.day) {
-        return _formatDate(startDate);
-      } else if (endDate != null) {
-        return '${_formatDate(startDate)} - ${_formatDate(endDate)}';
-      } else {
-        return _formatDate(startDate);
-      }
-    }
-
-    if (d is String && d.isNotEmpty) return d;
-    if (sd is String && sd.isNotEmpty) return sd;
-
-    return 'Date TBD';
+  String _month(DateTime date) {
+    const months = [
+      'JAN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MAY',
+      'JUN',
+      'JUL',
+      'AUG',
+      'SEP',
+      'OCT',
+      'NOV',
+      'DEC'
+    ];
+    return months[date.month - 1];
   }
 
-  String _formatDate(DateTime date) {
-    final months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec'
-    ];
-    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  String _timeRange(
+      BuildContext context, DateTime? startDate, DateTime? endDate) {
+    if (startDate == null) return 'Time TBD';
+    final start = TimeOfDay.fromDateTime(startDate).format(context);
+    if (endDate == null) return start;
+    final end = TimeOfDay.fromDateTime(endDate).format(context);
+    return '$start–$end';
+  }
+
+  String _shortAddress(String address) {
+    final firstPart = address.split(',').first.trim();
+    return firstPart.isEmpty ? address : firstPart;
   }
 }

@@ -22,6 +22,7 @@ class ReviewResponse {
   final String responseText;
   final DateTime createdAt;
   final DateTime? updatedAt;
+  final String? imageUrl;
 
   ReviewResponse({
     required this.id,
@@ -30,6 +31,7 @@ class ReviewResponse {
     required this.responseText,
     required this.createdAt,
     this.updatedAt,
+    this.imageUrl,
   });
 
   factory ReviewResponse.fromFirestore(Map<String, dynamic> data, String id) {
@@ -43,6 +45,7 @@ class ReviewResponse {
       // legacy ISO-string values, which (inside ShopRepository._parseAll's
       // per-doc catch) silently hides the ENTIRE review from every list.
       updatedAt: _parseDate(data['updatedAt']),
+      imageUrl: data['imageUrl'] as String?,
     );
   }
 
@@ -53,6 +56,7 @@ class ReviewResponse {
       'responseText': responseText,
       'createdAt': Timestamp.fromDate(createdAt),
       if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
+      if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
     };
   }
 }
@@ -90,8 +94,7 @@ class Review {
     final responses = ((data['responses'] as List?) ?? [])
         .whereType<Map>()
         .map((r) => ReviewResponse.fromFirestore(
-            Map<String, dynamic>.from(r),
-            (r['id'] as String?) ?? ''))
+            Map<String, dynamic>.from(r), (r['id'] as String?) ?? ''))
         .toList();
     return Review(
       id: id,

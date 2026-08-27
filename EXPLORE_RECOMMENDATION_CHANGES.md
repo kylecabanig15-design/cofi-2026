@@ -13,9 +13,9 @@ This document explains the difference between the previous Explore recommendatio
 | Request execution | Most café queries waited for the previous query to finish. | Independent signal and profile requests execute concurrently. |
 | Pull-to-refresh | Always bypassed the cache and waited for a complete collaborative-filtering rebuild. | Uses live Firestore streams and the existing cache, avoiding an unnecessary blocking rebuild. |
 | Visible feed during refresh | The refresh gesture could remain active while the full algorithm ran. | Existing café results remain visible while scores update in the background. |
-| Interest changes | Firestore saved the interests, but the 24-hour collaborative-score cache remained valid. | Saving interests clears the user's recommendation cache and signals Explore automatically. |
+| Interest changes | Firestore saved interests but Explore could keep old local ordering. | Saving interests keeps collaborative scores and immediately re-sorts with the new local interest bonus. |
 | Manual reload after changing interests | Sometimes required to see the complete updated ranking. | Not required. Explore listens to the user document and updates the interest-based ranking automatically. |
-| Overlapping refreshes | Older computations could finish later and replace newer results. | A request identifier ensures only the latest computation can update the screen. |
+| Overlapping refreshes | Older computations could finish later and replace newer results. | Input versions, a debounce, and one-at-a-time execution coalesce changes and protect newer results. |
 | Users with sparse data | An empty recommendation result was not cached, so the expensive calculation could repeat. | Valid empty results are cached to avoid unnecessary repeated work. |
 | Error diagnostics | Recommendation failures produced one generic `_findSimilarUsers` error. | Errors identify the exact query stage, such as loading shops, signals, or profiles. |
 
@@ -57,11 +57,11 @@ Open or refresh Explore
 ```text
 User saves new interests
     -> update users/{uid}.interests in Firestore
-    -> clear that user's local recommendation cache
-    -> increment the app-wide recommendation signal
-    -> Explore's user-document listener receives the new interests
+    -> keep that user's collaborative recommendation cache
+    -> increment the interest-only app signal
+    -> Explore fetches the new interests
     -> apply the interest-to-shop-tag ranking bonus immediately
-    -> recompute collaborative scores in the background
+    -> do not recompute cosine similarity
 ```
 
 The user does not need to close, reopen, or manually reload Explore after changing interests.
@@ -81,8 +81,9 @@ The optimization does not change the documented recommendation formula. The `For
 
 - Recommendation scores remain cached for up to 24 hours during normal browsing.
 - Pull-to-refresh no longer discards a valid cache.
-- Reviews and visits continue to use `recommendationVersion` to request a background recalculation.
-- Changing interests explicitly invalidates the user's cache before notifying Explore.
+- Rating-context changes persist a dirty input version and use `recommendationVersion` to request a coalesced background recalculation.
+- Changing interests keeps the collaborative cache and uses `interestsVersion` for local re-ranking.
+- Unrated standalone visits update visit history without paying for a no-op collaborative pass.
 - Empty results are cached as valid results for users who do not yet have enough collaborative data.
 
 ## Files Changed
@@ -92,9 +93,9 @@ The optimization does not change the documented recommendation formula. The `For
 - `lib/features/home/explore_tab.dart`
   - Cache-friendly pull-to-refresh, background refresh behavior, automatic interest reload, and stale-request protection.
 - `lib/features/auth/interest_selection_screen.dart`
-  - Recommendation-cache invalidation and automatic Explore notification after interests are saved.
+  - Interest-only Explore notification without collaborative-cache invalidation.
 - `lib/utils/app_signals.dart`
-  - Provides the shared `recommendationVersion` notifier used by review, visit, and preference changes.
+  - Separates rating-context refreshes from interest-only refreshes.
 
 ## Expected Result
 
@@ -104,4 +105,3 @@ The optimization does not change the documented recommendation formula. The `For
 - Existing café cards remain visible during recommendation recomputation.
 - Firestore round-trip latency is substantially reduced.
 - The implementation better matches the documentation's description of an up-to-date dynamic Explore feed.
-

@@ -94,25 +94,18 @@ class _CustomLocationScreenState extends State<CustomLocationScreen> {
   Future<void> _getAddressFromCoordinates(
       double latitude, double longitude) async {
     try {
-      debugPrint('Reverse geocoding: lat=$latitude, lon=$longitude');
-
-      if (_googleMapsApiKey.isEmpty) {
-        debugPrint('GOOGLE_GEOCODING_API_KEY not set; using Nominatim only');
-      } else {
+      if (_googleMapsApiKey.isNotEmpty) {
         // Try Google Geocoding API first
         final String googleUrl =
             'https://maps.googleapis.com/maps/api/geocode/json?latlng=$latitude,$longitude&key=$_googleMapsApiKey';
         final googleResponse = await http.get(Uri.parse(googleUrl));
 
-        debugPrint(
-            'Google Geocoding response status: ${googleResponse.statusCode}');
         if (googleResponse.statusCode == 200) {
           final json = jsonDecode(googleResponse.body);
           final results = json['results'] as List? ?? [];
 
           if (results.isNotEmpty) {
             final address = results[0]['formatted_address'] as String? ?? '';
-            debugPrint('Extracted address from Google: $address');
             if (mounted) {
               setState(() {
                 _selectedLocationName = address;
@@ -124,7 +117,6 @@ class _CustomLocationScreenState extends State<CustomLocationScreen> {
       }
 
       // Fallback to OpenStreetMap Nominatim API if Google fails
-      debugPrint('Google Geocoding failed, trying Nominatim...');
       final String nominatimUrl =
           'https://nominatim.openstreetmap.org/reverse?format=json&lat=$latitude&lon=$longitude';
       final nominatimResponse = await http.get(
@@ -132,7 +124,6 @@ class _CustomLocationScreenState extends State<CustomLocationScreen> {
         headers: {'User-Agent': 'CoFi-App'},
       );
 
-      debugPrint('Nominatim response status: ${nominatimResponse.statusCode}');
       if (nominatimResponse.statusCode == 200) {
         final json = jsonDecode(nominatimResponse.body);
         final address = json['address'] != null
@@ -140,16 +131,12 @@ class _CustomLocationScreenState extends State<CustomLocationScreen> {
             : '';
 
         if (address.isNotEmpty) {
-          debugPrint('Extracted address from Nominatim: $address');
           if (mounted) {
             setState(() {
               _selectedLocationName = address;
             });
           }
         }
-      } else {
-        debugPrint(
-            'Nominatim API error: ${nominatimResponse.statusCode} - ${nominatimResponse.body}');
       }
     } catch (e) {
       debugPrint('Error getting address from coordinates: $e');

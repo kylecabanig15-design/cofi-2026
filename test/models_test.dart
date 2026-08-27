@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:cofi/models/event_model.dart';
 import 'package:cofi/models/job_model.dart';
+import 'package:cofi/models/promotion_model.dart';
 import 'package:cofi/models/review_model.dart';
 import 'package:cofi/models/shop_model.dart';
 import 'package:cofi/models/user_model.dart';
@@ -137,6 +138,7 @@ void main() {
             'id': 'resp1',
             'ownerName': 'Owner',
             'responseText': 'Thanks!',
+            'imageUrl': 'reply.jpg',
             'createdAt': Timestamp.fromDate(DateTime(2026, 8, 1)),
             'updatedAt': Timestamp.fromDate(DateTime(2026, 8, 2)),
           }
@@ -144,6 +146,45 @@ void main() {
       }, 'r1');
       expect(r.authorPhotoUrl, 'p.png');
       expect(r.responses.first.updatedAt, DateTime(2026, 8, 2));
+      expect(r.responses.first.imageUrl, 'reply.jpg');
+    });
+  });
+
+  group('Promotion model', () {
+    test('is active only while a published offer is in its valid period', () {
+      final promotion = Promotion.fromFirestore({
+        'shopId': 'shop1',
+        'title': 'Study Deal',
+        'offer': '20% OFF',
+        'status': 'published',
+        'imageUrl': 'offer.jpg',
+        'imageSource': 'promotion',
+        'startDate': Timestamp.fromDate(DateTime(2026, 8, 1)),
+        'endDate': Timestamp.fromDate(DateTime(2026, 8, 31, 23, 59)),
+      }, 'p1');
+
+      expect(promotion.isActiveAt(DateTime(2026, 8, 15)), isTrue);
+      expect(promotion.hasDedicatedImage, isTrue);
+      expect(promotion.isActiveAt(DateTime(2026, 9, 1)), isFalse);
+    });
+
+    test('legacy cafe gallery images are not treated as offer artwork', () {
+      final promotion = Promotion.fromFirestore({
+        'imageUrl': 'cafe-gallery.jpg',
+      }, 'p1');
+
+      expect(promotion.hasDedicatedImage, isFalse);
+    });
+
+    test('draft and paused offers never appear active', () {
+      for (final status in ['draft', 'paused']) {
+        final promotion = Promotion.fromFirestore({
+          'status': status,
+          'startDate': DateTime(2026, 8, 1),
+          'endDate': DateTime(2026, 8, 31),
+        }, 'p1');
+        expect(promotion.isActiveAt(DateTime(2026, 8, 15)), isFalse);
+      }
     });
   });
 

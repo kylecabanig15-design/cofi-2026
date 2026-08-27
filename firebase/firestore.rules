@@ -85,7 +85,7 @@ service cloud.firestore {
           && request.resource.data.body.size() <= 1000
           && request.resource.data.get('type', '') in
              ['event', 'event_participation', 'job', 'job_application',
-              'shop', 'recommendation', 'review', 'business_application',
+              'shop', 'recommendation', 'review', 'review_reply', 'business_application',
               'chat']
           && request.resource.data.get('recipientRole', 'user') in ['user', 'business'];
       }
@@ -124,6 +124,9 @@ service cloud.firestore {
       allow read: if signedIn();
     }
     match /{path=**}/jobs/{jobId} {
+      allow read: if signedIn();
+    }
+    match /{path=**}/promotions/{promotionId} {
       allow read: if signedIn();
     }
     // Visits, reviews and comments are also read via collectionGroup()
@@ -235,6 +238,21 @@ service cloud.firestore {
                 && participantId == request.auth.uid
                 && resource.data.userId == request.auth.uid);
         }
+      }
+
+      // ----- Special offers -----
+      // Offers are authored and managed only by the verified shop's staff.
+      // Customer clients have read-only access and never perform redemption
+      // writes in this first, low-cost version.
+      match /promotions/{promotionId} {
+        allow read: if signedIn();
+        allow create, update: if isAdmin()
+          || (isShopStaff(shopId)
+              && get(/databases/$(database)/documents/shops/$(shopId)).data.isVerified == true
+              && request.resource.data.shopId == shopId);
+        allow delete: if isAdmin()
+          || (isShopStaff(shopId)
+              && get(/databases/$(database)/documents/shops/$(shopId)).data.isVerified == true);
       }
 
       // ----- Visit logs (independent of reviews by design) -----

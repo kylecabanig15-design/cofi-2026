@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/utils/colors.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class EditProfileDialog extends StatefulWidget {
   const EditProfileDialog({super.key});
@@ -111,19 +112,22 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
         await user.updateDisplayName(newName);
 
         if (mounted) {
+          final messenger = ScaffoldMessenger.of(context);
           Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Profile updated successfully'),
-              backgroundColor: Colors.green,
-            ),
+          CustomToast.showFromMessenger(
+            messenger,
+            'Your latest name and photo are now visible.',
+            type: ToastType.success,
+            title: 'Profile updated',
           );
         }
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update profile: $e')),
+        CustomToast.showError(
+          context,
+          'We could not save your profile changes. Please try again.',
+          title: 'Profile not updated',
         );
       }
     } finally {

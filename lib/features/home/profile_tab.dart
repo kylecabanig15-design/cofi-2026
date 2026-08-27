@@ -7,10 +7,12 @@ import 'package:cofi/models/job_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/features/jobs/job_chat_screen.dart';
 import 'package:cofi/features/settings/settings_screen.dart';
+import 'package:cofi/features/business/shop_verification_sheet.dart';
 
 class ProfileTab extends StatelessWidget {
   static final JobRepository _jobRepository = JobRepository();
@@ -23,273 +25,291 @@ class ProfileTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: SafeArea(
-        bottom: false,
-        child: StatefulBuilder(
-          builder: (context, setState) {
-            return RefreshIndicator(
-              color: primary,
-              backgroundColor: Colors.black87,
-              onRefresh: () async {
-                setState(() {});
-                await Future.delayed(const Duration(milliseconds: 800));
-              },
-              child: ListView(
-                padding: const EdgeInsets.only(bottom: 120),
+      body: StatefulBuilder(
+        builder: (context, setState) {
+          return RefreshIndicator(
+            color: primary,
+            backgroundColor: Colors.black87,
+            onRefresh: () async {
+              setState(() {});
+              await Future.delayed(const Duration(milliseconds: 800));
+            },
+            child: ListView(
+              padding: EdgeInsets.only(
+                top: MediaQuery.of(context).padding.top + 16,
+                bottom: 120,
+              ),
+              children: [
+          // Profile header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const SizedBox(height: 32),
-                  // Profile header
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Builder(builder: (context) {
-                          final user = FirebaseAuth.instance.currentUser;
-                          if (user == null) {
-                            return Container(
-                              width: 72,
-                              height: 72,
-                              decoration: const BoxDecoration(
-                                color: primary,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: Image.asset(
-                                    'assets/images/logo.png',
-                                  ),
-                                ),
-                              ),
-                            );
-                          }
-                          return StreamBuilder<
-                              DocumentSnapshot<Map<String, dynamic>>>(
-                            stream: FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(user.uid)
-                                .snapshots(),
-                            builder: (context, snapshot) {
-                              final data = snapshot.data?.data();
-                              final photoUrl =
-                                  (data?['photoUrl'] as String?)?.trim();
-
-                              return Container(
-                                width: 72,
-                                height: 72,
-                                decoration: const BoxDecoration(
-                                  color: primary,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Center(
-                                  child: ClipOval(
-                                    child: (photoUrl != null &&
-                                            photoUrl.isNotEmpty)
-                                        ? CachedNetworkImage(
-                                            imageUrl: photoUrl,
-                                            width: 72,
-                                            height: 72,
-                                            fit: BoxFit.cover,
-                                            placeholder: (context, url) =>
-                                                const CircularProgressIndicator(
-                                                    color: Colors.white,
-                                                    strokeWidth: 2),
-                                            errorWidget:
-                                                (context, url, error) =>
-                                                    Padding(
-                                              padding:
-                                                  const EdgeInsets.all(8.0),
-                                              child: Image.asset(
-                                                  'assets/images/logo.png'),
-                                            ),
-                                          )
-                                        : Padding(
-                                            padding: const EdgeInsets.all(8.0),
-                                            child: Image.asset(
-                                                'assets/images/logo.png'),
-                                          ),
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        }),
-                        Row(
-                          children: [
-                            IconButton(
-                                onPressed: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => const SettingsScreen(),
-                                    ),
-                                  );
-                                },
-                                icon: const Icon(
-                                  Icons.settings,
-                                  color: Colors.white,
-                                )),
-                          ],
+                  Builder(builder: (context) {
+                    final user = FirebaseAuth.instance.currentUser;
+                    if (user == null) {
+                      return Container(
+                        width: 72,
+                        height: 72,
+                        decoration: const BoxDecoration(
+                          color: primary,
+                          shape: BoxShape.circle,
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Builder(builder: (context) {
-                      final user = FirebaseAuth.instance.currentUser;
-                      if (user == null) {
-                        return TextWidget(
-                          text: 'Guest',
-                          fontSize: 32,
-                          color: Colors.white,
-                          isBold: true,
-                        );
-                      }
-                      final sessionName =
-                          context.watch<UserSession>().user?.name.trim();
-                      final displayName =
-                          (sessionName != null && sessionName.isNotEmpty)
-                              ? sessionName
-                              : (user.displayName ?? 'User');
-                      return TextWidget(
-                        text: displayName,
-                        fontSize: 32,
-                        color: Colors.white,
-                        isBold: true,
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Image.asset(
+                              'assets/images/logo.png',
+                            ),
+                          ),
+                        ),
                       );
-                    }),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Builder(builder: (context) {
-                      final user = FirebaseAuth.instance.currentUser;
-                      if (user == null) {
-                        return TextWidget(
-                          text: 'Not signed in',
-                          fontSize: 16,
-                          color: Colors.white70,
-                        );
-                      }
-                      final sessionAddress =
-                          context.watch<UserSession>().user?.address.trim() ??
-                              '';
-                      if (sessionAddress.isEmpty) {
-                        return const SizedBox.shrink();
-                      }
-                      return TextWidget(
-                        text: sessionAddress,
-                        fontSize: 16,
-                        color: Colors.white70,
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 32),
-                  // Stats Card - Different for Business vs User accounts
-                  Builder(
-                    builder: (context) {
-                      final user = FirebaseAuth.instance.currentUser;
-                      if (user == null) return const SizedBox.shrink();
+                    }
+                    return StreamBuilder<
+                        DocumentSnapshot<Map<String, dynamic>>>(
+                      stream: FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(user.uid)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        final data = snapshot.data?.data();
+                        final photoUrl = (data?['photoUrl'] as String?)?.trim();
 
-                      final isBusiness =
-                          context.watch<UserSession>().isBusiness;
-
-                      // Business Account - Show Analytics & Stats
-                      if (isBusiness) {
-                        return _buildBusinessAnalyticsSection(
-                            context, user.uid);
-                      }
-
-                      // User Account - Show regular stats
-                      return _buildUserStatsSection(context, user.uid);
-                    },
-                  ),
-                  const SizedBox(height: 32),
-                  // Contribute to Community or Business Dashboard based on account type
-                  Builder(
-                    builder: (context) {
-                      final user = FirebaseAuth.instance.currentUser;
-                      if (user == null) return const SizedBox.shrink();
-
-                      final isBusiness =
-                          context.watch<UserSession>().isBusiness;
-
-                      // Business Account - Show Business Dashboard
-                      if (isBusiness) {
-                        return _buildBusinessSection(context, user.uid);
-                      }
-
-                      // User Account - Show Contribute Section
-                      return _buildUserContributeSection(context, user.uid);
-                    },
-                  ),
-                  const SizedBox(height: 32),
-
-                  // Find the perfect cafe
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Column(
-                      children: [
-                        Container(
-                          width: 72,
-                          height: 72,
+                        return Container(
+                          width: 80,
+                          height: 80,
                           decoration: const BoxDecoration(
                             color: primary,
                             shape: BoxShape.circle,
                           ),
-                          child: const Center(
-                            child: Icon(Icons.local_cafe,
-                                color: Colors.white, size: 36),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        TextWidget(
-                          text: 'Find the perfect cafe',
-                          fontSize: 22,
-                          color: Colors.white,
-                          isBold: true,
-                        ),
-                        const SizedBox(height: 8),
-                        TextWidget(
-                          align: TextAlign.center,
-                          text:
-                              'Explore, check cafe shops to visit and share it in the reviews.',
-                          fontSize: 15,
-                          color: Colors.white70,
-                        ),
-                        const SizedBox(height: 18),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: onOpenExplore,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: primary,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                            ),
-                            child: const Text(
-                              'Explore Cafes',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
+                          child: Center(
+                            child: ClipOval(
+                              child: (photoUrl != null && photoUrl.isNotEmpty)
+                                  ? CachedNetworkImage(
+                                      imageUrl: photoUrl,
+                                      width: 72,
+                                      height: 72,
+                                      fit: BoxFit.cover,
+                                      placeholder: (context, url) =>
+                                          const CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2),
+                                      errorWidget: (context, url, error) =>
+                                          Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: Image.asset(
+                                            'assets/images/logo.png'),
+                                      ),
+                                    )
+                                  : Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child:
+                                          Image.asset('assets/images/logo.png'),
+                                    ),
                             ),
                           ),
+                        );
+                      },
+                    );
+                  }),
+                  Row(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.03),
+                          shape: BoxShape.circle,
                         ),
-                      ],
-                    ),
+                        child: IconButton(
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const SettingsScreen(),
+                                ),
+                              );
+                            },
+                            icon: const Icon(
+                              Icons.settings,
+                              color: Colors.white,
+                            )),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 32),
                 ],
               ),
+            ),
+            const SizedBox(height: 18),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Builder(builder: (context) {
+                final user = FirebaseAuth.instance.currentUser;
+                if (user == null) {
+                  return const Text(
+                    'Guest',
+                    style: TextStyle(
+                      fontSize: 32,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'Regular',
+                    ),
+                  );
+                }
+                final sessionName = context.watch<UserSession>().user?.name.trim();
+                final displayName = (sessionName != null && sessionName.isNotEmpty)
+                    ? sessionName
+                    : (user.displayName ?? 'User');
+                return Text(
+                  displayName,
+                  style: const TextStyle(
+                    fontSize: 32,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'Regular',
+                  ),
+                );
+              }),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Builder(builder: (context) {
+                final user = FirebaseAuth.instance.currentUser;
+                if (user == null) {
+                  return TextWidget(
+                    text: 'Not signed in',
+                    fontSize: 16,
+                    color: Colors.white70,
+                  );
+                }
+                final sessionAddress =
+                    context.watch<UserSession>().user?.address.trim() ?? '';
+                if (sessionAddress.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                return TextWidget(
+                  text: sessionAddress,
+                  fontSize: 16,
+                  color: Colors.white70,
+                );
+              }),
+            ),
+            const SizedBox(height: 32),
+            // Stats Card - Different for Business vs User accounts
+            Builder(
+              builder: (context) {
+                final user = FirebaseAuth.instance.currentUser;
+                if (user == null) return const SizedBox.shrink();
+
+                final isBusiness =
+                    context.watch<UserSession>().isBusiness;
+
+                // Business Account - Show Business Dashboard
+                if (isBusiness) {
+                  return const SizedBox.shrink();
+                }
+
+                // User Account - Show regular stats
+                return _buildUserStatsSection(context, user.uid);
+              },
+            ),
+            const SizedBox(height: 32),
+            // Contribute to Community or Business Dashboard based on account type
+            Builder(
+              builder: (context) {
+                final user = FirebaseAuth.instance.currentUser;
+                if (user == null) return const SizedBox.shrink();
+
+                final isBusiness =
+                    context.watch<UserSession>().isBusiness;
+
+                // Business Account - Show Analytics & Stats
+                if (isBusiness) {
+                  return _buildBusinessAnalyticsSection(context, user.uid);
+                }
+
+                // User Account - Show Contribute Section
+                return _buildUserContributeSection(context, user.uid);
+              },
+            ),
+            const SizedBox(height: 32),
+
+            // Find the perfect cafe
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.02),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Center(
+                        child:
+                            Icon(Icons.local_cafe, color: Colors.white, size: 32),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Find the perfect cafe',
+                      style: TextStyle(
+                        fontSize: 22,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.5,
+                        fontFamily: 'Regular',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Explore, check cafe shops to visit and share it in the reviews.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Colors.white.withOpacity(0.6),
+                        height: 1.4,
+                        fontFamily: 'Regular',
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: onOpenExplore,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primary,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Text(
+                          'Explore Cafes',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+          ],
+        ),
             );
           },
         ),
-      ),
     );
   }
 
@@ -409,6 +429,8 @@ class ProfileTab extends StatelessWidget {
 
   // Business Analytics Section for business users
   Widget _buildBusinessAnalyticsSection(BuildContext context, String uid) {
+    String selectedMetric = 'Visits';
+    
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: StreamBuilder<QuerySnapshot>(
@@ -464,8 +486,7 @@ class ProfileTab extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         TextWidget(
-                          text:
-                              'Submit or claim a shop to unlock powerful insights and customer data.',
+                          text: 'Submit or claim a shop to unlock powerful insights and customer data.',
                           fontSize: 14,
                           color: Colors.grey[500],
                           align: TextAlign.center,
@@ -474,6 +495,8 @@ class ProfileTab extends StatelessWidget {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 24),
+                  _buildBusinessStatusCard(context, uid),
                 ],
               ),
             );
@@ -482,8 +505,13 @@ class ProfileTab extends StatelessWidget {
           final shopDoc = shopSnapshot.data!.docs.first;
           final shopId = shopDoc.id;
 
-          return Container(
-            decoration: BoxDecoration(
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildBusinessStatusCard(context, uid),
+              const SizedBox(height: 24),
+              Container(
+                decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.03),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
@@ -495,13 +523,10 @@ class ProfileTab extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextWidget(
-                  text: 'Business Analytics',
-                  fontSize: 20,
-                  color: Colors.white,
-                  isBold: true,
-                ),
-                const SizedBox(height: 20),
+                // Interactive Chart Section
+                _BusinessAnalyticsChart(shopId: shopId),
+                
+                const SizedBox(height: 24),
 
                 // Stats Grid
                 StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -534,8 +559,7 @@ class ProfileTab extends StatelessWidget {
                                         .toStringAsFixed(1)
                                     : '0.0',
                                 color: Colors.amber,
-                                tooltip:
-                                    'Average star rating from all customer reviews',
+                                tooltip: 'Average star rating from all customer reviews',
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -545,8 +569,7 @@ class ProfileTab extends StatelessWidget {
                                 label: 'Total Ratings',
                                 value: reviews.length.toString(),
                                 color: Colors.blue,
-                                tooltip:
-                                    'Total number of reviews submitted by customers',
+                                tooltip: 'Total number of reviews submitted by customers',
                               ),
                             ),
                           ],
@@ -569,8 +592,7 @@ class ProfileTab extends StatelessWidget {
                                     label: 'Customer Visits',
                                     value: visitCount.toString(),
                                     color: Colors.green,
-                                    tooltip:
-                                        'Total number of recorded customer visits',
+                                    tooltip: 'Total number of recorded customer visits',
                                   );
                                 },
                               ),
@@ -590,8 +612,7 @@ class ProfileTab extends StatelessWidget {
                                     label: 'Saved',
                                     value: savedCount.toString(),
                                     color: primary,
-                                    tooltip:
-                                        'Number of users who have bookmarked your shop',
+                                    tooltip: 'Number of users who have bookmarked your shop',
                                   );
                                 },
                               ),
@@ -604,6 +625,8 @@ class ProfileTab extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+            ],
           );
         },
       ),
@@ -653,8 +676,7 @@ class ProfileTab extends StatelessWidget {
                           label: 'Visited this week',
                           color: Colors.amber,
                           tooltip: 'Unique cafes you visited this week',
-                          onTap: () =>
-                              Navigator.pushNamed(context, '/visitedCafes'),
+                          onTap: () => Navigator.pushNamed(context, '/visitedCafes'),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -665,8 +687,7 @@ class ProfileTab extends StatelessWidget {
                           label: 'Visited this month',
                           color: Colors.blue,
                           tooltip: 'Unique cafes you visited this month',
-                          onTap: () =>
-                              Navigator.pushNamed(context, '/visitedCafes'),
+                          onTap: () => Navigator.pushNamed(context, '/visitedCafes'),
                         ),
                       ),
                     ],
@@ -681,8 +702,7 @@ class ProfileTab extends StatelessWidget {
                           label: 'Visited this year',
                           color: Colors.green,
                           tooltip: 'Unique cafes you visited this year',
-                          onTap: () =>
-                              Navigator.pushNamed(context, '/visitedCafes'),
+                          onTap: () => Navigator.pushNamed(context, '/visitedCafes'),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -693,8 +713,7 @@ class ProfileTab extends StatelessWidget {
                           label: 'Reviews written',
                           color: primary,
                           tooltip: 'Total cafes you have reviewed this year',
-                          onTap: () =>
-                              Navigator.pushNamed(context, '/yourReviews'),
+                          onTap: () => Navigator.pushNamed(context, '/yourReviews'),
                         ),
                       ),
                     ],
@@ -744,51 +763,45 @@ class ProfileTab extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(24),
+        color: Colors.white.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1.5,
+          color: Colors.white.withOpacity(0.05),
+          width: 1,
         ),
       ),
       child: Stack(
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      color.withValues(alpha: 0.4),
-                      color.withValues(alpha: 0.1),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+          SizedBox(
+            width: double.infinity,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: color.withValues(alpha: 0.5),
-                    width: 1,
-                  ),
+                  child: Icon(icon, color: color, size: 22),
                 ),
-                child: Icon(icon, color: color, size: 26),
-              ),
-              const SizedBox(height: 20),
-              TextWidget(
-                text: value,
-                fontSize: 26,
-                color: Colors.white,
-                isBold: true,
-              ),
-              const SizedBox(height: 4),
-              TextWidget(
-                text: label,
-                fontSize: 13,
-                color: Colors.grey[400],
-              ),
-            ],
+                const SizedBox(height: 20),
+                TextWidget(
+                  text: value,
+                  fontSize: 24,
+                  color: Colors.white,
+                  isBold: true,
+                  align: TextAlign.center,
+                ),
+                const SizedBox(height: 4),
+                TextWidget(
+                  text: label,
+                  fontSize: 13,
+                  color: Colors.white.withOpacity(0.5),
+                  align: TextAlign.center,
+                ),
+              ],
+            ),
           ),
           if (tooltip != null)
             Positioned(
@@ -913,8 +926,7 @@ class ProfileTab extends StatelessWidget {
               if (hasShop) {
                 final count = snapshot.data!.docs.length;
                 label = 'My Contributions';
-                subtitle =
-                    'You have contributed $count café${count > 1 ? 's' : ''}';
+                subtitle = 'You have contributed $count café${count > 1 ? 's' : ''}';
                 statusIcon = Icons.stars_rounded;
                 statusColor = Colors.amber;
                 onTap = () {
@@ -934,7 +946,9 @@ class ProfileTab extends StatelessWidget {
                 onTap: onTap,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.08),
+                    color: onTap == null
+                        ? Colors.white.withValues(alpha: 0.04)
+                        : Colors.white.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(32),
                   ),
                   child: Row(
@@ -963,23 +977,25 @@ class ProfileTab extends StatelessWidget {
                             TextWidget(
                               text: label,
                               fontSize: 18,
-                              color: Colors.white,
+                              color: onTap == null ? Colors.grey : Colors.white,
                               isBold: true,
                             ),
                             if (subtitle.isNotEmpty)
                               TextWidget(
                                 text: subtitle,
                                 fontSize: 14,
-                                color: Colors.white70,
+                                color:
+                                    onTap == null ? Colors.grey : Colors.white70,
                               ),
                           ],
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.arrow_forward_ios,
-                            color: Colors.white, size: 22),
-                        onPressed: onTap,
-                      ),
+                      if (onTap != null)
+                        IconButton(
+                          icon: const Icon(Icons.arrow_forward_ios,
+                              color: Colors.white, size: 22),
+                          onPressed: onTap,
+                        ),
                     ],
                   ),
                 ),
@@ -1097,7 +1113,8 @@ class ProfileTab extends StatelessWidget {
     );
   }
 
-  void _showJobApplicationsDialog(BuildContext context, List<Job> jobs) {
+  void _showJobApplicationsDialog(
+      BuildContext context, List<Job> jobs) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1105,11 +1122,11 @@ class ProfileTab extends StatelessWidget {
       builder: (ctx) => Container(
         height: MediaQuery.of(context).size.height * 0.75,
         decoration: BoxDecoration(
-          color: Colors.grey[900]!.withValues(alpha: 0.95),
+          color: Colors.grey[900]!.withOpacity(0.95),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
           boxShadow: [
             BoxShadow(
-              color: primary.withValues(alpha: 0.2),
+              color: primary.withOpacity(0.2),
               blurRadius: 20,
               spreadRadius: 2,
             ),
@@ -1134,7 +1151,7 @@ class ProfileTab extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.green.withValues(alpha: 0.2),
+                      color: Colors.green.withOpacity(0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.work_history,
@@ -1169,11 +1186,9 @@ class ProfileTab extends StatelessWidget {
             const SizedBox(height: 24),
             Expanded(
               child: ListView.separated(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 itemCount: jobs.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 16),
+                separatorBuilder: (context, index) => const SizedBox(height: 16),
                 itemBuilder: (context, index) {
                   final job = jobs[index];
                   final userApplications = job.applications
@@ -1208,9 +1223,8 @@ class ProfileTab extends StatelessWidget {
                               MaterialPageRoute(
                                 builder: (context) => JobChatScreen(
                                   jobId: job.id,
-                                  jobTitle: job.title.isEmpty
-                                      ? 'Unknown Position'
-                                      : job.title,
+                                  jobTitle:
+                                      job.title.isEmpty ? 'Unknown Position' : job.title,
                                   shopId: job.shopId,
                                   posterId: documentSnapshot['posterId'] ?? '',
                                   applicantId: currentUser.uid,
@@ -1235,12 +1249,12 @@ class ProfileTab extends StatelessWidget {
                         ),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.05),
+                          color: Colors.white.withOpacity(0.05),
                           width: 1,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.2),
+                            color: Colors.black.withOpacity(0.2),
                             blurRadius: 10,
                             offset: const Offset(0, 5),
                           ),
@@ -1256,7 +1270,7 @@ class ProfileTab extends StatelessWidget {
                                 width: 48,
                                 height: 48,
                                 decoration: BoxDecoration(
-                                  color: primary.withValues(alpha: 0.1),
+                                  color: primary.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: const Icon(Icons.coffee, color: primary),
@@ -1296,10 +1310,14 @@ class ProfileTab extends StatelessWidget {
                           const Divider(color: Colors.white12),
                           const SizedBox(height: 12),
                           ...userApplications.map((app) {
-                            final status = app.status;
-                            final dateStr = app.appliedAt != null
+                            final appData = app as Map<String, dynamic>;
+                            final status =
+                                appData['status'] as String? ?? 'pending';
+                            final appliedAt =
+                                appData['appliedAt'] as Timestamp?;
+                            final dateStr = appliedAt != null
                                 ? DateFormat('MMM dd, yyyy')
-                                    .format(app.appliedAt!)
+                                    .format(appliedAt.toDate())
                                 : 'Unknown date';
 
                             Color statusColor = Colors.orange;
@@ -1335,10 +1353,10 @@ class ProfileTab extends StatelessWidget {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 12, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: statusColor.withValues(alpha: 0.15),
+                                    color: statusColor.withOpacity(0.15),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
-                                      color: statusColor.withValues(alpha: 0.3),
+                                      color: statusColor.withOpacity(0.3),
                                     ),
                                   ),
                                   child: Row(
@@ -1423,190 +1441,170 @@ class ProfileTab extends StatelessWidget {
   }
 
   // Business Account: Show business dashboard with shop management
-  Widget _buildBusinessSection(BuildContext context, String uid) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: TextWidget(
-            text: 'My Business',
-            fontSize: 18,
-            color: Colors.white,
-            isBold: true,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('shops')
-                .where(Filter.or(
-                  Filter('posterId', isEqualTo: uid),
-                  Filter('postedBy.uid', isEqualTo: uid),
-                ))
-                .snapshots(),
-            builder: (context, shopSnapshot) {
-              return StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('shop_claims')
-                    .where('claimantId', isEqualTo: uid)
-                    .where('status', isEqualTo: 'pending')
-                    .limit(1)
-                    .snapshots(),
-                builder: (context, claimSnapshot) {
-                  final hasShop = shopSnapshot.hasData &&
-                      shopSnapshot.data!.docs.isNotEmpty;
-                  final hasPendingClaim = claimSnapshot.hasData &&
-                      claimSnapshot.data!.docs.isNotEmpty;
+  Widget _buildBusinessStatusCard(BuildContext context, String uid) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('shops')
+          .where(Filter.or(
+            Filter('posterId', isEqualTo: uid),
+            Filter('postedBy.uid', isEqualTo: uid),
+          ))
+          .snapshots(),
+      builder: (context, shopSnapshot) {
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('shop_claims')
+              .where('claimantId', isEqualTo: uid)
+              .where('status', isEqualTo: 'pending')
+              .limit(1)
+              .snapshots(),
+          builder: (context, claimSnapshot) {
+            final hasShop =
+                shopSnapshot.hasData && shopSnapshot.data!.docs.isNotEmpty;
+            final hasPendingClaim =
+                claimSnapshot.hasData && claimSnapshot.data!.docs.isNotEmpty;
 
-                  if (!hasShop && hasPendingClaim) {
-                    final claimDoc = claimSnapshot.data!.docs.first;
-                    final claimData = claimDoc.data() as Map<String, dynamic>;
-                    final claimedShopId = claimData['shopId'] as String?;
-                    final claimId = claimDoc.id;
-                    final shopName = claimData['shopName'] ?? 'Unknown Shop';
+            if (!hasShop && hasPendingClaim) {
+              final claimDoc = claimSnapshot.data!.docs.first;
+              final claimData = claimDoc.data() as Map<String, dynamic>;
+              final claimedShopId = claimData['shopId'] as String?;
+              final claimId = claimDoc.id;
+              final shopName = claimData['shopName'] ?? 'Unknown Shop';
 
-                    if (claimedShopId != null) {
-                      return StreamBuilder<DocumentSnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('shops')
-                            .doc(claimedShopId)
-                            .snapshots(),
-                        builder: (context, shopCheckSnap) {
-                          bool shopExists = true;
-                          if (shopCheckSnap.hasData &&
-                              !shopCheckSnap.data!.exists) {
-                            shopExists = false;
-                          }
-
-                          if (!shopExists) {
-                            return _buildOrphanedClaimCard(
-                                context, claimId, shopName);
-                          }
-
-                          // Default pending review state
-                          return _buildBusinessCardContent(
-                            context: context,
-                            label: 'Verification Pending',
-                            subtitle: 'Application currently under review',
-                            icon: Icons.hourglass_top,
-                            color: Colors.orange,
-                            onTap: () {
-                              _showReviewDialog(context);
-                            },
-                          );
-                        },
-                      );
+              if (claimedShopId != null) {
+                return StreamBuilder<DocumentSnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('shops')
+                      .doc(claimedShopId)
+                      .snapshots(),
+                  builder: (context, shopCheckSnap) {
+                    bool shopExists = true;
+                    if (shopCheckSnap.hasData && !shopCheckSnap.data!.exists) {
+                      shopExists = false;
                     }
-                  }
 
-                  String label;
-                  String subtitle;
-                  IconData icon;
-                  Color color;
-                  VoidCallback onTap;
-
-                  if (hasShop) {
-                    final doc = shopSnapshot.data!.docs.first;
-                    final data = doc.data() as Map<String, dynamic>;
-                    final shopId = doc.id;
-                    final shopName = data['name'] ?? '';
-                    final isVerified = data['isVerified'] ?? false;
-                    if (isVerified) {
-                      label = 'Manage My Shop';
-                      subtitle = 'View dashboard & analytics';
-                      icon = Icons.business;
-                      color = const Color(0xFF2563EB); // Blue
-                      onTap = () {
-                        Navigator.pushNamed(
-                          context,
-                          '/businessProfile',
-                          arguments: {
-                            ...data,
-                            'id': doc.id,
-                          },
-                        );
-                      };
-                    } else if (hasPendingClaim) {
-                      label = 'Verification Pending';
-                      subtitle = 'Application currently under review';
-                      icon = Icons.hourglass_top;
-                      color = Colors.orange;
-                      onTap = () {
-                        _showReviewDialog(context);
-                      };
-                    } else {
-                      // NOT VERIFIED and NO PENDING CLAIM
-                      // This happens after rejection or before starting verification.
-                      // Return to the default "Claim or Submit Shop" state.
-                      label = 'Claim or Submit Shop';
-                      subtitle = 'Get started with your business';
-                      icon = Icons.business;
-                      color = const Color(0xFF2563EB);
-                      onTap = () {
-                        Navigator.pushNamed(context, '/businessDashboard');
-                      };
+                    if (!shopExists) {
+                       return _buildOrphanedClaimCard(context, claimId, shopName);
                     }
-                  } else {
-                    // No Shop, No Pending Claim
-                    label = 'Claim or Submit Shop';
-                    subtitle = 'Get started with your business';
-                    icon = Icons.business;
-                    color = const Color(0xFF2563EB);
-                    onTap = () {
-                      Navigator.pushNamed(context, '/businessDashboard');
-                    };
-                  }
 
-                  return _buildBusinessCardContent(
-                    context: context,
-                    label: label,
-                    subtitle: subtitle,
-                    icon: icon,
-                    color: color,
-                    onTap: onTap,
+                    // Default pending review state
+                    return _buildBusinessCardContent(
+                      context: context,
+                      label: 'Verification Pending',
+                      subtitle: 'Application currently under review',
+                      icon: Icons.hourglass_top,
+                      color: Colors.orange,
+                      onTap: () {
+                          _showReviewDialog(context);
+                      },
+                    );
+                  },
+                );
+              }
+            }
+
+            String label;
+            String subtitle;
+            IconData icon;
+            Color color;
+            VoidCallback onTap;
+
+            if (hasShop) {
+              final doc = shopSnapshot.data!.docs.first;
+              final data = doc.data() as Map<String, dynamic>;
+              final shopId = doc.id;
+              final shopName = data['name'] ?? '';
+              final isVerified = data['isVerified'] ?? false;
+              if (isVerified) {
+                label = 'Manage My Shop';
+                subtitle = 'Access your business dashboard & insights';
+                icon = Icons.business;
+                color = const Color(0xFF2563EB); // Blue
+                onTap = () {
+                  Navigator.pushNamed(
+                    context,
+                    '/businessProfile',
+                    arguments: {
+                      ...data,
+                      'id': doc.id,
+                    },
                   );
-                },
-              );
-            },
-          ),
-        ),
-      ],
+                };
+              } else if (hasPendingClaim) {
+                label = 'Verification Pending';
+                subtitle = 'Application currently under review';
+                icon = Icons.hourglass_top;
+                color = Colors.orange;
+                onTap = () {
+                  _showReviewDialog(context);
+                };
+              } else {
+                // NOT VERIFIED and NO PENDING CLAIM
+                label = 'Claim or Submit Shop';
+                subtitle = 'Get started with your business';
+                icon = Icons.business;
+                color = const Color(0xFF2563EB);
+                onTap = () {
+                  Navigator.pushNamed(context, '/businessDashboard');
+                };
+              }
+            } else {
+              // No Shop, No Pending Claim
+               label = 'Claim or Submit Shop';
+               subtitle = 'Get started with your business';
+               icon = Icons.business;
+               color = const Color(0xFF2563EB);
+               onTap = () {
+                  Navigator.pushNamed(context, '/businessDashboard');
+               };
+            }
+
+            return _buildBusinessCardContent(
+              context: context,
+              label: label,
+              subtitle: subtitle,
+              icon: icon,
+              color: color,
+              onTap: onTap,
+            );
+          },
+        );
+      },
     );
   }
 
   void _showReviewDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.black,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: primary.withValues(alpha: 0.3)),
-        ),
-        title: Row(
-          children: [
-            Icon(Icons.hourglass_empty, color: primary),
-            const SizedBox(width: 12),
-            const Text('Review in Progress',
-                style: TextStyle(color: Colors.white)),
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.black,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: primary.withOpacity(0.3)),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.hourglass_empty, color: primary),
+              const SizedBox(width: 12),
+              const Text('Review in Progress',
+                  style: TextStyle(color: Colors.white)),
+            ],
+          ),
+          content: const Text(
+            'Your shop submission or ownership claim is currently being reviewed by our admin team. You will gain access to the business dashboard once approved.',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('OK',
+                  style: TextStyle(
+                      color: primary,
+                      fontWeight: FontWeight.bold)),
+            ),
           ],
         ),
-        content: const Text(
-          'Your shop submission or ownership claim is currently being reviewed by our admin team. You will gain access to the business dashboard once approved.',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('OK',
-                style: TextStyle(color: primary, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
+      );
   }
 
   Widget _buildBusinessCardContent({
@@ -1621,10 +1619,70 @@ class ProfileTab extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
+          color: Colors.white.withOpacity(0.02),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.08),
+            width: 1,
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Center(
+                child: Icon(icon, color: color, size: 24),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.3,
+                      fontFamily: 'Regular',
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  if (subtitle.isNotEmpty)
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white.withOpacity(0.6),
+                        fontFamily: 'Regular',
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios,
+                color: Colors.white.withOpacity(0.3), size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrphanedClaimCard(BuildContext context, String claimId, String shopName) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.05),
           borderRadius: BorderRadius.circular(32),
           border: Border.all(
-            color: color.withValues(alpha: 0.3),
+            color: Colors.red.withOpacity(0.3),
             width: 1.5,
           ),
         ),
@@ -1637,134 +1695,464 @@ class ProfileTab extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: color,
+                  color: Colors.red.withOpacity(0.2),
                   shape: BoxShape.circle,
                 ),
-                child: Center(
-                  child: Icon(icon, color: Colors.white, size: 28),
+                child: const Center(
+                  child: Icon(Icons.domain_disabled_rounded, color: Colors.red, size: 24),
                 ),
               ),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextWidget(
-                    text: label,
-                    fontSize: 18,
-                    color: Colors.white,
-                    isBold: true,
-                  ),
-                  if (subtitle.isNotEmpty)
-                    TextWidget(
-                      text: subtitle,
-                      fontSize: 14,
-                      color: Colors.white70,
-                    ),
+                   TextWidget(text: 'Shop Not Found', fontSize: 16, color: Colors.redAccent, isBold: true),
+                   TextWidget(text: '"$shopName" is no longer available.', fontSize: 12, color: Colors.white54),
                 ],
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.arrow_forward_ios,
-                  color: Colors.white, size: 22),
-              onPressed: onTap,
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: TextButton(
+                  onPressed: () => _deleteOrphanedClaim(context, claimId),
+                  style: TextButton.styleFrom(
+                      backgroundColor: Colors.red.withOpacity(0.1),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('DISMISS', style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 
-  Widget _buildOrphanedClaimCard(
-      BuildContext context, String claimId, String shopName) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.red.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(32),
-        border: Border.all(
-          color: Colors.red.withValues(alpha: 0.3),
-          width: 1.5,
-        ),
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 16),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Center(
-                child: Icon(Icons.domain_disabled_rounded,
-                    color: Colors.red, size: 24),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextWidget(
-                    text: 'Shop Not Found',
-                    fontSize: 16,
-                    color: Colors.redAccent,
-                    isBold: true),
-                TextWidget(
-                    text: '"$shopName" is no longer available.',
-                    fontSize: 12,
-                    color: Colors.white54),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: TextButton(
-              onPressed: () => _deleteOrphanedClaim(context, claimId),
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.red.withValues(alpha: 0.1),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('DISMISS',
-                  style: TextStyle(
-                      color: Colors.redAccent,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold)),
-            ),
-          ),
-        ],
-      ),
-    );
+  Future<void> _deleteOrphanedClaim(BuildContext context, String claimId) async {
+      try {
+          await FirebaseFirestore.instance.collection('shop_claims').doc(claimId).delete();
+          if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('Invalid claim removed'),
+                  backgroundColor: Colors.green,
+              ));
+          }
+      } catch (e) {
+          if (context.mounted) {
+             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                 content: Text('Error removing claim: $e'),
+                 backgroundColor: Colors.red,
+             ));
+          }
+      }
+  }
+}
+
+class _BusinessAnalyticsChart extends StatefulWidget {
+  final String shopId;
+  const _BusinessAnalyticsChart({Key? key, required this.shopId}) : super(key: key);
+
+  @override
+  _BusinessAnalyticsChartState createState() => _BusinessAnalyticsChartState();
+}
+
+class _BusinessAnalyticsChartState extends State<_BusinessAnalyticsChart> {
+  String _selectedMetric = 'Visits';
+  String _timeframe = 'Weekly'; // 'Weekly' or 'Monthly'
+  bool _isLoading = true;
+  
+  Map<String, List<FlSpot>> _metricData = {};
+  Map<String, double> _maxYs = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchHistoricalData();
   }
 
-  Future<void> _deleteOrphanedClaim(
-      BuildContext context, String claimId) async {
+  Future<void> _fetchHistoricalData() async {
+    setState(() => _isLoading = true);
+    
     try {
-      await FirebaseFirestore.instance
-          .collection('shop_claims')
-          .doc(claimId)
-          .delete();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Invalid claim removed'),
-          backgroundColor: Colors.green,
-        ));
+      final int daysToFetch = _timeframe == 'Weekly' ? 7 : 30;
+      final now = DateTime.now();
+      DateTime stripTime(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
+      final today = stripTime(now);
+      
+      final startDate = today.subtract(Duration(days: daysToFetch - 1));
+      
+      final db = FirebaseFirestore.instance;
+      
+      // 1. Fetch Visits
+      final visitQuery = await db
+          .collection('shops')
+          .doc(widget.shopId)
+          .collection('visits')
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+          .get();
+          
+      // 2. Fetch Reviews (Total Ratings and average Rating)
+      final reviewQuery = await db
+          .collection('shops')
+          .doc(widget.shopId)
+          .collection('reviews')
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+          .get();
+          
+      // 3. Fetch Total Saves (Bookmarks) - No historical timestamps, so flat line
+      final saveQuery = await db
+          .collection('users')
+          .where('bookmarks', arrayContains: widget.shopId)
+          .get();
+          
+      final totalSaves = saveQuery.docs.length;
+      
+      List<int> visitCounts = List.filled(daysToFetch, 0);
+      List<int> reviewCounts = List.filled(daysToFetch, 0);
+      List<double> ratingSums = List.filled(daysToFetch, 0.0);
+      
+      for (var doc in visitQuery.docs) {
+        final data = doc.data();
+        if (data['createdAt'] is Timestamp) {
+           final date = (data['createdAt'] as Timestamp).toDate();
+           final diff = today.difference(stripTime(date)).inDays;
+           if (diff >= 0 && diff < daysToFetch) {
+             final index = (daysToFetch - 1) - diff;
+             visitCounts[index]++;
+           }
+        }
+      }
+      
+      for (var doc in reviewQuery.docs) {
+        final data = doc.data();
+        if (data['createdAt'] is Timestamp) {
+           final date = (data['createdAt'] as Timestamp).toDate();
+           final diff = today.difference(stripTime(date)).inDays;
+           if (diff >= 0 && diff < daysToFetch) {
+             final index = (daysToFetch - 1) - diff;
+             reviewCounts[index]++;
+             final rating = data['rating'];
+             if (rating is num) {
+                ratingSums[index] += rating.toDouble();
+             }
+           }
+        }
+      }
+      
+      List<FlSpot> visitSpots = [];
+      List<FlSpot> saveSpots = [];
+      List<FlSpot> ratingSpots = [];
+      List<FlSpot> totalRatingSpots = [];
+      
+      double maxVisits = 0;
+      double maxTotalRatings = 0;
+      
+      for (int i = 0; i < daysToFetch; i++) {
+         visitSpots.add(FlSpot(i.toDouble(), visitCounts[i].toDouble()));
+         if (visitCounts[i] > maxVisits) maxVisits = visitCounts[i].toDouble();
+         
+         saveSpots.add(FlSpot(i.toDouble(), totalSaves.toDouble()));
+         
+         double avgRating = reviewCounts[i] > 0 ? (ratingSums[i] / reviewCounts[i]) : 0.0;
+         ratingSpots.add(FlSpot(i.toDouble(), avgRating));
+         
+         totalRatingSpots.add(FlSpot(i.toDouble(), reviewCounts[i].toDouble()));
+         if (reviewCounts[i] > maxTotalRatings) maxTotalRatings = reviewCounts[i].toDouble();
+      }
+      
+      if (mounted) {
+        setState(() {
+          _metricData = {
+            'Visits': visitSpots,
+            'Saves': saveSpots,
+            'Rating': ratingSpots,
+            'Total Ratings': totalRatingSpots,
+          };
+          _maxYs = {
+            'Visits': (maxVisits < 10 ? 10.0 : maxVisits + 5),
+            'Saves': (totalSaves < 10 ? 10.0 : totalSaves + 5),
+            'Rating': 5.0,
+            'Total Ratings': (maxTotalRatings < 5 ? 5.0 : maxTotalRatings + 2),
+          };
+          _isLoading = false;
+        });
       }
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error removing claim: $e'),
-          backgroundColor: Colors.red,
-        ));
+      debugPrint('Error fetching historical analytics data: $e');
+      if (mounted) {
+        setState(() {
+           _isLoading = false;
+        });
       }
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final metricColors = {
+      'Visits': Colors.green,
+      'Saves': primary,
+      'Rating': Colors.amber,
+      'Total Ratings': Colors.blue,
+    };
+    final activeColor = metricColors[_selectedMetric] ?? primary;
+    final int daysToFetch = _timeframe == 'Weekly' ? 7 : 30;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Timeframe Segmented Control
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.03),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
+          ),
+          padding: const EdgeInsets.all(4),
+          child: Row(
+            children: ['Weekly', 'Monthly'].map((timeframe) {
+              final isSelected = _timeframe == timeframe;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    if (!isSelected) {
+                      setState(() {
+                        _timeframe = timeframe;
+                      });
+                      _fetchHistoricalData();
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.white.withOpacity(0.1) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              )
+                            ]
+                          : [],
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      timeframe == 'Weekly' ? 'Last 7 Days' : 'Last 30 Days',
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : Colors.white54,
+                        fontSize: 13,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 20),
+        
+        // Metric Toggles
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: ['Visits', 'Saves', 'Rating', 'Total Ratings'].map((metric) {
+              final isSelected = _selectedMetric == metric;
+              final chipColor = metricColors[metric] ?? primary;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: ChoiceChip(
+                  showCheckmark: false,
+                  label: Text(metric),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    if (selected) setState(() => _selectedMetric = metric);
+                  },
+                  backgroundColor: Colors.white.withOpacity(0.02),
+                  selectedColor: chipColor.withOpacity(0.15),
+                  labelStyle: TextStyle(
+                    color: isSelected ? chipColor : Colors.white.withOpacity(0.6),
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    fontSize: 13,
+                  ),
+                  side: BorderSide(
+                    color: isSelected ? chipColor.withOpacity(0.5) : Colors.white.withOpacity(0.05),
+                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 24),
+        
+        // Chart Area
+        if (_isLoading)
+          Container(
+            height: 200,
+            alignment: Alignment.center,
+            child: const CircularProgressIndicator(color: primary),
+          )
+        else
+          Container(
+            height: 200,
+            width: double.infinity,
+            padding: const EdgeInsets.only(right: 16, left: 0),
+            child: LineChart(
+              LineChartData(
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipColor: (touchedSpot) => Colors.black87,
+                    fitInsideHorizontally: true,
+                    fitInsideVertically: true,
+                    getTooltipItems: (touchedSpots) {
+                      return touchedSpots.map((LineBarSpot touchedSpot) {
+                        final now = DateTime.now();
+                        final todayIndex = daysToFetch - 1;
+                        final dayDiff = todayIndex - touchedSpot.x.toInt();
+                        final spotDate = now.subtract(Duration(days: dayDiff));
+                        
+                        String dateLabel;
+                        if (_timeframe == 'Weekly') {
+                          final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                          dateLabel = days[spotDate.weekday - 1];
+                        } else {
+                          dateLabel = DateFormat('MMM d').format(spotDate);
+                        }
+                        
+                        final value = touchedSpot.y;
+                        return LineTooltipItem(
+                          '$dateLabel\n',
+                          const TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                          children: [
+                            TextSpan(
+                              text: _selectedMetric == 'Rating' ? value.toStringAsFixed(1) : value.toInt().toString(),
+                              style: TextStyle(
+                                color: activeColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList();
+                    },
+                  ),
+                ),
+                clipData: const FlClipData.none(),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: true,
+                  getDrawingHorizontalLine: (value) {
+                    return FlLine(
+                      color: activeColor.withOpacity(0.1),
+                      strokeWidth: 1,
+                      dashArray: [4, 4], // Tech-style grid
+                    );
+                  },
+                  getDrawingVerticalLine: (value) {
+                    return FlLine(
+                      color: activeColor.withOpacity(0.1),
+                      strokeWidth: 1,
+                      dashArray: [4, 4],
+                    );
+                  },
+                ),
+                titlesData: FlTitlesData(
+                  show: true,
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 30,
+                      interval: _timeframe == 'Weekly' ? 1 : 6,
+                      getTitlesWidget: (value, meta) {
+                        final int index = value.toInt();
+                        if (index < 0 || index >= daysToFetch) return const SizedBox.shrink();
+                        
+                        final now = DateTime.now();
+                        final todayIndex = daysToFetch - 1;
+                        final dayDiff = todayIndex - index;
+                        final spotDate = now.subtract(Duration(days: dayDiff));
+                        
+                        String dateLabel;
+                        if (_timeframe == 'Weekly') {
+                          final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                          dateLabel = days[spotDate.weekday - 1];
+                        } else {
+                          dateLabel = DateFormat('MM/dd').format(spotDate);
+                        }
+                        
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(
+                            dateLabel,
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                minX: 0,
+                maxX: (daysToFetch - 1).toDouble(),
+                minY: 0,
+                maxY: _maxYs[_selectedMetric] ?? 10.0,
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: _metricData[_selectedMetric] ?? [],
+                    isCurved: true, // Smooth curves
+                    color: activeColor, // Dynamic color based on selection
+                    barWidth: 3, 
+                    isStrokeCapRound: true,
+                    shadow: Shadow(
+                      color: activeColor,
+                      blurRadius: 15,
+                    ),
+                    dotData: FlDotData(
+                      show: _timeframe == 'Weekly', // Only show dots on weekly to avoid 30-day clutter
+                      getDotPainter: (spot, percent, barData, index) {
+                        return FlDotSquarePainter(
+                          size: 6,
+                          color: activeColor,
+                          strokeWidth: 0,
+                        );
+                      },
+                    ),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          activeColor.withOpacity(0.4),
+                          activeColor.withOpacity(0.0),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }

@@ -235,6 +235,24 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "promotions",
+      "fieldPath": "endDate",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "events",
       "fieldPath": "startDate",
       "indexes": [

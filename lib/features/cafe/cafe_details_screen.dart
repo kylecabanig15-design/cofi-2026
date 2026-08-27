@@ -1692,6 +1692,25 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
             fontSize: 13,
             color: Colors.white70,
           ),
+          if ((response['imageUrl'] as String?)?.isNotEmpty == true) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: CachedNetworkImage(
+                imageUrl: response['imageUrl'] as String,
+                width: double.infinity,
+                height: 140,
+                fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => const SizedBox(
+                  height: 80,
+                  child: Center(
+                    child: Icon(Icons.broken_image_outlined,
+                        color: Colors.white38),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1955,10 +1974,12 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
                   ? (snapshot.data!.data()
                       as Map<String, dynamic>)['accountType']
                   : 'user';
-              if (accountType == 'business') return const SizedBox.shrink();
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
+              final isBusiness = accountType == 'business';
+              return IgnorePointer(
+                ignoring: isBusiness,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
                   ElevatedButton(
                     key: _logVisitKey,
                     onPressed: () {
@@ -2033,7 +2054,7 @@ class _CafeDetailsScreenState extends State<CafeDetailsScreen> {
                     ),
                   ),
                 ],
-              );
+              ));
             },
           ),
         ],

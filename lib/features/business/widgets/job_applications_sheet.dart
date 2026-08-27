@@ -8,82 +8,30 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:cofi/features/jobs/job_chat_screen.dart';
 import 'package:cofi/widgets/custom_toast.dart';
 import 'dart:ui';
+import 'package:cofi/features/business/widgets/business_workspace_ui.dart';
 
 class JobApplicationsBottomSheet extends StatefulWidget {
   final String shopId;
   const JobApplicationsBottomSheet({super.key, required this.shopId});
 
   @override
-  State<JobApplicationsBottomSheet> createState() => _JobApplicationsBottomSheetState();
+  State<JobApplicationsBottomSheet> createState() =>
+      _JobApplicationsBottomSheetState();
 }
 
-class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet> {
+class _JobApplicationsBottomSheetState
+    extends State<JobApplicationsBottomSheet> {
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.9,
-      decoration: BoxDecoration(
-        color: const Color(0xFF121212),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(30),
-          topRight: Radius.circular(30),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: primary.withValues(alpha: 0.15),
-            blurRadius: 20,
-            spreadRadius: 2,
-            offset: const Offset(0, -5),
-          ),
-        ],
-      ),
+    return BusinessSheetShell(
+      accentColor: Colors.indigoAccent,
       child: Column(
         children: [
-          // Handle bar
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 50,
-            height: 5,
-            decoration: BoxDecoration(
-              color: Colors.grey[700],
-              borderRadius: BorderRadius.circular(10),
-            ),
+          const BusinessSheetHeader(
+            title: 'Candidate inbox',
+            subtitle: 'Review applicants and continue the conversation',
+            icon: Icons.people_alt_outlined,
           ),
-
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: primary.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.work_history_rounded, color: primary, size: 24),
-                    ),
-                    const SizedBox(width: 12),
-                    TextWidget(
-                      text: 'Applications',
-                      fontSize: 24,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                  ],
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                ),
-              ],
-            ),
-          ),
-          
-          const Divider(color: Colors.white12, height: 1),
 
           // Applications list
           Expanded(
@@ -127,41 +75,86 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
                   return _buildEmptyState();
                 }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.all(24),
-                  itemCount: snapshot.data!.docs.length,
-                  itemBuilder: (context, index) {
-                    final jobDoc = snapshot.data!.docs[index];
-                    final jobData = jobDoc.data() as Map<String, dynamic>;
-                    final applications = jobData['applications'] as List? ?? [];
+                final allApplications = snapshot.data!.docs
+                    .expand((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      return data['applications'] as List? ?? const [];
+                    })
+                    .whereType<Map>()
+                    .map((item) => item.cast<String, dynamic>())
+                    .toList(growable: false);
+                final pending = allApplications
+                    .where((item) => (item['status'] ?? 'pending') == 'pending')
+                    .length;
+                final accepted = allApplications
+                    .where((item) =>
+                        item['status'] == 'accepted' ||
+                        item['status'] == 'approved')
+                    .length;
 
-                    if (applications.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  child: Column(
+                    children: [
+                      BusinessMetricsStrip(
+                        items: [
+                          BusinessMetricData(
+                              '${allApplications.length}', 'Candidates'),
+                          BusinessMetricData('$pending', 'To review'),
+                          BusinessMetricData('$accepted', 'Accepted'),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: ListView.builder(
+                          padding: const EdgeInsets.only(bottom: 24),
+                          itemCount: snapshot.data!.docs.length,
+                          itemBuilder: (context, index) {
+                            final jobDoc = snapshot.data!.docs[index];
+                            final jobData =
+                                jobDoc.data() as Map<String, dynamic>;
+                            final applications =
+                                jobData['applications'] as List? ?? [];
 
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Job title Badge
-                        Container(
-                          margin: EdgeInsets.only(bottom: 16, top: index == 0 ? 0 : 24),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.white12),
-                          ),
-                          child: TextWidget(
-                            text: jobData['title'] ?? 'Job Position',
-                            fontSize: 14,
-                            color: Colors.white70,
-                            isBold: true,
-                          ),
+                            if (applications.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Job title Badge
+                                Container(
+                                  margin: EdgeInsets.only(
+                                      bottom: 16, top: index == 0 ? 0 : 24),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.05),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: Colors.white12),
+                                  ),
+                                  child: TextWidget(
+                                    text: jobData['title'] ?? 'Job Position',
+                                    fontSize: 14,
+                                    color: Colors.white70,
+                                    isBold: true,
+                                  ),
+                                ),
+                                ...applications.map((application) {
+                                  return _buildApplicationCard(
+                                      application as Map<String, dynamic>,
+                                      jobDoc.id,
+                                      jobData['title'] ?? '',
+                                      applications);
+                                }),
+                              ],
+                            );
+                          },
                         ),
-                        ...applications.map((application) {
-                          return _buildApplicationCard(application as Map<String, dynamic>, jobDoc.id, jobData['title'] ?? '', applications);
-                        }),
-                      ],
-                    );
-                  },
+                      ),
+                    ],
+                  ),
                 );
               },
             ),
@@ -172,38 +165,16 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.inbox_rounded, size: 64, color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 24),
-          TextWidget(
-            text: 'No Applications Yet',
-            fontSize: 20,
-            color: Colors.white,
-            isBold: true,
-          ),
-          const SizedBox(height: 12),
-          TextWidget(
-            text: 'When candidates apply to your jobs,\nthey will appear here.',
-            fontSize: 14,
-            color: Colors.grey[500],
-            align: TextAlign.center,
-          ),
-        ],
-      ),
+    return const BusinessEmptyState(
+      icon: Icons.inbox_outlined,
+      title: 'Your candidate inbox is quiet',
+      message:
+          'Applications will arrive here, grouped by the role they applied for.',
     );
   }
 
-  Widget _buildApplicationCard(Map<String, dynamic> application, String jobId, String jobTitle, List<dynamic> allApplications) {
+  Widget _buildApplicationCard(Map<String, dynamic> application, String jobId,
+      String jobTitle, List<dynamic> allApplications) {
     final appliedAt = application['appliedAt'] as Timestamp?;
     final date = appliedAt != null
         ? DateFormat('MMM dd, yyyy').format(appliedAt.toDate())
@@ -213,9 +184,9 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
+        color: BusinessWorkspaceColors.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: BusinessWorkspaceColors.line),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.2),
@@ -243,7 +214,8 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           TextWidget(
-                            text: application['applicantName'] ?? 'Unknown Applicant',
+                            text: application['applicantName'] ??
+                                'Unknown Applicant',
                             fontSize: 18,
                             color: Colors.white,
                             isBold: true,
@@ -272,15 +244,18 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
                   ),
                   child: Column(
                     children: [
-                      _buildContactRow(Icons.email_outlined, application['applicantEmail'] ?? 'No email'),
+                      _buildContactRow(Icons.email_outlined,
+                          application['applicantEmail'] ?? 'No email'),
                       const SizedBox(height: 8),
-                      _buildContactRow(Icons.phone_outlined, application['applicantPhone'] ?? 'No phone'),
+                      _buildContactRow(Icons.phone_outlined,
+                          application['applicantPhone'] ?? 'No phone'),
                     ],
                   ),
                 ),
 
                 // Cover Letter Preview
-                if (application['coverLetter'] != null && application['coverLetter'].toString().isNotEmpty) ...[
+                if (application['coverLetter'] != null &&
+                    application['coverLetter'].toString().isNotEmpty) ...[
                   const SizedBox(height: 16),
                   TextWidget(
                     text: 'Cover Letter',
@@ -316,7 +291,7 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
                     ),
                   ],
                 ),
-                
+
                 if (status == 'pending') ...[
                   const SizedBox(height: 8),
                   Row(
@@ -326,7 +301,11 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
                           icon: Icons.check_circle_outline,
                           label: 'Accept',
                           color: const Color(0xFF2E7D32),
-                          onTap: () => _updateApplicationStatus(jobId, application['applicantId'], 'accepted', allApplications),
+                          onTap: () => _updateApplicationStatus(
+                              jobId,
+                              application['applicantId'],
+                              'accepted',
+                              allApplications),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -335,7 +314,11 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
                           icon: Icons.cancel_outlined,
                           label: 'Reject',
                           color: const Color(0xFFC62828),
-                          onTap: () => _updateApplicationStatus(jobId, application['applicantId'], 'rejected', allApplications),
+                          onTap: () => _updateApplicationStatus(
+                              jobId,
+                              application['applicantId'],
+                              'rejected',
+                              allApplications),
                         ),
                       ),
                     ],
@@ -404,40 +387,30 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
     );
   }
 
-  Widget _buildActionButton({required IconData icon, required String label, required Color color, required VoidCallback onTap}) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 16, color: Colors.white),
-              const SizedBox(width: 6),
-              TextWidget(
-                text: label,
-                fontSize: 13,
-                color: Colors.white,
-                isBold: true,
-              ),
-            ],
-          ),
-        ),
+  Widget _buildActionButton(
+      {required IconData icon,
+      required String label,
+      required Color color,
+      required VoidCallback onTap}) {
+    final foreground = color == Colors.grey[800] ? Colors.white70 : color;
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: foreground,
+        backgroundColor: foreground.withValues(alpha: .08),
+        side: BorderSide(color: foreground.withValues(alpha: .25)),
+        minimumSize: const Size(40, 46),
       ),
+      icon: Icon(icon, size: 16),
+      label: Text(label),
     );
   }
-  
-  Widget _buildChatButton(Map<String, dynamic> application, String jobId, String jobTitle) {
+
+  Widget _buildChatButton(
+      Map<String, dynamic> application, String jobId, String jobTitle) {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return const SizedBox.shrink();
-    
+
     // Create chatId exactly like JobChatScreen
     final List<String> userIds = [currentUser.uid, application['applicantId']];
     userIds.sort();
@@ -453,60 +426,19 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
           .snapshots(),
       builder: (context, snapshot) {
         int unreadCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
-        
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => _openChat(application, jobId, jobTitle),
-            borderRadius: BorderRadius.circular(12),
-            child: Ink(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [primary, Color(0xFF6B9F71)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.chat_bubble_outline, size: 16, color: Colors.white),
-                  const SizedBox(width: 6),
-                  TextWidget(
-                    text: 'Message',
-                    fontSize: 13,
-                    color: Colors.white,
-                    isBold: true,
-                  ),
-                  if (unreadCount > 0) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: Colors.redAccent,
-                        shape: BoxShape.circle,
-                      ),
-                      child: TextWidget(
-                        text: unreadCount.toString(),
-                        fontSize: 10,
-                        color: Colors.white,
-                        isBold: true,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
+
+        return FilledButton.icon(
+          onPressed: () => _openChat(application, jobId, jobTitle),
+          style: FilledButton.styleFrom(minimumSize: const Size(40, 46)),
+          icon: const Icon(Icons.chat_bubble_outline, size: 16),
+          label: Text(unreadCount > 0 ? 'Message · $unreadCount' : 'Message'),
         );
       },
     );
   }
 
-  Future<void> _updateApplicationStatus(
-      String jobId, String applicantId, String newStatus, List<dynamic> currentApplications) async {
+  Future<void> _updateApplicationStatus(String jobId, String applicantId,
+      String newStatus, List<dynamic> currentApplications) async {
     try {
       final updatedApplications = currentApplications.map((app) {
         if (app['applicantId'] == applicantId) {
@@ -526,28 +458,59 @@ class _JobApplicationsBottomSheetState extends State<JobApplicationsBottomSheet>
           .update({'applications': updatedApplications});
 
       if (mounted) {
-        CustomToast.showSuccess(context, 'Application $newStatus successfully');
+        CustomToast.showSuccess(
+          context,
+          'The candidate will see the updated application status.',
+          title: 'Application ${newStatus.toLowerCase()}',
+        );
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        CustomToast.showError(context, 'Failed to update status: $e');
+        CustomToast.showError(
+          context,
+          'We could not update the application. Please try again.',
+          title: 'Status not updated',
+        );
       }
     }
   }
 
   Future<void> _viewResume(String? resumeUrl) async {
+    final messenger = ScaffoldMessenger.of(context);
     Navigator.pop(context);
-    if (resumeUrl != null && resumeUrl.isNotEmpty) {
+    if (resumeUrl == null || resumeUrl.isEmpty) {
+      CustomToast.showFromMessenger(
+        messenger,
+        'This candidate did not provide an accessible résumé link.',
+        type: ToastType.warning,
+        title: 'Résumé unavailable',
+      );
+      return;
+    }
+    try {
       final uri = Uri.parse(resumeUrl);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
-        CustomToast.showError(context, 'Could not open resume');
+        CustomToast.showFromMessenger(
+          messenger,
+          'The résumé link could not be opened on this device.',
+          type: ToastType.error,
+          title: 'Résumé unavailable',
+        );
       }
+    } catch (_) {
+      CustomToast.showFromMessenger(
+        messenger,
+        'The résumé link could not be opened on this device.',
+        type: ToastType.error,
+        title: 'Résumé unavailable',
+      );
     }
   }
 
-  Future<void> _openChat(Map<String, dynamic> application, String jobId, String jobTitle) async {
+  Future<void> _openChat(
+      Map<String, dynamic> application, String jobId, String jobTitle) async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 

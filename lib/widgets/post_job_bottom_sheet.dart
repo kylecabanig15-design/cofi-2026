@@ -1,9 +1,11 @@
 import 'package:intl/intl.dart';
-import 'package:cofi/utils/colors.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cofi/widgets/text_widget.dart';
+import 'package:cofi/features/business/widgets/business_workspace_ui.dart';
+import 'package:cofi/utils/formatters.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class PostJobBottomSheet extends StatefulWidget {
   const PostJobBottomSheet({
@@ -25,7 +27,10 @@ class PostJobBottomSheet extends StatefulWidget {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (context) => PostJobBottomSheet(shopId: shopId),
+      builder: (context) => BusinessWorkspaceTheme(
+        accentColor: Colors.redAccent,
+        child: PostJobBottomSheet(shopId: shopId),
+      ),
     );
   }
 
@@ -73,7 +78,7 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
     // Populate fields if editing
     if (widget.isEditing && widget.jobData != null) {
       _jobNameController.text = widget.jobData!['title'] ?? '';
-      _rateController.text = widget.jobData!['rate'] ?? '';
+      _rateController.text = formatNumberWithCommas(widget.jobData!['rate']);
       // Prefer the canonical "qualifications" field, but fall back to the old key
       _requiredController.text = widget.jobData!['qualifications'] ??
           widget.jobData!['requiredSkills'] ??
@@ -113,15 +118,17 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
   Future<void> _saveJob() async {
     final title = _jobNameController.text.trim();
     final type = _selectedJobType;
-    final rate = _rateController.text.trim();
+    final rate = _rateController.text.replaceAll(',', '').trim();
     final requiredSkills = _requiredController.text.trim();
     final description = _descriptionController.text.trim();
     final email = _emailController.text.trim();
     final link = _linkController.text.trim();
 
     if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter the Job name.')),
+      CustomToast.showWarning(
+        context,
+        'Add a clear job title before saving.',
+        title: 'Job title required',
       );
       return;
     }
@@ -172,9 +179,10 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
         if (jobId == null || jobId.isEmpty) {
           // If we somehow don't have a jobId, fail fast with a clear message
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text('Unable to update job: missing job ID.')),
+            CustomToast.showError(
+              context,
+              'Close this form and open the job again before retrying.',
+              title: 'Job could not be identified',
             );
           }
           return;
@@ -193,32 +201,42 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
             .update(updateData);
 
         if (mounted) {
-          Navigator.pop(context, updateData); // Close modal and return updated data
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Job updated successfully.')),
+          final messenger = ScaffoldMessenger.of(context);
+          Navigator.pop(context, updateData);
+          CustomToast.showFromMessenger(
+            messenger,
+            'Applicants will now see the latest job details.',
+            type: ToastType.success,
+            title: 'Job updated',
           );
         }
       } else {
         // Create new job
         data['createdAt'] = FieldValue.serverTimestamp();
 
-        final jobRef = await FirebaseFirestore.instance
+        await FirebaseFirestore.instance
             .collection('shops')
             .doc(widget.shopId)
             .collection('jobs')
             .add(data);
 
         if (mounted) {
+          final messenger = ScaffoldMessenger.of(context);
           Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Job posted.')),
+          CustomToast.showFromMessenger(
+            messenger,
+            'The opening is now visible in Work in Coffee.',
+            type: ToastType.success,
+            title: 'Job published',
           );
         }
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save job: $e')),
+        CustomToast.showError(
+          context,
+          'We could not save the job. Check your connection and try again.',
+          title: 'Job not saved',
         );
       }
     } finally {
@@ -243,9 +261,9 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
       onTap: () => FocusScope.of(context).unfocus(),
       child: Container(
         height: MediaQuery.of(context).size.height * 0.95,
-        decoration: BoxDecoration(
-          color: Colors.grey[900],
-          borderRadius: const BorderRadius.only(
+        decoration: const BoxDecoration(
+          color: BusinessWorkspaceColors.canvas,
+          borderRadius: BorderRadius.only(
             topLeft: Radius.circular(25),
             topRight: Radius.circular(25),
           ),
@@ -253,28 +271,10 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
         child: SafeArea(
           child: Column(
             children: [
-              // Header
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: const Icon(
-                        Icons.close,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    TextWidget(
-                      text: widget.isEditing ? 'Edit Job' : 'Post a job',
-                      fontSize: 18,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                  ],
-                ),
+              BusinessSheetHeader(
+                title: widget.isEditing ? 'Refine this role' : 'Open a role',
+                subtitle: 'Set clear expectations for your future teammate',
+                icon: Icons.person_search_outlined,
               ),
 
               // Form Content
@@ -290,6 +290,12 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        const BusinessSectionLabel(
+                          step: '01',
+                          title: 'Role basics',
+                          description:
+                              'Name the role and make compensation easy to understand.',
+                        ),
                         // Job name
                         _buildField('Job name', _jobNameController),
 
@@ -318,7 +324,14 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
                         // End Date
                         _buildEndDatePicker(),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 28),
+
+                        const BusinessSectionLabel(
+                          step: '02',
+                          title: 'Who will succeed here',
+                          description:
+                              'Describe the work and the qualifications that matter.',
+                        ),
 
                         // Qualifications
                         _buildField('Qualifications', _requiredController,
@@ -330,7 +343,14 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
                         _buildField('Description', _descriptionController,
                             isMultiline: true),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 28),
+
+                        const BusinessSectionLabel(
+                          step: '03',
+                          title: 'Application route',
+                          description:
+                              'Tell candidates where they can follow up.',
+                        ),
 
                         // Email
                         _buildField('Email', _emailController),
@@ -346,14 +366,8 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
                         SizedBox(
                           width: double.infinity,
                           height: 50,
-                          child: ElevatedButton(
+                          child: FilledButton(
                             onPressed: _saving ? null : _saveJob,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: primary, // Red color
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(100),
-                              ),
-                            ),
                             child: _saving
                                 ? const SizedBox(
                                     width: 22,
@@ -388,85 +402,28 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
 
   Widget _buildField(String label, TextEditingController controller,
       {bool isMultiline = false}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextWidget(
-          text: label,
-          fontSize: 16,
-          color: Colors.white,
-          isBold: true,
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.grey[800],
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: TextField(
-            controller: controller,
-            minLines: isMultiline ? 4 : 1,
-            maxLines: isMultiline ? null : 1,
-            keyboardType: isMultiline ? TextInputType.multiline : TextInputType.text,
-            style: const TextStyle(
-              color: Colors.grey,
-              fontSize: 14,
-            ),
-            decoration: InputDecoration(
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.all(isMultiline ? 16 : 12),
-              hintStyle: const TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-              ),
-            ),
-          ),
-        ),
-      ],
+    return TextField(
+      controller: controller,
+      minLines: isMultiline ? 4 : 1,
+      maxLines: isMultiline ? null : 1,
+      keyboardType: isMultiline ? TextInputType.multiline : TextInputType.text,
+      style: const TextStyle(color: Colors.white, fontSize: 14),
+      decoration: InputDecoration(labelText: label),
     );
   }
 
   Widget _buildRateField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextWidget(
-          text: 'Rate',
-          fontSize: 16,
-          color: Colors.white,
-          isBold: true,
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.grey[800],
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: TextField(
-            controller: _rateController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            maxLines: 1,
-            style: const TextStyle(
-              color: Colors.grey,
-              fontSize: 14,
-            ),
-            decoration: InputDecoration(
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.all(12),
-              hintText: 'Enter amount (e.g., 500)',
-              hintStyle: const TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-              ),
-              prefixText: '₱ ',
-              prefixStyle: const TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-              ),
-            ),
-          ),
-        ),
-      ],
+    return TextField(
+      controller: _rateController,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: const [ThousandsSeparatorInputFormatter()],
+      maxLines: 1,
+      style: const TextStyle(color: Colors.white, fontSize: 14),
+      decoration: const InputDecoration(
+        labelText: 'Rate',
+        hintText: '500',
+        prefixText: '₱ ',
+      ),
     );
   }
 
@@ -497,10 +454,11 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
           },
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.grey[800],
-              borderRadius: BorderRadius.circular(8),
+              color: BusinessWorkspaceColors.surface,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: BusinessWorkspaceColors.line),
             ),
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -551,10 +509,11 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
           },
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.grey[800],
-              borderRadius: BorderRadius.circular(8),
+              color: BusinessWorkspaceColors.surface,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: BusinessWorkspaceColors.line),
             ),
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -579,110 +538,32 @@ class _PostJobBottomSheetState extends State<PostJobBottomSheet> {
   }
 
   Widget _buildJobTypeDropdown() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextWidget(
-          text: 'Job Type',
-          fontSize: 16,
-          color: Colors.white,
-          isBold: true,
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.grey[800],
-            borderRadius: BorderRadius.circular(8),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _selectedJobType,
-              isExpanded: true,
-              dropdownColor: Colors.grey[800],
-              icon: const Icon(
-                Icons.arrow_drop_down,
-                color: Colors.grey,
-              ),
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-              ),
-              items: _jobTypes.map((String type) {
-                return DropdownMenuItem<String>(
-                  value: type,
-                  child: Text(
-                    type,
-                    style: const TextStyle(
-                      color: Colors.grey,
-                      fontSize: 14,
-                    ),
-                  ),
-                );
-              }).toList(),
-              onChanged: (String? newValue) {
-                setState(() {
-                  _selectedJobType = newValue!;
-                });
-              },
-            ),
-          ),
-        ),
-      ],
+    return DropdownButtonFormField<String>(
+      initialValue: _selectedJobType,
+      dropdownColor: BusinessWorkspaceColors.surfaceRaised,
+      style: const TextStyle(color: Colors.white, fontSize: 14),
+      decoration: const InputDecoration(labelText: 'Job type'),
+      items: _jobTypes
+          .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+          .toList(),
+      onChanged: (newValue) {
+        if (newValue != null) setState(() => _selectedJobType = newValue);
+      },
     );
   }
 
   Widget _buildPaymentTypeDropdown() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextWidget(
-          text: 'Payment Type',
-          fontSize: 16,
-          color: Colors.white,
-          isBold: true,
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.grey[800],
-            borderRadius: BorderRadius.circular(8),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _selectedPaymentType,
-              isExpanded: true,
-              dropdownColor: Colors.grey[800],
-              icon: const Icon(
-                Icons.arrow_drop_down,
-                color: Colors.grey,
-              ),
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 14,
-              ),
-              items: _paymentTypes.map((String type) {
-                return DropdownMenuItem<String>(
-                  value: type,
-                  child: Text(
-                    type,
-                    style: const TextStyle(
-                      color: Colors.grey,
-                      fontSize: 14,
-                    ),
-                  ),
-                );
-              }).toList(),
-              onChanged: (String? newValue) {
-                setState(() {
-                  _selectedPaymentType = newValue!;
-                });
-              },
-            ),
-          ),
-        ),
-      ],
+    return DropdownButtonFormField<String>(
+      initialValue: _selectedPaymentType,
+      dropdownColor: BusinessWorkspaceColors.surfaceRaised,
+      style: const TextStyle(color: Colors.white, fontSize: 14),
+      decoration: const InputDecoration(labelText: 'Payment type'),
+      items: _paymentTypes
+          .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+          .toList(),
+      onChanged: (newValue) {
+        if (newValue != null) setState(() => _selectedPaymentType = newValue);
+      },
     );
   }
 }

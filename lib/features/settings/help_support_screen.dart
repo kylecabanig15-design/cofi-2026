@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/text_widget.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class HelpSupportScreen extends StatelessWidget {
   const HelpSupportScreen({super.key});
@@ -22,22 +23,19 @@ class HelpSupportScreen extends StatelessWidget {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  'Could not open email client. Please ensure you have a mail app installed.'),
-              backgroundColor: Colors.redAccent,
-            ),
+          CustomToast.showWarning(
+            context,
+            'Install or configure a mail app, then try again.',
+            title: 'No email app available',
           );
         }
       }
-    } catch (e) {
+    } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error opening email: $e'),
-            backgroundColor: Colors.redAccent,
-          ),
+        CustomToast.showError(
+          context,
+          'We could not open your email app. Please try again.',
+          title: 'Email could not open',
         );
       }
     }
@@ -132,7 +130,8 @@ Date: ${DateTime.now().toString().split('.')[0]}
               maxLines: 4,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: 'Describe the issue (include café name if applicable)...',
+                hintText:
+                    'Describe the issue (include café name if applicable)...',
                 hintStyle: const TextStyle(color: Colors.white38),
                 filled: true,
                 fillColor: Colors.grey[850],
@@ -566,8 +565,7 @@ Date: ${DateTime.now().toString().split('.')[0]}
       ),
       child: ExpansionTile(
         tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        childrenPadding:
-            const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+        childrenPadding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
         iconColor: Colors.white54,
         collapsedIconColor: Colors.white54,
         title: Text(

@@ -11,6 +11,8 @@ import 'package:cofi/widgets/text_widget.dart';
 import 'package:cofi/widgets/post_event_bottom_sheet.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/features/events/event_comments_screen.dart';
+import 'package:cofi/widgets/custom_dialog.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class EventDetailsScreen extends StatefulWidget {
   final Map<String, dynamic>? event;
@@ -111,7 +113,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                 children: List.generate(
                                   imageUrls.length,
                                   (index) => Container(
-                                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                                    margin: const EdgeInsets.symmetric(
+                                        horizontal: 3),
                                     width: _currentImageIndex == index ? 8 : 6,
                                     height: _currentImageIndex == index ? 8 : 6,
                                     decoration: BoxDecoration(
@@ -221,14 +224,19 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                     .doc(e['shopId'] as String?)
                                     .snapshots(),
                                 builder: (context, snapshot) {
-                                  if (!snapshot.hasData || !snapshot.data!.exists) {
+                                  if (!snapshot.hasData ||
+                                      !snapshot.data!.exists) {
                                     return const SizedBox.shrink();
                                   }
-                                  final shopData = snapshot.data!.data() as Map<String, dynamic>?;
-                                  final shopName = shopData?['name'] as String? ?? '';
-                                  final shopLogo = shopData?['logoUrl'] as String? ?? '';
-                                  if (shopName.isEmpty) return const SizedBox.shrink();
-                                  
+                                  final shopData = snapshot.data!.data()
+                                      as Map<String, dynamic>?;
+                                  final shopName =
+                                      shopData?['name'] as String? ?? '';
+                                  final shopLogo =
+                                      shopData?['logoUrl'] as String? ?? '';
+                                  if (shopName.isEmpty)
+                                    return const SizedBox.shrink();
+
                                   return Row(
                                     children: [
                                       // Cafe logo
@@ -236,11 +244,13 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                         Container(
                                           width: 24,
                                           height: 24,
-                                          margin: const EdgeInsets.only(right: 8),
+                                          margin:
+                                              const EdgeInsets.only(right: 8),
                                           decoration: BoxDecoration(
                                             shape: BoxShape.circle,
                                             border: Border.all(
-                                              color: Colors.white.withValues(alpha: 0.3),
+                                              color: Colors.white
+                                                  .withValues(alpha: 0.3),
                                               width: 1,
                                             ),
                                           ),
@@ -248,7 +258,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                             child: CachedNetworkImage(
                                               imageUrl: shopLogo,
                                               fit: BoxFit.cover,
-                                              placeholder: (context, url) => Container(
+                                              placeholder: (context, url) =>
+                                                  Container(
                                                 color: Colors.grey[800],
                                                 child: const Icon(
                                                   Icons.store,
@@ -256,7 +267,9 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                                   color: Colors.white54,
                                                 ),
                                               ),
-                                              errorWidget: (context, url, error) => Container(
+                                              errorWidget:
+                                                  (context, url, error) =>
+                                                      Container(
                                                 color: Colors.grey[800],
                                                 child: const Icon(
                                                   Icons.store,
@@ -375,7 +388,9 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                         ),
                         const SizedBox(height: 8),
                         TextWidget(
-                          text: formatAddress((e['address'] ?? 'Address not specified').toString()),
+                          text: formatAddress(
+                              (e['address'] ?? 'Address not specified')
+                                  .toString()),
                           fontSize: 14,
                           color: Colors.white70,
                           maxLines: 2,
@@ -484,8 +499,9 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                         context, e['shopId'], e['id'])
                                     : _unpublishEvent(
                                         context, e['shopId'], e['id']),
-                                icon: Icon(
-                                    isPaused ? Icons.cloud_upload : Icons.cloud_off),
+                                icon: Icon(isPaused
+                                    ? Icons.cloud_upload
+                                    : Icons.cloud_off),
                                 label: Text(isPaused ? 'Publish' : 'Unpublish'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor:
@@ -529,7 +545,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                     : null,
                 builder: (context, userSnapshot) {
                   final userData = userSnapshot.data?.data();
-                  final accountType = userData?['accountType'] as String? ?? 'user';
+                  final accountType =
+                      userData?['accountType'] as String? ?? 'user';
                   final isBusinessAccount = accountType == 'business';
 
                   // Check if user is already a participant
@@ -545,7 +562,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                             .snapshots()
                         : null,
                     builder: (context, participantSnapshot) {
-                      final isParticipating = participantSnapshot.data?.exists ?? false;
+                      final isParticipating =
+                          participantSnapshot.data?.exists ?? false;
 
                       // Get participant count
                       return StreamBuilder<QuerySnapshot>(
@@ -557,7 +575,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                             .collection('participants')
                             .snapshots(),
                         builder: (context, countSnapshot) {
-                          final participantCount = countSnapshot.data?.docs.length ?? 0;
+                          final participantCount =
+                              countSnapshot.data?.docs.length ?? 0;
 
                           return Padding(
                             padding: const EdgeInsets.all(24),
@@ -571,10 +590,12 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                         vertical: 16, horizontal: 20),
                                     margin: const EdgeInsets.only(bottom: 12),
                                     decoration: BoxDecoration(
-                                      color: Colors.orange.withValues(alpha: 0.15),
+                                      color:
+                                          Colors.orange.withValues(alpha: 0.15),
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
-                                        color: Colors.orange.withValues(alpha: 0.4),
+                                        color: Colors.orange
+                                            .withValues(alpha: 0.4),
                                         width: 1,
                                       ),
                                     ),
@@ -588,7 +609,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: TextWidget(
-                                            text: 'Business accounts cannot join events',
+                                            text:
+                                                'Business accounts cannot join events',
                                             fontSize: 14,
                                             color: Colors.white,
                                             isBold: true,
@@ -603,17 +625,20 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                   GestureDetector(
                                     onTap: () async {
                                       // Show confirmation dialog
-                                      final viewParticipants = await showDialog<bool>(
+                                      final viewParticipants =
+                                          await showDialog<bool>(
                                         context: context,
                                         builder: (context) => AlertDialog(
                                           backgroundColor: Colors.grey[900],
                                           title: const Text(
                                             'View Participants',
-                                            style: TextStyle(color: Colors.white),
+                                            style:
+                                                TextStyle(color: Colors.white),
                                           ),
                                           content: const Text(
                                             'Do you want to view all participants?',
-                                            style: TextStyle(color: Colors.white70),
+                                            style: TextStyle(
+                                                color: Colors.white70),
                                           ),
                                           actions: [
                                             TextButton(
@@ -630,7 +655,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                         ),
                                       );
 
-                                      if (viewParticipants == true && context.mounted) {
+                                      if (viewParticipants == true &&
+                                          context.mounted) {
                                         _showParticipantsList(context, e);
                                       }
                                     },
@@ -653,7 +679,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                           const SizedBox(width: 12),
                                           Expanded(
                                             child: TextWidget(
-                                              text: '$participantCount ${participantCount == 1 ? 'Participant' : 'Participants'}',
+                                              text:
+                                                  '$participantCount ${participantCount == 1 ? 'Participant' : 'Participants'}',
                                               fontSize: 16,
                                               color: Colors.white,
                                               isBold: true,
@@ -690,11 +717,13 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                             padding: const EdgeInsets.symmetric(
                                                 vertical: 16),
                                             shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(30),
+                                              borderRadius:
+                                                  BorderRadius.circular(30),
                                             ),
                                           ),
                                           child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
                                             children: [
                                               Icon(
                                                 isParticipating
@@ -717,7 +746,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                       ),
 
                                     // Spacing between buttons
-                                    if (!isBusinessAccount) const SizedBox(width: 12),
+                                    if (!isBusinessAccount)
+                                      const SizedBox(width: 12),
 
                                     // Comments button
                                     Expanded(
@@ -726,7 +756,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                           Navigator.push(
                                             context,
                                             MaterialPageRoute(
-                                              builder: (context) => EventCommentsScreen(
+                                              builder: (context) =>
+                                                  EventCommentsScreen(
                                                 eventId: e['id'] ?? '',
                                                 shopId: e['shopId'] ?? '',
                                               ),
@@ -738,11 +769,13 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                                           padding: const EdgeInsets.symmetric(
                                               vertical: 16),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(30),
+                                            borderRadius:
+                                                BorderRadius.circular(30),
                                           ),
                                         ),
                                         child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
                                           children: [
                                             const Icon(
                                               Icons.comment,
@@ -779,36 +812,23 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
   Future<void> _joinEvent(BuildContext context, Map<String, dynamic> e) async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please sign in to join events')),
+      CustomToast.showWarning(
+        context,
+        'Sign in to reserve your place at this event.',
+        title: 'Sign-in required',
       );
       return;
     }
 
-    // Show confirmation dialog
-    final confirm = await showDialog<bool>(
+    final confirmed = await CustomDialog.confirm(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text('Join Event', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'Do you want to join this event?',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Join'),
-          ),
-        ],
-      ),
+      title: 'Join this event?',
+      message: 'Your name will be added to the participant list.',
+      confirmText: 'Join event',
+      icon: Icons.event_available_outlined,
     );
 
-    if (confirm != true) return;
+    if (!confirmed) return;
 
     try {
       final shopId = e['shopId'] as String?;
@@ -868,9 +888,10 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
             .doc(shopId)
             .get();
         final ownerId = shopDoc.data()?['ownerId'];
-        
+
         if (ownerId != null && ownerId != currentUser.uid) {
-          final userName = userData?['name'] ?? currentUser.displayName ?? 'User';
+          final userName =
+              userData?['name'] ?? currentUser.displayName ?? 'User';
           await NotificationService().createEventParticipationNotification(
             ownerId,
             eventId,
@@ -886,18 +907,27 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
       }
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("You're in! 🎉"),
-            backgroundColor: Colors.green,
-          ),
+        CustomToast.showSuccess(
+          context,
+          'You have been added to the participant list.',
+          title: "You're going",
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to join event: $e')),
-        );
+        if (e.toString().contains('Already participating')) {
+          CustomToast.showInfo(
+            context,
+            'You are already on the participant list.',
+            title: 'Already joined',
+          );
+        } else {
+          CustomToast.showError(
+            context,
+            'We could not add you to this event. Please try again.',
+            title: 'Could not join',
+          );
+        }
       }
     }
   }
@@ -906,30 +936,15 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 
-    // Show confirmation dialog
-    final confirm = await showDialog<bool>(
+    final confirmed = await CustomDialog.confirm(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text('Leave Event', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'Are you sure you want to leave this event?',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Leave', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      title: 'Leave this event?',
+      message: 'Your name will be removed from the participant list.',
+      confirmText: 'Leave event',
+      icon: Icons.event_busy_outlined,
     );
 
-    if (confirm != true) return;
+    if (!confirmed) return;
 
     try {
       final shopId = e['shopId'] as String?;
@@ -973,14 +988,18 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
       });
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You have left the event')),
+        CustomToast.showSuccess(
+          context,
+          'You were removed from the participant list.',
+          title: 'Event left',
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to leave event: $e')),
+        CustomToast.showError(
+          context,
+          'We could not update your attendance. Please try again.',
+          title: 'Could not leave',
         );
       }
     }
@@ -1014,7 +1033,8 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                 children: [
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
-                    child: const Icon(Icons.close, color: Colors.white, size: 24),
+                    child:
+                        const Icon(Icons.close, color: Colors.white, size: 24),
                   ),
                   const SizedBox(width: 16),
                   TextWidget(
@@ -1055,12 +1075,15 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                   return ListView.separated(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     itemCount: snapshot.data!.docs.length,
-                    separatorBuilder: (_, __) => const Divider(color: Colors.white24),
+                    separatorBuilder: (_, __) =>
+                        const Divider(color: Colors.white24),
                     itemBuilder: (context, index) {
-                      final participantData =
-                          snapshot.data!.docs[index].data() as Map<String, dynamic>;
-                      final name = participantData['userName'] as String? ?? 'User';
-                      final photoUrl = participantData['userPhotoUrl'] as String? ?? '';
+                      final participantData = snapshot.data!.docs[index].data()
+                          as Map<String, dynamic>;
+                      final name =
+                          participantData['userName'] as String? ?? 'User';
+                      final photoUrl =
+                          participantData['userPhotoUrl'] as String? ?? '';
 
                       return ListTile(
                         leading: CircleAvatar(
@@ -1105,15 +1128,21 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
           .update({'isPaused': true});
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Event unpublished')),
-        );
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
+        CustomToast.showFromMessenger(
+          messenger,
+          'New guests can no longer discover this event.',
+          type: ToastType.success,
+          title: 'Event unpublished',
+        );
       }
-    } catch (e) {
+    } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to unpublish event: $e')),
+        CustomToast.showError(
+          context,
+          'We could not unpublish the event. Please try again.',
+          title: 'Update failed',
         );
       }
     }
@@ -1132,15 +1161,21 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
           .update({'isPaused': false});
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Event published')),
-        );
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
+        CustomToast.showFromMessenger(
+          messenger,
+          'Guests can discover and join this event again.',
+          type: ToastType.success,
+          title: 'Event published',
+        );
       }
-    } catch (e) {
+    } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to publish event: $e')),
+        CustomToast.showError(
+          context,
+          'We could not publish the event. Please try again.',
+          title: 'Update failed',
         );
       }
     }
@@ -1150,29 +1185,16 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
       BuildContext context, String? shopId, String? eventId) async {
     if (shopId == null || eventId == null) return;
 
-    // Show confirmation dialog
-    final confirm = await showDialog<bool>(
+    final confirmed = await CustomDialog.confirm(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title:
-            const Text('Archive Event', style: TextStyle(color: Colors.white)),
-        content: const Text('Are you sure you want to archive this event?',
-            style: TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Archive', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      title: 'Archive this event?',
+      message:
+          'It will leave active listings and move to Past events for your records.',
+      confirmText: 'Archive event',
+      icon: Icons.archive_outlined,
     );
 
-    if (confirm != true) return;
+    if (!confirmed) return;
 
     try {
       await FirebaseFirestore.instance
@@ -1183,15 +1205,21 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
           .update({'isArchived': true});
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Event archived')),
-        );
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
+        CustomToast.showFromMessenger(
+          messenger,
+          'You can still find it under Past events.',
+          type: ToastType.success,
+          title: 'Event archived',
+        );
       }
-    } catch (e) {
+    } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to archive event: $e')),
+        CustomToast.showError(
+          context,
+          'We could not archive the event. Please try again.',
+          title: 'Archive failed',
         );
       }
     }

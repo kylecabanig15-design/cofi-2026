@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/widgets/text_widget.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class ShopVerificationSheet extends StatefulWidget {
   final String shopId;
@@ -31,12 +32,12 @@ class ShopVerificationSheet extends StatefulWidget {
 
 class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
   final _formKey = GlobalKey<FormState>();
-  
+
   // Form fields
   final TextEditingController _legalNameController = TextEditingController();
   final TextEditingController _roleController = TextEditingController();
   final TextEditingController _docRefController = TextEditingController();
-  
+
   // Document Uploads
   XFile? _permitImage;
   XFile? _idImage;
@@ -63,7 +64,7 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
         imageQuality: 70,
         maxWidth: 1024,
       );
-      
+
       if (image != null) {
         setState(() {
           if (isPermit) {
@@ -94,7 +95,8 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
 
     if (!_acceptAttestation || !_acceptTerms || !_acceptDataProcessing) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please accept all legal agreements to proceed.')),
+        const SnackBar(
+            content: Text('Please accept all legal agreements to proceed.')),
       );
       return;
     }
@@ -118,8 +120,10 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
         for (var doc in existingClaims.docs) {
           if (doc['claimantId'] == user.uid) {
             if (mounted) {
-               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('You already have a pending verification for this shop.')),
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text(
+                        'You already have a pending verification for this shop.')),
               );
               Navigator.pop(context); // Close sheet
             }
@@ -136,7 +140,8 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
       final permitRef = FirebaseStorage.instance
           .ref()
           .child('verification_docs')
-          .child('${widget.shopId}_permit_${DateTime.now().millisecondsSinceEpoch}');
+          .child(
+              '${widget.shopId}_permit_${DateTime.now().millisecondsSinceEpoch}');
       await permitRef.putFile(File(_permitImage!.path));
       permitUrl = await permitRef.getDownloadURL();
 
@@ -144,7 +149,8 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
       final idRef = FirebaseStorage.instance
           .ref()
           .child('verification_docs')
-          .child('${widget.shopId}_id_${DateTime.now().millisecondsSinceEpoch}');
+          .child(
+              '${widget.shopId}_id_${DateTime.now().millisecondsSinceEpoch}');
       await idRef.putFile(File(_idImage!.path));
       idUrl = await idRef.getDownloadURL();
 
@@ -152,7 +158,10 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
       if (widget.isVerificationFlow) {
         // DIRECT SUBMISSION: Update the existing shop doc directly
         // This keeps it in the "Business Submissions" list and avoids creating a duplicate "Claim" entry.
-        await FirebaseFirestore.instance.collection('shops').doc(widget.shopId).update({
+        await FirebaseFirestore.instance
+            .collection('shops')
+            .doc(widget.shopId)
+            .update({
           'businessLegalName': _legalNameController.text.trim(),
           'applicantRole': _roleController.text.trim(),
           'verificationDocReference': _docRefController.text.trim(),
@@ -194,28 +203,26 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(widget.isVerificationFlow 
-              ? 'Verification documents submitted successfully!' 
-              : 'Claim request submitted successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        
-        // 1. Pop the verification sheet
-        Navigator.pop(context);
+        final messenger = ScaffoldMessenger.of(context);
+        final navigator = Navigator.of(context);
+        navigator.pop();
 
-        // 2. Pop intermediate screen(s) only as far as the caller asked for,
-        // guarded by canPop so we never pop past the base route (the number
-        // of routes above base varies between the submit and claim flows).
         int remaining = widget.popCountOnSuccess;
-        while (remaining > 0 && mounted && Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
+        while (remaining > 0 && navigator.canPop()) {
+          navigator.pop();
           remaining--;
         }
+        CustomToast.showFromMessenger(
+          messenger,
+          widget.isVerificationFlow
+              ? 'Your documents are now waiting for admin review.'
+              : 'The café owner request is now waiting for admin review.',
+          type: ToastType.success,
+          title: widget.isVerificationFlow
+              ? 'Documents submitted'
+              : 'Claim request submitted',
+        );
       }
-
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -247,7 +254,7 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          
+
           Expanded(
             child: SingleChildScrollView(
               padding: EdgeInsets.only(
@@ -264,7 +271,10 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [primary.withValues(alpha: 0.15), Colors.transparent],
+                        colors: [
+                          primary.withValues(alpha: 0.15),
+                          Colors.transparent
+                        ],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ),
@@ -279,18 +289,21 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
                             color: primary.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.verified_user_rounded, color: primary, size: 32),
+                          child: const Icon(Icons.verified_user_rounded,
+                              color: primary, size: 32),
                         ),
                         const SizedBox(height: 16),
                         TextWidget(
-                          text: widget.isVerificationFlow ? 'Business Verification' : 'Ownership Verification',
+                          text: widget.isVerificationFlow
+                              ? 'Business Verification'
+                              : 'Ownership Verification',
                           fontSize: 22,
                           color: Colors.white,
                           isBold: true,
                         ),
                         const SizedBox(height: 8),
                         TextWidget(
-                          text: widget.isVerificationFlow 
+                          text: widget.isVerificationFlow
                               ? 'Please provide documentation to verify your business submission.'
                               : 'To claim "${widget.shopName}", we need to verify your business identity.',
                           fontSize: 14,
@@ -300,9 +313,9 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(height: 32),
-                  
+
                   Form(
                     key: _formKey,
                     child: Column(
@@ -313,38 +326,47 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
                           controller: _legalNameController,
                           label: 'Registered Business Name',
                           hint: 'e.g., CoFi Coffee Roasters Inc.',
-                          validator: (v) => v?.isEmpty == true ? 'Required' : null,
+                          validator: (v) =>
+                              v?.isEmpty == true ? 'Required' : null,
                         ),
                         _buildTextField(
                           controller: _roleController,
                           label: 'Your Position / Title',
                           hint: 'e.g., Owner, Manager, Authorized Rep',
-                          validator: (v) => v?.isEmpty == true ? 'Required' : null,
+                          validator: (v) =>
+                              v?.isEmpty == true ? 'Required' : null,
                         ),
                         _buildTextField(
                           controller: _docRefController,
                           label: 'Business Registration / TIN',
                           hint: 'e.g., 123-456-789-000',
-                          validator: (v) => v?.isEmpty == true ? 'Required' : null,
+                          validator: (v) =>
+                              v?.isEmpty == true ? 'Required' : null,
                         ),
-                        
                         const SizedBox(height: 32),
                         _buildSectionHeader('Verification Documents'),
                         TextWidget(
-                          text: 'Photos must be clear and readable. Accepted formats: JPG, PNG.',
+                          text:
+                              'Photos must be clear and readable. Accepted formats: JPG, PNG.',
                           fontSize: 13,
                           color: Colors.white38,
                         ),
                         const SizedBox(height: 16),
-                        
                         Row(
                           children: [
-                            Expanded(child: _buildUploadCard('Business Permit\n(BIR / DTI / Mayor\'s)', _permitImage, true)),
+                            Expanded(
+                                child: _buildUploadCard(
+                                    'Business Permit\n(BIR / DTI / Mayor\'s)',
+                                    _permitImage,
+                                    true)),
                             const SizedBox(width: 16),
-                            Expanded(child: _buildUploadCard('Your Government\nIssued ID', _idImage, false)),
+                            Expanded(
+                                child: _buildUploadCard(
+                                    'Your Government\nIssued ID',
+                                    _idImage,
+                                    false)),
                           ],
                         ),
-
                         const SizedBox(height: 32),
                         _buildSectionHeader('Legal Consent'),
                         _buildCheckbox(
@@ -362,16 +384,13 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
                           _acceptDataProcessing,
                           (v) => setState(() => _acceptDataProcessing = v!),
                         ),
-
                         const SizedBox(height: 40),
-                        
                         SizedBox(
                           width: double.infinity,
                           height: 56,
                           child: ElevatedButton(
                             onPressed: _isSubmitting ? null : _submitClaim,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: primary,
                               disabledBackgroundColor: Colors.grey[800],
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
@@ -382,7 +401,8 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
                                 ? const SizedBox(
                                     width: 24,
                                     height: 24,
-                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                        color: Colors.white, strokeWidth: 2),
                                   )
                                 : const Text(
                                     'Submit Verification',
@@ -472,7 +492,8 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
           ),
         ],
@@ -492,28 +513,35 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
             color: file != null ? primary : Colors.white10,
             width: file != null ? 2 : 1,
           ),
-          image: file != null ? DecorationImage(
-            image: FileImage(File(file.path)),
-            fit: BoxFit.cover,
-          ) : null,
+          image: file != null
+              ? DecorationImage(
+                  image: FileImage(File(file.path)),
+                  fit: BoxFit.cover,
+                )
+              : null,
         ),
-        child: file == null ? Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.add_a_photo_rounded, color: Colors.white24, size: 32),
-            const SizedBox(height: 12),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
-            ),
-          ],
-        ) : Stack(
-          children: [
-            Container(color: Colors.black26),
-            const Center(child: Icon(Icons.check_circle, color: Colors.white, size: 32)),
-          ],
-        ),
+        child: file == null
+            ? Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add_a_photo_rounded,
+                      color: Colors.white24, size: 32),
+                  const SizedBox(height: 12),
+                  Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                ],
+              )
+            : Stack(
+                children: [
+                  Container(color: Colors.black26),
+                  const Center(
+                      child: Icon(Icons.check_circle,
+                          color: Colors.white, size: 32)),
+                ],
+              ),
       ),
     );
   }
@@ -532,14 +560,16 @@ class _ShopVerificationSheetState extends State<ShopVerificationSheet> {
               onChanged: onChanged,
               activeColor: primary,
               side: const BorderSide(color: Colors.white24),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4)),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+              style: const TextStyle(
+                  color: Colors.white70, fontSize: 13, height: 1.4),
             ),
           ),
         ],

@@ -129,64 +129,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _toggleNotifications(bool value) async {
-    final bool? confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: Text(
-          value ? 'Enable Notifications' : 'Disable Notifications',
-          style: const TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          value
-              ? 'Stay updated with the best café matches and community events!'
-              : 'You will stop receiving alerts for new cafés and community updates. Are you sure?',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(
-              foregroundColor: value ? primary : Colors.redAccent,
-            ),
-            child: Text(value ? 'Enable' : 'Disable'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
+    if (!value) {
+      final confirmed = await CustomDialog.confirm(
+        context: context,
+        title: 'Pause all notifications?',
+        message:
+            'Chat, job, review, event, café, and recommendation alerts will stop until you turn them on again.',
+        confirmText: 'Pause alerts',
+        icon: Icons.notifications_off_outlined,
+      );
+      if (!confirmed) return;
+    }
 
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .update({'notificationsEnabled': value});
-      if (mounted) {
-        setState(() {
-          _notificationsEnabled = value;
-        });
-      }
-      if (value) {
-        await NotificationService().requestPermissionIfNeeded();
-        final status = await Permission.notification.status;
-        if (mounted && !status.isGranted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
-                  'Push notifications are blocked in your device settings.'),
-              action: SnackBarAction(
-                label: 'Open Settings',
-                onPressed: openAppSettings,
-              ),
-            ),
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({'notificationsEnabled': value});
+        if (mounted) {
+          setState(() {
+            _notificationsEnabled = value;
+          });
+        }
+        if (value) {
+          await NotificationService().requestPermissionIfNeeded();
+          final status = await Permission.notification.status;
+          if (mounted && !status.isGranted) {
+            CustomToast.show(
+              context,
+              'Allow notifications in your device settings to receive alerts.',
+              type: ToastType.warning,
+              title: 'Device permission is off',
+              actionLabel: 'Open settings',
+              onAction: openAppSettings,
+            );
+            return;
+          }
+        }
+        if (mounted) {
+          CustomToast.showSuccess(
+            context,
+            value
+                ? 'Your enabled alert categories are active.'
+                : 'You will not receive alerts until you turn them on again.',
+            title: value ? 'Notifications on' : 'Notifications paused',
           );
         }
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _notificationsEnabled = !value);
+        CustomToast.showError(
+          context,
+          'We could not update your notification preference. Please try again.',
+          title: 'Preference not saved',
+        );
       }
     }
   }
@@ -274,7 +272,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       title: 'Log Out',
       message: 'Are you sure you want to log out?',
       confirmText: 'Log Out',
-      isDestructive: true,
       icon: Icons.logout_outlined,
       onConfirm: () async {
         try {
@@ -289,8 +286,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // LoginScreen on its own once signOut completes.
             Navigator.of(context).popUntil((route) => route.isFirst);
           }
-        } catch (e) {
-          if (mounted) CustomToast.showError(context, 'Logout failed: $e');
+        } catch (_) {
+          if (mounted) {
+            CustomToast.showError(
+              context,
+              'We could not sign you out. Please try again.',
+              title: 'Sign-out failed',
+            );
+          }
         }
       },
     );
@@ -592,7 +595,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // Show success message and navigate to login
       if (mounted) {
-        CustomToast.showSuccess(context, 'Account deleted successfully');
+        CustomToast.showSuccess(
+          context,
+          'Your account and associated personal data were removed.',
+          title: 'Account deleted',
+        );
         // Auth deletion signs the user out of Firebase, so AuthGate (kept
         // mounted at the root) swaps to LoginScreen on its own. Just unwind.
         Navigator.of(context).popUntil((route) => route.isFirst);
@@ -886,7 +893,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 }
               }
             },
-            child: const Text('Confirm', style: TextStyle(color: primary)),
+            child:
+                const Text('Verify password', style: TextStyle(color: primary)),
           ),
         ],
       ),

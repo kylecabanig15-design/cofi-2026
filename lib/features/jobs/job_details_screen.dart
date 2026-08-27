@@ -10,6 +10,8 @@ import 'package:cofi/features/jobs/job_archives_screen.dart';
 import 'package:cofi/features/jobs/job_application_screen.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cofi/widgets/custom_dialog.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class JobDetailsScreen extends StatefulWidget {
   final Map<String, dynamic>? job;
@@ -29,7 +31,8 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    _jobData = widget.job != null ? Map<String, dynamic>.from(widget.job!) : null;
+    _jobData =
+        widget.job != null ? Map<String, dynamic>.from(widget.job!) : null;
     _checkUserType();
   }
 
@@ -47,7 +50,10 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       final jobCreatedBy = widget.job?['createdBy'] as String?;
       final isCreator = jobCreatedBy == currentUser.uid;
 
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).get();
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
       final accountType = userDoc.data()?['accountType'] as String? ?? 'user';
 
       setState(() {
@@ -117,38 +123,16 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
   }
 
   Future<void> _unpublishJobApplication() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await CustomDialog.confirm(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text(
-          'Unpublish Job Application',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Are you sure you want to unpublish this job application? This will prevent new users from applying.',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Unpublish',
-              style: TextStyle(color: Colors.orange),
-            ),
-          ),
-        ],
-      ),
+      title: 'Unpublish this job?',
+      message:
+          'The opening will remain in your workspace, but new candidates cannot apply.',
+      confirmText: 'Unpublish job',
+      icon: Icons.visibility_off_outlined,
     );
 
-    if (confirmed == true) {
+    if (confirmed) {
       try {
         final jobId = widget.job?['id'] ?? widget.job?['jobId'];
         final shopId = widget.shopId;
@@ -168,24 +152,21 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         });
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Job application unpublished successfully'),
-              backgroundColor: Colors.green,
-            ),
-          );
-
-          // Wait a moment for the stream to update, then pop
-          await Future.delayed(const Duration(milliseconds: 500));
+          final messenger = ScaffoldMessenger.of(context);
           Navigator.pop(context);
+          CustomToast.showFromMessenger(
+            messenger,
+            'New candidates can no longer apply to this opening.',
+            type: ToastType.success,
+            title: 'Job unpublished',
+          );
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error unpublishing job: $e'),
-              backgroundColor: Colors.red,
-            ),
+          CustomToast.showError(
+            context,
+            'We could not unpublish the job. Please try again.',
+            title: 'Update failed',
           );
         }
         debugLog('Error unpublishing job: $e');
@@ -232,38 +213,17 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                   IconButton(
                     icon: const Icon(Icons.archive, color: Colors.orange),
                     onPressed: () async {
-                      final confirmed = await showDialog<bool>(
+                      final confirmed = await CustomDialog.confirm(
                         context: context,
-                        builder: (context) => AlertDialog(
-                          backgroundColor: const Color(0xFF1A1A1A),
-                          title: const Text(
-                            'Archive Job',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                          content: const Text(
-                            'Are you sure you want to archive this job? It will be moved to Job Archives, removed from active listings, and you will not be able to reopen or bring it back.',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: const Text(
-                                'Cancel',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, true),
-                              child: const Text(
-                                'Archive',
-                                style: TextStyle(color: Colors.orange),
-                              ),
-                            ),
-                          ],
-                        ),
+                        title: 'Archive this job?',
+                        message:
+                            'It will leave active listings and move to Past openings for your records.',
+                        confirmText: 'Archive job',
+                        icon: Icons.archive_outlined,
                       );
 
-                      if (confirmed == true) {
+                      if (!context.mounted) return;
+                      if (confirmed) {
                         _archiveJob(context, widget.job!['id'], widget.shopId);
                       }
                     },
@@ -538,7 +498,8 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                   ? null
                   : () async {
                       // Open edit job bottom sheet
-                      final updatedJob = await showModalBottomSheet<Map<String, dynamic>?>(
+                      final updatedJob =
+                          await showModalBottomSheet<Map<String, dynamic>?>(
                         context: context,
                         backgroundColor: Colors.transparent,
                         isScrollControlled: true,
@@ -609,7 +570,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         );
       } else {
         if (_isBusinessAccount) return const SizedBox.shrink();
-        
+
         return SizedBox(
           width: double.infinity,
           child: ElevatedButton(
@@ -665,28 +626,26 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       });
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Job archived - moved to Job Archives'),
-            backgroundColor: Colors.green,
-          ),
-        );
-
-        // Navigate directly to Job Archives for this shop
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder: (context) => JobArchivesScreen(shopId: shopId),
           ),
         );
+        CustomToast.showFromMessenger(
+          messenger,
+          'You can still find it under Past openings.',
+          type: ToastType.success,
+          title: 'Job archived',
+        );
       }
-    } catch (e) {
+    } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error archiving job: $e'),
-            backgroundColor: Colors.red,
-          ),
+        CustomToast.showError(
+          context,
+          'We could not archive the job. Please try again.',
+          title: 'Archive failed',
         );
       }
     }
@@ -728,38 +687,15 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
   }
 
   Future<void> _publishJobApplication() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await CustomDialog.confirm(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text(
-          'Publish Job Application',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Are you sure you want to publish this job application? New users will be able to apply again.',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Publish',
-              style: TextStyle(color: Colors.green),
-            ),
-          ),
-        ],
-      ),
+      title: 'Publish this job?',
+      message: 'The opening will return to Work in Coffee for new applicants.',
+      confirmText: 'Publish job',
+      icon: Icons.publish_outlined,
     );
 
-    if (confirmed == true) {
+    if (confirmed) {
       try {
         final jobId = widget.job?['id'] ?? widget.job?['jobId'];
         final shopId = widget.shopId;
@@ -779,24 +715,21 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
         });
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Job application published successfully'),
-              backgroundColor: Colors.green,
-            ),
-          );
-
-          // Wait a moment for the stream to update, then pop
-          await Future.delayed(const Duration(milliseconds: 500));
+          final messenger = ScaffoldMessenger.of(context);
           Navigator.pop(context);
+          CustomToast.showFromMessenger(
+            messenger,
+            'Candidates can discover and apply to this opening again.',
+            type: ToastType.success,
+            title: 'Job published',
+          );
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error publishing job: $e'),
-              backgroundColor: Colors.red,
-            ),
+          CustomToast.showError(
+            context,
+            'We could not publish the job. Please try again.',
+            title: 'Update failed',
           );
         }
         debugLog('Error reopening job: $e');

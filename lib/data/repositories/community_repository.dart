@@ -2,11 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:cofi/models/event_model.dart';
 import 'package:cofi/models/job_model.dart';
+import 'package:cofi/models/promotion_model.dart';
 import 'package:cofi/utils/logger.dart';
 
 /// Parses docs defensively: one malformed document must never fail the
 /// whole list stream.
-List<T> _parseAll<T>(QuerySnapshot<Map<String, dynamic>> s, T Function(Map<String, dynamic>, String) ctor) {
+List<T> _parseAll<T>(QuerySnapshot<Map<String, dynamic>> s,
+    T Function(Map<String, dynamic>, String) ctor) {
   final out = <T>[];
   for (final d in s.docs) {
     try {
@@ -203,8 +205,8 @@ class JobRepository {
     final snap = await _firestore.collectionGroup('jobs').get();
     return snap.docs
         .map((d) => Job.fromFirestore(d.data(), d.id))
-        .where((job) => job.applications
-            .any((app) => app.applicantId == applicantId))
+        .where((job) =>
+            job.applications.any((app) => app.applicantId == applicantId))
         .toList();
   }
 
@@ -217,5 +219,27 @@ class JobRepository {
         .get();
     if (!doc.exists) return null;
     return Job.fromFirestore(doc.data()!, doc.id);
+  }
+}
+
+class PromotionRepository {
+  PromotionRepository({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance;
+
+  final FirebaseFirestore _firestore;
+
+  Stream<List<Promotion>> watchActivePromotions() {
+    return _firestore
+        .collectionGroup('promotions')
+        .orderBy('endDate')
+        .limit(20)
+        .snapshots()
+        .map((snapshot) {
+      final now = DateTime.now();
+      return _parseAll(snapshot, Promotion.fromFirestore)
+          .where((promotion) =>
+              promotion.isActiveAt(now) && promotion.hasDedicatedImage)
+          .toList();
+    });
   }
 }

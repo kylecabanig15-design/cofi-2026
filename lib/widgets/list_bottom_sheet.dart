@@ -6,6 +6,8 @@ import 'package:cofi/utils/colors.dart';
 import 'package:cofi/features/cafe/cafe_details_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:ui'; // For BackdropFilter
+import 'package:cofi/widgets/custom_dialog.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class SyncResult {
   final bool success;
@@ -725,55 +727,23 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
     final newPrivacy = !isPrivate;
     final isNowPublic = !newPrivacy;
 
-    // ADDED: Confirmation for BOTH directions
     final confirmMessage = isNowPublic
-        ? 'Making this list Public will share it with the community in the Explore tab. Continue?'
-        : 'Making this list Private will remove it from the Community tab. Are you sure?';
+        ? 'People in Community will be able to discover this collection.'
+        : 'The collection will disappear from Community but remain available to you.';
 
-    final confirmTitle = isNowPublic ? 'Unlock List?' : 'Make Private?';
-    final confirmButton = isNowPublic ? 'Make Public' : 'Make Private';
+    final confirmTitle =
+        isNowPublic ? 'Make collection public?' : 'Make collection private?';
+    final confirmButton = isNowPublic ? 'Make public' : 'Make private';
     final confirmIcon = isNowPublic ? Icons.public : Icons.lock;
 
-    final confirm = await showDialog<bool>(
+    final confirmed = await CustomDialog.confirm(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(confirmIcon,
-                color: isNowPublic ? primary : Colors.white70, size: 24),
-            const SizedBox(width: 8),
-            TextWidget(
-                text: confirmTitle,
-                fontSize: 18,
-                color: Colors.white,
-                isBold: true),
-          ],
-        ),
-        content: TextWidget(
-          text: confirmMessage,
-          fontSize: 14,
-          color: Colors.white70,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: TextWidget(
-                text: 'Cancel', fontSize: 14, color: Colors.grey[400]),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: TextWidget(
-                text: confirmButton,
-                fontSize: 14,
-                color: isNowPublic ? primary : Colors.redAccent,
-                isBold: true),
-          ),
-        ],
-      ),
+      title: confirmTitle,
+      message: confirmMessage,
+      confirmText: confirmButton,
+      icon: confirmIcon,
     );
-    if (confirm != true) return;
+    if (!confirmed) return;
 
     try {
       // 1. Update local list privacy
@@ -846,180 +816,37 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
       }
     } catch (e) {
       if (context.mounted) {
-        _showStatusDialog(context, 'Failed to update: $e', isSuccess: false);
+        _showStatusDialog(
+            context, 'We could not update the collection privacy.',
+            isSuccess: false);
       }
     }
   }
 
   void _showStatusDialog(BuildContext context, String message,
       {required bool isSuccess, IconData? icon, VoidCallback? onConfirm}) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.grey[900],
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.5),
-                blurRadius: 20,
-                spreadRadius: 5,
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isSuccess
-                      ? primary.withValues(alpha: 0.1)
-                      : Colors.redAccent.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon ??
-                      (isSuccess
-                          ? Icons.check_circle_outline
-                          : Icons.error_outline),
-                  color: isSuccess ? primary : Colors.redAccent,
-                  size: 40,
-                ),
-              ),
-              const SizedBox(height: 20),
-              TextWidget(
-                text: isSuccess ? 'Success' : 'Oops!',
-                fontSize: 20,
-                color: Colors.white,
-                isBold: true,
-              ),
-              const SizedBox(height: 8),
-              TextWidget(
-                text: message,
-                fontSize: 14,
-                color: Colors.white70,
-                align: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(dialogContext);
-                    if (onConfirm != null) onConfirm();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isSuccess ? primary : Colors.grey[800],
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: const TextWidget(
-                      text: 'OK',
-                      fontSize: 16,
-                      color: Colors.white,
-                      isBold: true),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    if (isSuccess) {
+      CustomToast.showSuccess(context, message);
+    } else {
+      CustomToast.showError(context, message);
+    }
+    onConfirm?.call();
   }
 
-  void _showDeleteListConfirmation(BuildContext context) {
-    showDialog(
+  Future<void> _showDeleteListConfirmation(BuildContext context) async {
+    final confirmed = await CustomDialog.confirm(
       context: context,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.grey[900],
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.redAccent.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.delete_forever,
-                    color: Colors.redAccent, size: 40),
-              ),
-              const SizedBox(height: 20),
-              const TextWidget(
-                  text: 'Delete Collection?',
-                  fontSize: 20,
-                  color: Colors.white,
-                  isBold: true),
-              const SizedBox(height: 8),
-              TextWidget(
-                text:
-                    'Are you sure you want to delete "${_currentTitle ?? widget.title}"? This action cannot be undone.',
-                fontSize: 14,
-                color: Colors.white70,
-                align: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(dialogContext),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: TextWidget(
-                          text: 'Cancel',
-                          fontSize: 16,
-                          color: Colors.grey[400],
-                          isBold: true),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(
-                            dialogContext); // Close confirmation dialog
-                        _removeList(context); // Pass the sheet context
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: const TextWidget(
-                          text: 'Delete',
-                          fontSize: 16,
-                          color: Colors.white,
-                          isBold: true),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+      title: 'Delete collection?',
+      message:
+          '"${_currentTitle ?? widget.title}" and its saved cafés will be permanently removed.',
+      confirmText: 'Delete collection',
+      isDestructive: true,
+      icon: Icons.delete_forever_outlined,
     );
+    if (confirmed && context.mounted) await _removeList(context);
   }
 
-  void _removeList(BuildContext context) async {
+  Future<void> _removeList(BuildContext context) async {
     try {
       await FirebaseFirestore.instance
           .collection('users')
@@ -1042,7 +869,7 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
         // Show success feedback FIRST, then pop on OK
         _showStatusDialog(
           context,
-          'Collection deleted successfully',
+          'The collection was permanently deleted.',
           isSuccess: true,
           icon: Icons.delete_outline,
           onConfirm: () {
@@ -1054,7 +881,8 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
       }
     } catch (e) {
       if (context.mounted) {
-        _showStatusDialog(context, 'Failed to delete: $e', isSuccess: false);
+        _showStatusDialog(context, 'We could not delete the collection.',
+            isSuccess: false);
       }
     }
   }
@@ -1178,12 +1006,12 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
       }
 
       if (mounted) {
-        _showStatusDialog(context, 'Title updated successfully',
+        _showStatusDialog(context, 'The collection name was updated.',
             isSuccess: true, icon: Icons.edit_note);
       }
     } catch (e) {
       if (mounted) {
-        _showStatusDialog(context, 'Failed to update title: $e',
+        _showStatusDialog(context, 'We could not rename the collection.',
             isSuccess: false);
       }
     }
@@ -1196,43 +1024,12 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
     required String userId,
     required String cafeName,
   }) {
-    showDialog(
+    _removeCafeFromList(
       context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          backgroundColor: Colors.grey[800],
-          title: TextWidget(
-              text: 'Remove Cafe',
-              fontSize: 18,
-              color: Colors.white,
-              isBold: true),
-          content: TextWidget(
-              text: 'Remove "$cafeName" from this collection?',
-              fontSize: 16,
-              color: Colors.white70),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: TextWidget(
-                  text: 'Cancel', fontSize: 14, color: Colors.grey[400]),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                _removeCafeFromList(
-                  context: context,
-                  shopId: shopId,
-                  listId: listId,
-                  userId: userId,
-                  cafeName: cafeName,
-                );
-              },
-              child: TextWidget(
-                  text: 'Remove', fontSize: 14, color: Colors.redAccent),
-            ),
-          ],
-        );
-      },
+      shopId: shopId,
+      listId: listId,
+      userId: userId,
+      cafeName: cafeName,
     );
   }
 
@@ -1247,6 +1044,7 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
     required String userId,
     required String cafeName,
   }) async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await FirebaseFirestore.instance
           .collection('users')
@@ -1264,22 +1062,64 @@ class _ListBottomSheetState extends State<ListBottomSheet> {
         setState(() {
           _removedShopIds.add(shopId);
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$cafeName removed'),
-            backgroundColor: Colors.grey[800],
-            behavior: SnackBarBehavior.floating,
+        CustomToast.showFromMessenger(
+          messenger,
+          '$cafeName was removed from this collection.',
+          type: ToastType.info,
+          title: 'Café removed',
+          actionLabel: 'Undo',
+          onAction: () => _restoreCafeToList(
+            shopId: shopId,
+            listId: listId,
+            userId: userId,
+            cafeName: cafeName,
           ),
         );
       }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Failed to remove cafe'),
-              backgroundColor: Colors.red),
-        );
-      }
+    } catch (_) {
+      CustomToast.showFromMessenger(
+        messenger,
+        'We could not remove the café. Please try again.',
+        type: ToastType.error,
+        title: 'Collection not updated',
+      );
+    }
+  }
+
+  Future<void> _restoreCafeToList({
+    required String shopId,
+    required String listId,
+    required String userId,
+    required String cafeName,
+  }) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('lists')
+          .doc(listId)
+          .collection('items')
+          .doc(shopId)
+          .set({
+        'shopId': shopId,
+        'name': cafeName,
+        'addedAt': FieldValue.serverTimestamp(),
+      });
+      await _syncSharedCollectionLogos();
+      if (!mounted) return;
+      setState(() => _removedShopIds.remove(shopId));
+      CustomToast.showSuccess(
+        context,
+        '$cafeName is back in the collection.',
+        title: 'Removal undone',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      CustomToast.showError(
+        context,
+        'We could not restore the café. Add it again from the collection.',
+        title: 'Undo failed',
+      );
     }
   }
 
@@ -1614,13 +1454,12 @@ class _AddCafeBottomSheetState extends State<AddCafeBottomSheet> {
         await ListBottomSheet.syncLogos(widget.userId, widget.listId);
         widget.onCafeAdded();
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to add cafe: $e'),
-            backgroundColor: Colors.red,
-          ),
+        CustomToast.showError(
+          context,
+          'We could not add the café. Please try again.',
+          title: 'Collection not updated',
         );
       }
     }

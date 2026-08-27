@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cofi/widgets/text_widget.dart';
+import 'package:cofi/features/business/widgets/business_workspace_ui.dart';
+import 'package:cofi/widgets/custom_dialog.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class JobArchivesScreen extends StatefulWidget {
   final String shopId;
@@ -15,9 +18,9 @@ class _JobArchivesScreenState extends State<JobArchivesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: BusinessWorkspaceColors.canvas,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: BusinessWorkspaceColors.canvas,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
@@ -25,85 +28,83 @@ class _JobArchivesScreenState extends State<JobArchivesScreen> {
         ),
         centerTitle: true,
         title: TextWidget(
-          text: 'Job Archives',
+          text: 'Past openings',
           fontSize: 18,
-          color: Colors.white,
+          color: BusinessWorkspaceColors.paper,
           isBold: true,
         ),
       ),
-      body: SafeArea(
-        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('shops')
-              .doc(widget.shopId)
-              .collection('jobs')
-              .orderBy('createdAt', descending: true)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(strokeWidth: 2),
-              );
-            }
-
-            if (snapshot.hasError) {
-              return Center(
-                child: TextWidget(
-                  text: 'Error loading archives',
-                  fontSize: 16,
-                  color: Colors.white70,
-                ),
-              );
-            }
-
-            final allJobs = snapshot.data?.docs ?? [];
-
-            // Filter to only show archived jobs
-            final archivedJobs = allJobs.where((doc) {
-              final job = doc.data();
-              return job['isArchived'] == true;
-            }).toList();
-
-            if (archivedJobs.isEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.archive, color: Colors.grey, size: 48),
-                    const SizedBox(height: 16),
-                    TextWidget(
-                      text: 'No archived jobs',
-                      fontSize: 16,
-                      color: Colors.white,
-                      isBold: true,
-                    ),
-                    const SizedBox(height: 8),
-                    TextWidget(
-                      text: 'Archived jobs will appear here',
-                      fontSize: 14,
-                      color: Colors.grey,
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            return ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              itemCount: archivedJobs.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 16),
-              itemBuilder: (context, index) {
-                final jobDoc = archivedJobs[index];
-                final jobId = jobDoc.id;
-                final job = jobDoc.data();
-                return _buildArchivedJobCard(
-                  jobId: jobId,
-                  job: job,
-                  onDelete: () => _deleteJob(jobId),
+      body: BusinessWorkspaceTheme(
+        accentColor: Colors.blueGrey,
+        child: SafeArea(
+          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('shops')
+                .doc(widget.shopId)
+                .collection('jobs')
+                .orderBy('createdAt', descending: true)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 );
-              },
-            );
-          },
+              }
+
+              if (snapshot.hasError) {
+                return Center(
+                  child: TextWidget(
+                    text: 'Error loading archives',
+                    fontSize: 16,
+                    color: Colors.white70,
+                  ),
+                );
+              }
+
+              final allJobs = snapshot.data?.docs ?? [];
+
+              // Filter to only show archived jobs
+              final archivedJobs = allJobs.where((doc) {
+                final job = doc.data();
+                return job['isArchived'] == true;
+              }).toList();
+
+              if (archivedJobs.isEmpty) {
+                return const BusinessEmptyState(
+                  icon: Icons.inventory_2_outlined,
+                  title: 'No past openings',
+                  message:
+                      'Closed and archived roles will stay here for your records.',
+                );
+              }
+
+              return ListView.separated(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                itemCount: archivedJobs.length + 1,
+                separatorBuilder: (_, __) => const SizedBox(height: 16),
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return const BusinessPageIntro(
+                      eyebrow: 'Hiring ledger',
+                      title: 'Past openings',
+                      description:
+                          'A tidy record of roles your café has already closed.',
+                      icon: Icons.work_history_rounded,
+                    );
+                  }
+                  final jobDoc = archivedJobs[index - 1];
+                  final jobId = jobDoc.id;
+                  final job = jobDoc.data();
+                  return _buildArchivedJobCard(
+                    jobId: jobId,
+                    job: job,
+                    onDelete: () => _deleteJob(jobId),
+                  );
+                },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -125,9 +126,9 @@ class _JobArchivesScreenState extends State<JobArchivesScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[800]!),
+        color: BusinessWorkspaceColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: BusinessWorkspaceColors.line),
       ),
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -221,21 +222,15 @@ class _JobArchivesScreenState extends State<JobArchivesScreen> {
           SizedBox(
             width: double.infinity,
             height: 40,
-            child: ElevatedButton.icon(
+            child: OutlinedButton.icon(
               onPressed: onDelete,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.redAccent,
+                side:
+                    BorderSide(color: Colors.redAccent.withValues(alpha: .35)),
               ),
-              icon: const Icon(Icons.delete, size: 18),
-              label: TextWidget(
-                text: 'Delete',
-                fontSize: 14,
-                color: Colors.white,
-                isBold: true,
-              ),
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              label: const Text('Delete permanently'),
             ),
           ),
         ],
@@ -244,29 +239,16 @@ class _JobArchivesScreenState extends State<JobArchivesScreen> {
   }
 
   Future<void> _deleteJob(String jobId) async {
-    // Show confirmation dialog
-    final confirm = await showDialog<bool>(
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await CustomDialog.confirm(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[900],
-        title: const Text('Delete Job', style: TextStyle(color: Colors.white)),
-        content: const Text(
-            'Are you sure you want to permanently delete this job?',
-            style: TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      title: 'Delete archived job?',
+      message: 'This permanently removes the opening and its archive record.',
+      confirmText: 'Delete job',
+      isDestructive: true,
     );
 
-    if (confirm != true) return;
+    if (!confirmed) return;
 
     try {
       await FirebaseFirestore.instance
@@ -276,23 +258,19 @@ class _JobArchivesScreenState extends State<JobArchivesScreen> {
           .doc(jobId)
           .delete();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Job deleted successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to delete job: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      CustomToast.showFromMessenger(
+        messenger,
+        'The archived job was permanently removed.',
+        type: ToastType.success,
+        title: 'Job deleted',
+      );
+    } catch (_) {
+      CustomToast.showFromMessenger(
+        messenger,
+        'We could not delete the job. Please try again.',
+        type: ToastType.error,
+        title: 'Delete failed',
+      );
     }
   }
 }

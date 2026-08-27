@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cofi/utils/colors.dart';
 import 'package:cofi/services/notification_service.dart';
+import 'package:cofi/widgets/custom_toast.dart';
 
 class JobChatScreen extends StatefulWidget {
   final String jobId;
@@ -262,13 +263,12 @@ class _JobChatScreenState extends State<JobChatScreen> {
       // Scroll to bottom
       if (!mounted) return;
       _scrollToBottom();
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to send message: $e'),
-          backgroundColor: Colors.red,
-        ),
+      CustomToast.showError(
+        context,
+        'Your message was not sent. Check your connection and try again.',
+        title: 'Message not sent',
       );
     }
   }

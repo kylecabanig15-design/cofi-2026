@@ -196,12 +196,9 @@ class _HomeScreenState extends State<HomeScreen> {
           bottomNavigationBar: _buildBottomNavBar(),
           body: Stack(
             children: [
-              SafeArea(
-                bottom: false,
-                child: IndexedStack(
-                  index: _currentIndex,
-                  children: _tabs,
-                ),
+              IndexedStack(
+                index: _currentIndex,
+                children: _tabs,
               ),
               if (_currentIndex == 0)
                 Positioned(

@@ -7,6 +7,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cofi/utils/formatters.dart';
 import 'package:cofi/widgets/custom_toast.dart';
 import 'package:cofi/utils/app_signals.dart';
+import 'package:cofi/features/home/explore/services/recommendation_service.dart';
+import 'package:get_storage/get_storage.dart';
 
 class LogVisitScreen extends StatefulWidget {
   final String shopId;
@@ -47,14 +49,22 @@ class _LogVisitScreenState extends State<LogVisitScreen> {
   Future<void> _submit() async {
     if (_submitting) return;
     if (widget.shopId.isEmpty) {
-      CustomToast.showError(context, 'Cannot log a visit without a shop.');
+      CustomToast.showError(
+        context,
+        'Close this screen, reopen the café, and try again.',
+        title: 'Café could not be identified',
+      );
       return;
     }
     setState(() => _submitting = true);
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        CustomToast.showInfo(context, 'Please sign in to log a visit.');
+        CustomToast.showWarning(
+          context,
+          'Sign in to add this café to your visit history.',
+          title: 'Sign-in required',
+        );
         return;
       }
       final data = {
@@ -79,14 +89,48 @@ class _LogVisitScreenState extends State<LogVisitScreen> {
         // No-op: UI feedback below still applies
       }
 
-      recommendationVersion.value++;
+      // Visit tags only enter the documented similarity vector when this user
+      // also has a star rating for the café. An unrated visit still updates the
+      // live visited state, but should not pay for a no-op algorithm run.
+      var affectsCollaborativeScores = true;
+      try {
+        final ratedCafe = await FirebaseFirestore.instance
+            .collection('shops')
+            .doc(widget.shopId)
+            .collection('reviews')
+            .where('userId', isEqualTo: user.uid)
+            .limit(1)
+            .get();
+        affectsCollaborativeScores = ratedCafe.docs.isNotEmpty;
+      } catch (_) {
+        // Conservatively revalidate if this inexpensive eligibility check fails.
+      }
+
+      if (affectsCollaborativeScores) {
+        try {
+          await RecommendationService.markInputsChanged(GetStorage(), user.uid);
+        } catch (_) {
+          // The visit is already committed; cache bookkeeping is best effort.
+        }
+        notifyRecommendationInputsChanged();
+      }
 
       if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
-      CustomToast.showSuccess(context, 'Visit logged successfully!');
-    } catch (e) {
+      CustomToast.showFromMessenger(
+        messenger,
+        'This café was added to your visit history.',
+        type: ToastType.success,
+        title: 'Visit logged',
+      );
+    } catch (_) {
       if (!mounted) return;
-      CustomToast.showError(context, 'Failed: $e');
+      CustomToast.showError(
+        context,
+        'We could not log this visit. Please try again.',
+        title: 'Visit not logged',
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
