@@ -1310,14 +1310,10 @@ class ProfileTab extends StatelessWidget {
                           const Divider(color: Colors.white12),
                           const SizedBox(height: 12),
                           ...userApplications.map((app) {
-                            final appData = app as Map<String, dynamic>;
-                            final status =
-                                appData['status'] as String? ?? 'pending';
-                            final appliedAt =
-                                appData['appliedAt'] as Timestamp?;
+                            final status = app.status;
+                            final appliedAt = app.appliedAt;
                             final dateStr = appliedAt != null
-                                ? DateFormat('MMM dd, yyyy')
-                                    .format(appliedAt.toDate())
+                                ? DateFormat('MMM dd, yyyy').format(appliedAt)
                                 : 'Unknown date';
 
                             Color statusColor = Colors.orange;

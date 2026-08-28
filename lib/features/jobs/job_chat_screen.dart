@@ -40,6 +40,7 @@ class _JobChatScreenState extends State<JobChatScreen> {
   String? _otherUserName;
   late String _posterId;
   late String _applicantId;
+  late String _shopId;
   bool _isLoading = true;
 
   @override
@@ -47,6 +48,7 @@ class _JobChatScreenState extends State<JobChatScreen> {
     super.initState();
     _posterId = widget.posterId;
     _applicantId = widget.applicantId;
+    _shopId = widget.shopId;
     _fetchUserNames();
 
     // Set active chat ID to suppress notifications while viewing
@@ -107,7 +109,7 @@ class _JobChatScreenState extends State<JobChatScreen> {
 
       // Prefer the participants stored on the conversation. Notification
       // metadata can be missing on older notifications.
-      if ((_posterId.isEmpty || _applicantId.isEmpty) &&
+      if ((_posterId.isEmpty || _applicantId.isEmpty || _shopId.isEmpty) &&
           widget.conversationId?.isNotEmpty == true) {
         final chatDoc = await _firestore
             .collection('job_chats')
@@ -116,6 +118,7 @@ class _JobChatScreenState extends State<JobChatScreen> {
         final chatData = chatDoc.data();
         _posterId = (chatData?['posterId'] as String?) ?? _posterId;
         _applicantId = (chatData?['applicantId'] as String?) ?? _applicantId;
+        _shopId = (chatData?['shopId'] as String?) ?? _shopId;
       }
 
       final String otherUserId =
@@ -126,16 +129,33 @@ class _JobChatScreenState extends State<JobChatScreen> {
           ? null
           : await _firestore.collection('users').doc(otherUserId).get();
 
+      // Applicants are messaging a café, not the personal account that owns
+      // it, so use the public shop name for the business side of the chat.
+      final shopDoc = _shopId.isEmpty
+          ? null
+          : await _firestore.collection('shops').doc(_shopId).get();
+
       final currentData = currentUserDoc.data();
       final otherData = otherUserDoc?.data();
+      final shopName = _nonEmpty(shopDoc?.data()?['name']) ??
+          _nonEmpty(shopDoc?.data()?['shopName']);
+      final currentUserIsPoster = currentUser.uid == _posterId;
 
       if (!mounted) return;
       setState(() {
-        _currentUserName = _userDisplayName(
-          currentData,
-          authDisplayName: currentUser.displayName,
-        );
-        _otherUserName = _userDisplayName(otherData);
+        _currentUserName = currentUserIsPoster
+            ? shopName ??
+                _userDisplayName(
+                  currentData,
+                  authDisplayName: currentUser.displayName,
+                )
+            : _userDisplayName(
+                currentData,
+                authDisplayName: currentUser.displayName,
+              );
+        _otherUserName = currentUserIsPoster
+            ? _userDisplayName(otherData)
+            : shopName ?? _userDisplayName(otherData);
         _isLoading = false;
       });
     } catch (e) {
@@ -223,7 +243,7 @@ class _JobChatScreenState extends State<JobChatScreen> {
           {
             'jobId': widget.jobId,
             'jobTitle': widget.jobTitle,
-            'shopId': widget.shopId,
+            'shopId': _shopId,
             'posterId': _posterId,
             'applicantId': _applicantId,
             'applicationId': widget.applicationId,
@@ -248,7 +268,7 @@ class _JobChatScreenState extends State<JobChatScreen> {
           chatId,
           widget.jobId,
           widget.jobTitle,
-          widget.shopId,
+          _shopId,
           _posterId,
           _applicantId,
           widget.applicationId,

@@ -4,6 +4,74 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get_storage/get_storage.dart';
 
+/// Builds the collaborative part of CoFi's **For You** recommendations.
+///
+/// ## End-to-end process
+///
+/// 1. [loadRecommendationScores] checks the signed-in user's local cache.
+/// 2. [_findSimilarUsers] loads review and visit signals for the 30
+///    highest-rated cafés used to compare users.
+/// 3. [mergeReviewAndVisitSignals] keeps only records with an explicit numeric
+///    `rating`. Visit tags may enrich a rated café, but an unrated visit never
+///    becomes a zero-star rating.
+/// 4. [calculateCosineSimilarity] compares users only on cafés both reviewed.
+///    The explicit star ratings are `xp` and `yp`; shared visit context is
+///    `tp`; café amenity context is `ap`.
+/// 5. [_findSimilarUsers] keeps similarities above `0.1`, sorts them from
+///    highest to lowest, and returns at most five users (Taste Twins).
+/// 6. [loadRecommendationScores] examines up to 100 verified candidate cafés,
+///    removes cafés already bookmarked or visited by the current user, and
+///    calculates a similarity-weighted predicted rating from the Taste Twins.
+/// 7. The result is returned as `Map<shopId, predictedRating>` and cached for
+///    24 hours. Explore adds the separate interest bonus and performs the final
+///    card sorting in `explore_tab.dart`.
+///
+/// ## Main formulas and their exact variable names
+///
+/// ```text
+/// user1Score = xp + tp + ap
+/// user2Score = yp + tp + ap
+/// similarity = numerator / denominator
+///
+/// score += sim * rating
+/// totalSim += sim
+/// finalScore = clamp(score / totalSim, 0.0, 5.0)
+/// scores[shopId] = finalScore
+/// ```
+///
+/// This service does not add the Explore interest bonus. That local layer uses
+/// `_shopRecommendationScores`, `bonusA`/`bonusB`, and `scoreA`/`scoreB` in
+/// `explore_tab.dart`.
+///
+/// ## How preferences/interests become the Explore interest bonus
+///
+/// Interests are stored in `users/{uid}.interests`. Explore loads them into
+/// `_userInterests`, while each café supplies its own `tags`. During the
+/// **For You** sort, `getBonus` performs an exact, case-sensitive comparison:
+///
+/// ```text
+/// matchCount = number of café tags contained in interests
+/// interestBonus = matchCount * 1.5
+/// finalExploreScore = collaborativePrediction + interestBonus
+/// ```
+///
+/// In the actual comparison variables in `explore_tab.dart`:
+///
+/// ```text
+/// sa/ sb       = _shopRecommendationScores[a.id/b.id] (or 0.0)
+/// bonusA/B     = getBonus(café, interests)
+/// scoreA/B     = sa/sb + bonusA/B
+/// ```
+///
+/// Example: if the user's interests are `['Specialty Coffee', 'Pet-Friendly']`
+/// and a café's tags contain both exact strings, `matchCount` is `2`, so the
+/// café receives `2 * 1.5 = 3.0` ranking points. A differently spelled or
+/// differently capitalized tag does not match.
+///
+/// Keeping interests outside the cached collaborative calculation means an
+/// interest edit can re-sort Explore immediately through `interestsVersion`
+/// without finding Taste Twins again. The interest bonus is an internal
+/// ordering value; it is not displayed as the café's public star rating.
 class RecommendationService {
   static const Duration recommendationCacheLifetime = Duration(hours: 24);
   static const int recommendationAlgorithmVersion = 2;
@@ -126,6 +194,16 @@ class RecommendationService {
 
   /// Adds visit context to rated cafés without turning an unrated visit into
   /// a zero-star rating. Reviews remain the primary recommendation signal.
+  ///
+  /// Input shape:
+  ///
+  /// ```text
+  /// reviews: [{shopId, rating, tags}]
+  /// visits:  [{shopId, tags}]
+  /// ```
+  ///
+  /// A review enters `merged` only when `review['rating'] is num`. A visit can
+  /// contribute tags only when that `shopId` is already present in `merged`.
   static List<Map<String, dynamic>> mergeReviewAndVisitSignals({
     required List<Map<String, dynamic>> reviews,
     required List<Map<String, dynamic>> visits,
@@ -341,6 +419,11 @@ class RecommendationService {
 
   /// Finds users similar to the current user using the Cosine Similarity algorithm.
   /// Used internally to derive shop recommendation scores.
+  ///
+  /// The comparison pool is built from collection-group reads of `reviews`
+  /// and `visits`, restricted locally to `topShopIds`. Each other user's
+  /// signals are merged and compared with `currentUserCombined`. The returned
+  /// maps contain `userId`, `similarity`, `commonShops`, and `userName`.
   Future<List<Map<String, dynamic>>> _findSimilarUsers(User? user) async {
     if (user == null) return [];
 
@@ -507,7 +590,19 @@ class RecommendationService {
   }
 
   /// Calculates shop recommendation scores based on similar users.
-  /// includes Caching (24h) and optimizations.
+  /// Includes caching (24h) and query optimizations.
+  ///
+  /// For each unseen candidate café, `score` accumulates `sim * rating` and
+  /// `totalSim` accumulates `sim`. Their quotient is `finalScore`, the predicted
+  /// 0–5 rating stored in `scores[shopId]`.
+  ///
+  /// The returned map contains collaborative predictions only. Explore stores
+  /// it in `_shopRecommendationScores`, adds `1.5` per exact interest match,
+  /// and then sorts the **For You** feed.
+  ///
+  /// Cache behavior is stale-while-revalidate: a usable `staleScores` map can
+  /// remain visible during recalculation or after an error. A successful run
+  /// writes the scores, timestamp, input version, and algorithm version.
   Future<Map<String, double>> loadRecommendationScores({
     required User? user,
     required GetStorage box,
